@@ -8,6 +8,6 @@
     "build": "rspress build"
   },
   "devDependencies": {
-    "rspress": "^2.0"
+    "rspress": "^1.47"
   }
 }
