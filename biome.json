@@ -58,7 +58,7 @@
     }
   ],
   "files": {
-    "ignore": [
+    "experimentalScannerIgnores": [
       "node_modules",
       "dist",
       "data",
