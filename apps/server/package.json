@@ -1,0 +1,25 @@
+{
+  "name": "@teamsland/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/main.ts",
+    "start": "bun run src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@teamsland/types": "workspace:*",
+    "@teamsland/config": "workspace:*",
+    "@teamsland/memory": "workspace:*",
+    "@teamsland/session": "workspace:*",
+    "@teamsland/meego": "workspace:*",
+    "@teamsland/ingestion": "workspace:*",
+    "@teamsland/context": "workspace:*",
+    "@teamsland/sidecar": "workspace:*",
+    "@teamsland/swarm": "workspace:*",
+    "@teamsland/git": "workspace:*",
+    "@teamsland/lark": "workspace:*",
+    "@teamsland/observability": "workspace:*"
+  }
+}
