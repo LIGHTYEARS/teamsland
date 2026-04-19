@@ -1,0 +1,56 @@
+{
+  "meego": {
+    "spaces": [{ "spaceId": "space-1", "name": "测试空间" }],
+    "eventMode": "webhook",
+    "webhook": { "host": "0.0.0.0", "port": 8080, "path": "/webhook" },
+    "poll": { "intervalSeconds": 30, "lookbackMinutes": 5 },
+    "longConnection": { "enabled": false, "reconnectIntervalSeconds": 10 }
+  },
+  "lark": {
+    "appId": "${TEST_LARK_ID}",
+    "appSecret": "${TEST_LARK_SECRET}",
+    "bot": { "historyContextCount": 10 },
+    "notification": { "teamChannelId": "oc_test" }
+  },
+  "session": {
+    "compactionTokenThreshold": 50000,
+    "sqliteJitterRangeMs": [10, 100],
+    "busyTimeoutMs": 3000
+  },
+  "sidecar": {
+    "maxConcurrentSessions": 10,
+    "maxRetryCount": 2,
+    "maxDelegateDepth": 1,
+    "workerTimeoutSeconds": 120,
+    "healthCheckTimeoutMs": 10000,
+    "minSwarmSuccessRatio": 0.6
+  },
+  "memory": {
+    "decayHalfLifeDays": 15,
+    "extractLoopMaxIterations": 2
+  },
+  "storage": {
+    "sqliteVec": { "dbPath": "./test.sqlite", "busyTimeoutMs": 3000, "vectorDimensions": 256 },
+    "embedding": { "model": "test-model", "contextSize": 1024 },
+    "entityMerge": { "cosineThreshold": 0.9 },
+    "fts5": { "optimizeIntervalHours": 12 }
+  },
+  "confirmation": {
+    "reminderIntervalMin": 15,
+    "maxReminders": 2,
+    "pollIntervalMs": 30000
+  },
+  "dashboard": {
+    "port": 4000,
+    "auth": { "provider": "test_auth", "sessionTtlHours": 4, "allowedDepartments": ["eng"] }
+  },
+  "repoMapping": [
+    {
+      "meegoProjectId": "proj_test",
+      "repos": [{ "path": "/tmp/repo", "name": "测试仓库" }]
+    }
+  ],
+  "skillRouting": {
+    "test_skill": ["tool-a", "tool-b"]
+  }
+}
