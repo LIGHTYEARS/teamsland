@@ -1,0 +1,9 @@
+{
+  "name": "@teamsland/context",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": { "@teamsland/types": "workspace:*", "@teamsland/memory": "workspace:*", "@teamsland/config": "workspace:*" },
+  "scripts": { "typecheck": "tsc --noEmit" }
+}
