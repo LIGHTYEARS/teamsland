@@ -1,0 +1,2 @@
+// @teamsland/git — WorktreeManager
+export {};
