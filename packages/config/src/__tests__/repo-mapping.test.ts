@@ -47,4 +47,28 @@ describe("RepoMapping", () => {
     const mapping = RepoMapping.fromConfig([]);
     expect(mapping.resolve("anything")).toEqual([]);
   });
+
+  it("重复 meegoProjectId 时后者覆盖前者", () => {
+    const mapping = RepoMapping.fromConfig([
+      { meegoProjectId: "dup", repos: [{ path: "/a", name: "A" }] },
+      { meegoProjectId: "dup", repos: [{ path: "/b", name: "B" }] },
+    ]);
+    const repos = mapping.resolve("dup");
+    expect(repos).toHaveLength(1);
+    expect(repos[0].path).toBe("/b");
+    expect(repos[0].name).toBe("B");
+  });
+
+  it("修改 resolve 返回的数组不影响内部状态", () => {
+    const mapping = RepoMapping.fromConfig(TEST_CONFIG);
+    const first = mapping.resolve("project_xxx");
+    first.push({ path: "/repos/injected", name: "注入仓库" });
+    const second = mapping.resolve("project_xxx");
+    expect(second).toHaveLength(2);
+  });
+
+  it("空 repos 的项目返回空数组", () => {
+    const mapping = RepoMapping.fromConfig([{ meegoProjectId: "empty", repos: [] }]);
+    expect(mapping.resolve("empty")).toEqual([]);
+  });
 });

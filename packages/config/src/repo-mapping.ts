@@ -59,6 +59,6 @@ export class RepoMapping {
    * ```
    */
   resolve(meegoProjectId: string): RepoEntry[] {
-    return this.map.get(meegoProjectId) ?? [];
+    return [...(this.map.get(meegoProjectId) ?? [])];
   }
 }

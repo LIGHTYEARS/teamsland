@@ -1,11 +1,16 @@
 import { resolve } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../loader.js";
 
 const FIXTURES_DIR = resolve(import.meta.dirname, "fixtures");
 
 describe("loadConfig", () => {
   afterEach(() => {
+    delete process.env.TEST_LARK_ID;
+    delete process.env.TEST_LARK_SECRET;
+  });
+
+  beforeEach(() => {
     delete process.env.TEST_LARK_ID;
     delete process.env.TEST_LARK_SECRET;
   });
@@ -35,5 +40,28 @@ describe("loadConfig", () => {
 
     expect(config.lark.appId).toBe("resolved_id");
     expect(config.lark.appSecret).toBe("resolved_secret");
+  });
+
+  it("无参数时使用默认路径，环境变量缺失则抛出错误", async () => {
+    const savedAppId = process.env.LARK_APP_ID;
+    const savedAppSecret = process.env.LARK_APP_SECRET;
+    delete process.env.LARK_APP_ID;
+    delete process.env.LARK_APP_SECRET;
+    try {
+      await expect(loadConfig()).rejects.toThrow("环境变量未定义");
+    } finally {
+      if (savedAppId !== undefined) process.env.LARK_APP_ID = savedAppId;
+      if (savedAppSecret !== undefined) process.env.LARK_APP_SECRET = savedAppSecret;
+    }
+  });
+
+  it("JSON 格式错误时抛出 SyntaxError", async () => {
+    await expect(loadConfig(resolve(FIXTURES_DIR, "malformed-config.txt"))).rejects.toThrow(SyntaxError);
+  });
+
+  it("环境变量缺失时通过 loadConfig 完整流程抛出错误（集成）", async () => {
+    await expect(loadConfig(resolve(FIXTURES_DIR, "valid-config.json"))).rejects.toThrow(
+      "环境变量未定义: TEST_LARK_ID",
+    );
   });
 });

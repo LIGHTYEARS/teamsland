@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { resolveEnvVars } from "../env.js";
 
 describe("resolveEnvVars", () => {
@@ -69,5 +69,47 @@ describe("resolveEnvVars", () => {
       flag: false,
     });
     delete process.env.TEST_MIX;
+  });
+
+  it("空字符串环境变量返回空字符串", () => {
+    process.env.TEST_EMPTY = "";
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: 测试占位符字符串，非模板字面量
+    const result = resolveEnvVars("${TEST_EMPTY}");
+    expect(result).toBe("");
+    delete process.env.TEST_EMPTY;
+  });
+
+  it("小写变量名不被匹配，原样返回", () => {
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: 测试占位符字符串，非模板字面量
+    const result = resolveEnvVars("${lowercase}");
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: 测试占位符字符串，非模板字面量
+    expect(result).toBe("${lowercase}");
+  });
+
+  it("未闭合占位符原样返回", () => {
+    const result = resolveEnvVars("${UNCLOSED");
+    expect(result).toBe("${UNCLOSED");
+  });
+
+  it("同一变量被引用两次均被替换", () => {
+    process.env.TEST_DUP = "dup";
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: 测试占位符字符串，非模板字面量
+    const result = resolveEnvVars("${TEST_DUP}-${TEST_DUP}");
+    expect(result).toBe("dup-dup");
+    delete process.env.TEST_DUP;
+  });
+
+  it("嵌套对象中缺失变量向上抛出错误", () => {
+    delete process.env.MISSING_NESTED;
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: 测试占位符字符串，非模板字面量
+    expect(() => resolveEnvVars({ a: { b: "${MISSING_NESTED}" } })).toThrow("环境变量未定义: MISSING_NESTED");
+  });
+
+  afterEach(() => {
+    for (const key of Object.keys(process.env)) {
+      if (key.startsWith("TEST_")) {
+        delete process.env[key];
+      }
+    }
   });
 });
