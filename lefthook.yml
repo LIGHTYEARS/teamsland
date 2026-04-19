@@ -1,0 +1,15 @@
+pre-commit:
+  commands:
+    biome-check:
+      glob: "*.{ts,tsx,js,jsx,json,jsonc}"
+      run: bunx @biomejs/biome check --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
+    file-length:
+      glob: "*.{ts,tsx}"
+      run: |
+        for f in {staged_files}; do
+          lines=$(wc -l < "$f")
+          if [ "$lines" -gt 800 ]; then
+            echo "ERROR: $f has $lines lines (max 800). Split it."
+            exit 1
+          fi
+        done

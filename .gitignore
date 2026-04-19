@@ -1,0 +1,12 @@
+node_modules/
+dist/
+data/
+.worktrees/
+.env
+*.log
+
+# reference repos (untracked, used for porting only)
+hermes-agent/
+multica/
+OpenViking/
+qmd/

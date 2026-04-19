@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "composite": true,
+    "types": ["bun-types"]
+  },
+  "references": [
+    { "path": "packages/types" },
+    { "path": "packages/config" },
+    { "path": "packages/memory" },
+    { "path": "packages/session" },
+    { "path": "packages/meego" },
+    { "path": "packages/ingestion" },
+    { "path": "packages/context" },
+    { "path": "packages/sidecar" },
+    { "path": "packages/swarm" },
+    { "path": "packages/git" },
+    { "path": "packages/lark" },
+    { "path": "packages/observability" },
+    { "path": "apps/server" },
+    { "path": "apps/dashboard" }
+  ]
+}
