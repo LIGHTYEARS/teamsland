@@ -1,7 +1,0 @@
-sidecar:
-  max_concurrent_sessions: 20
-  max_retry_count: 3
-  max_delegate_depth: 2
-  worker_timeout_seconds: 300
-  health_check_timeout_ms: 30000
-  min_swarm_success_ratio: 0.5

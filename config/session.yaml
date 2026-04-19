@@ -1,4 +1,0 @@
-session:
-  compaction_token_threshold: 80000
-  sqlite_jitter_range_ms: [20, 150]
-  busy_timeout_ms: 5000

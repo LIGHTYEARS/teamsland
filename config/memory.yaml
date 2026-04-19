@@ -1,3 +1,0 @@
-memory:
-  decay_half_life_days: 30
-  extract_loop_max_iterations: 3

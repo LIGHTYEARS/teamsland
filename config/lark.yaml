@@ -1,7 +1,0 @@
-lark:
-  app_id: "${LARK_APP_ID}"
-  app_secret: "${LARK_APP_SECRET}"
-  bot:
-    history_context_count: 20
-  notification:
-    team_channel_id: ""
