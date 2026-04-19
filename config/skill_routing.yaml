@@ -1,0 +1,12 @@
+skill_routing:
+  frontend_dev:
+    - figma-reader
+    - lark-docs
+    - git-tools
+    - architect-template
+  code_review:
+    - git-diff
+    - lark-comment
+  bot_query:
+    - lark-docs
+    - lark-base

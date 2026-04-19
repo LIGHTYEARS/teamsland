@@ -1,0 +1,6 @@
+test:
+  memory_corpus_path: "test/fixtures/corpus/"
+  memory_queries_path: "test/fixtures/queries/"
+  precision_threshold: 0.8
+  sidecar_recovery_timeout_ms: 60000
+  concurrent_write_agents: 10

@@ -1,0 +1,12 @@
+storage:
+  sqlite_vec:
+    db_path: "./data/memory.sqlite"
+    busy_timeout_ms: 5000
+    vector_dimensions: 512
+  embedding:
+    model: "hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf"
+    context_size: 2048
+  entity_merge:
+    cosine_threshold: 0.95
+  fts5:
+    optimize_interval_hours: 24

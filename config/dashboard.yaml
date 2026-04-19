@@ -1,0 +1,6 @@
+dashboard:
+  port: 3000
+  auth:
+    provider: "lark_oauth"
+    session_ttl_hours: 8
+    allowed_departments: []
