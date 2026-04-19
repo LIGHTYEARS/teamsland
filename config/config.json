@@ -1,0 +1,94 @@
+{
+  "meego": {
+    "spaces": [{ "spaceId": "xxx", "name": "开放平台前端" }, { "spaceId": "yyy", "name": "开放平台基础" }],
+    "eventMode": "both",
+    "webhook": {
+      "host": "0.0.0.0",
+      "port": 8080,
+      "path": "/meego/webhook"
+    },
+    "poll": {
+      "intervalSeconds": 60,
+      "lookbackMinutes": 5
+    },
+    "longConnection": {
+      "enabled": true,
+      "reconnectIntervalSeconds": 10
+    }
+  },
+  "lark": {
+    "appId": "${LARK_APP_ID}",
+    "appSecret": "${LARK_APP_SECRET}",
+    "bot": {
+      "historyContextCount": 20
+    },
+    "notification": {
+      "teamChannelId": ""
+    }
+  },
+  "session": {
+    "compactionTokenThreshold": 80000,
+    "sqliteJitterRangeMs": [20, 150],
+    "busyTimeoutMs": 5000
+  },
+  "sidecar": {
+    "maxConcurrentSessions": 20,
+    "maxRetryCount": 3,
+    "maxDelegateDepth": 2,
+    "workerTimeoutSeconds": 300,
+    "healthCheckTimeoutMs": 30000,
+    "minSwarmSuccessRatio": 0.5
+  },
+  "memory": {
+    "decayHalfLifeDays": 30,
+    "extractLoopMaxIterations": 3
+  },
+  "storage": {
+    "sqliteVec": {
+      "dbPath": "./data/memory.sqlite",
+      "busyTimeoutMs": 5000,
+      "vectorDimensions": 512
+    },
+    "embedding": {
+      "model": "hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf",
+      "contextSize": 2048
+    },
+    "entityMerge": {
+      "cosineThreshold": 0.95
+    },
+    "fts5": {
+      "optimizeIntervalHours": 24
+    }
+  },
+  "confirmation": {
+    "reminderIntervalMin": 30,
+    "maxReminders": 3,
+    "pollIntervalMs": 60000
+  },
+  "dashboard": {
+    "port": 3000,
+    "auth": {
+      "provider": "lark_oauth",
+      "sessionTtlHours": 8,
+      "allowedDepartments": []
+    }
+  },
+  "repoMapping": [
+    {
+      "meegoProjectId": "project_xxx",
+      "repos": [
+        { "path": "/home/user/repos/frontend-main", "name": "前端主仓库" },
+        { "path": "/home/user/repos/frontend-components", "name": "组件库" }
+      ]
+    },
+    {
+      "meegoProjectId": "project_yyy",
+      "repos": [{ "path": "/home/user/repos/admin-portal", "name": "管理后台" }]
+    }
+  ],
+  "skillRouting": {
+    "frontend_dev": ["figma-reader", "lark-docs", "git-tools", "architect-template"],
+    "code_review": ["git-diff", "lark-comment"],
+    "bot_query": ["lark-docs", "lark-base"]
+  }
+}
