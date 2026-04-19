@@ -58,15 +58,16 @@
     }
   ],
   "files": {
-    "experimentalScannerIgnores": [
-      "node_modules",
-      "dist",
-      "data",
-      ".worktrees",
-      "hermes-agent",
-      "multica",
-      "OpenViking",
-      "qmd"
+    "includes": [
+      "**",
+      "!!**/node_modules",
+      "!!**/dist",
+      "!!**/data",
+      "!!**/.worktrees",
+      "!!**/hermes-agent",
+      "!!**/multica",
+      "!!**/OpenViking",
+      "!!**/qmd"
     ]
   }
 }
