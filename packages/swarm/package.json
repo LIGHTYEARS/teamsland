@@ -1,0 +1,9 @@
+{
+  "name": "@teamsland/swarm",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": { "@teamsland/types": "workspace:*", "@teamsland/sidecar": "workspace:*", "@teamsland/context": "workspace:*" },
+  "scripts": { "typecheck": "tsc --noEmit" }
+}
