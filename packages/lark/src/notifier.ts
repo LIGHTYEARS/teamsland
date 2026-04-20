@@ -51,4 +51,19 @@ export class LarkNotifier {
     const card: LarkCard = { title, content, level: level ?? "info" };
     await this.cli.sendInteractiveCard(this.channelId, card);
   }
+
+  /**
+   * 向指定用户发送飞书私信
+   *
+   * @param userId - 接收人的飞书用户 ID
+   * @param text - 消息文本内容
+   *
+   * @example
+   * ```typescript
+   * await notifier.sendDm("ou_user001", "任务 task-001 等待您确认，请尽快处理。");
+   * ```
+   */
+  async sendDm(userId: string, text: string): Promise<void> {
+    await this.cli.sendDm(userId, text);
+  }
 }
