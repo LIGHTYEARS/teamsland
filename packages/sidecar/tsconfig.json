@@ -2,5 +2,11 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": { "rootDir": "./src", "outDir": "./dist" },
   "include": ["src"],
-  "references": [{ "path": "../types" }, { "path": "../memory" }, { "path": "../lark" }, { "path": "../session" }]
+  "references": [
+    { "path": "../types" },
+    { "path": "../memory" },
+    { "path": "../lark" },
+    { "path": "../session" },
+    { "path": "../observability" }
+  ]
 }
