@@ -41,7 +41,14 @@
   },
   "memory": {
     "decayHalfLifeDays": 30,
-    "extractLoopMaxIterations": 3
+    "extractLoopMaxIterations": 3,
+    "exemptTypes": ["decisions", "identity"],
+    "perTypeTtl": {
+      "events": 90,
+      "cases": 365,
+      "patterns": 365,
+      "preferences": 180
+    }
   },
   "storage": {
     "sqliteVec": {

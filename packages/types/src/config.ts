@@ -1,3 +1,5 @@
+import type { MemoryType } from "./memory.js";
+
 // ─── meego.yaml ───
 
 /**
@@ -231,13 +233,18 @@ export interface SidecarConfig {
 // ─── memory.yaml ───
 
 /**
- * 记忆衰减配置，对应 config/memory.yaml
+ * 记忆衰减与回收配置，对应 config/memory.yaml
  *
  * @example
  * ```typescript
  * import type { MemoryConfig } from "@teamsland/types";
  *
- * const cfg: MemoryConfig = { decayHalfLifeDays: 30, extractLoopMaxIterations: 3 };
+ * const cfg: MemoryConfig = {
+ *   decayHalfLifeDays: 30,
+ *   extractLoopMaxIterations: 3,
+ *   exemptTypes: ["decisions", "identity"],
+ *   perTypeTtl: { events: 90, cases: 365 },
+ * };
  * ```
  */
 export interface MemoryConfig {
@@ -245,6 +252,10 @@ export interface MemoryConfig {
   decayHalfLifeDays: number;
   /** ExtractLoop 最大迭代次数 */
   extractLoopMaxIterations: number;
+  /** 豁免类型，不参与自动回收 */
+  exemptTypes: MemoryType[];
+  /** 按类型的硬过期天数，超过即归档 */
+  perTypeTtl: Partial<Record<MemoryType, number>>;
 }
 
 // ─── storage.yaml ───
