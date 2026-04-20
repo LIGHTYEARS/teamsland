@@ -70,6 +70,7 @@
       "dependencies": {
         "@teamsland/config": "workspace:*",
         "@teamsland/memory": "workspace:*",
+        "@teamsland/observability": "workspace:*",
         "@teamsland/types": "workspace:*",
       },
     },
@@ -139,6 +140,7 @@
       "dependencies": {
         "@teamsland/lark": "workspace:*",
         "@teamsland/memory": "workspace:*",
+        "@teamsland/observability": "workspace:*",
         "@teamsland/session": "workspace:*",
         "@teamsland/types": "workspace:*",
       },
@@ -148,6 +150,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@teamsland/context": "workspace:*",
+        "@teamsland/observability": "workspace:*",
         "@teamsland/sidecar": "workspace:*",
         "@teamsland/types": "workspace:*",
       },
