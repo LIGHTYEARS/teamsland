@@ -84,6 +84,7 @@
       "name": "@teamsland/ingestion",
       "version": "0.0.0",
       "dependencies": {
+        "@teamsland/observability": "workspace:*",
         "@teamsland/types": "workspace:*",
       },
     },
@@ -99,6 +100,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@teamsland/lark": "workspace:*",
+        "@teamsland/observability": "workspace:*",
         "@teamsland/session": "workspace:*",
         "@teamsland/types": "workspace:*",
       },
@@ -107,6 +109,7 @@
       "name": "@teamsland/memory",
       "version": "0.0.0",
       "dependencies": {
+        "@teamsland/observability": "workspace:*",
         "@teamsland/session": "workspace:*",
         "@teamsland/types": "workspace:*",
         "node-llama-cpp": "^3.0.0",
