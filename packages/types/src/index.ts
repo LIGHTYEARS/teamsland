@@ -48,5 +48,8 @@ export type { CompactResult, MessageRow, SessionRow, SessionStatus, TaskRow, Tas
 // Sidecar 注册表
 export type { AgentRecord, AgentStatus, RegistryState } from "./sidecar.js";
 
-// 任务与 Swarm
-export type { ComplexTask, SwarmResult, TaskConfig } from "./task.js";
+// Swarm 子任务与执行结果
+export type { SubTask, SwarmResult, WorkerResult } from "./swarm.js";
+
+// 任务
+export type { ComplexTask, TaskConfig } from "./task.js";

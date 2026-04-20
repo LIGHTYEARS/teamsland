@@ -70,29 +70,3 @@ export interface ComplexTask extends TaskConfig {
   /** 子任务列表（DAG 节点） */
   subtasks: TaskConfig[];
 }
-
-/**
- * Swarm 执行结果，汇总所有子任务的完成情况
- *
- * @example
- * ```typescript
- * import type { SwarmResult } from "@teamsland/types";
- *
- * const result: SwarmResult = {
- *   taskId: "task-001",
- *   outputs: [{ summary: "模块拆分完成" }],
- *   failures: [],
- *   successRatio: 1.0,
- * };
- * ```
- */
-export interface SwarmResult {
-  /** 任务 ID */
-  taskId: string;
-  /** 各子任务的输出集合 */
-  outputs: Record<string, unknown>[];
-  /** 失败子任务的错误信息 */
-  failures: string[];
-  /** 成功率（0-1），低于 minSwarmSuccessRatio 时拒绝合并 */
-  successRatio: number;
-}
