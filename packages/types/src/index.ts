@@ -42,6 +42,9 @@ export type { AbstractMemoryStore, MemoryEntry, MemoryType } from "./memory.js";
 // 团队通讯
 export type { TeamMessage, TeamMessageType } from "./message.js";
 
+// Session 持久化行类型
+export type { CompactResult, MessageRow, SessionRow, SessionStatus, TaskRow, TaskStatus } from "./session-row.js";
+
 // Sidecar 注册表
 export type { AgentRecord, AgentStatus, RegistryState } from "./sidecar.js";
 
