@@ -132,7 +132,8 @@ describe("SubagentRegistry", () => {
       notifier: makeFakeLarkNotifier() as never,
       registryPath: path,
     });
-    await restored.restoreOnStartup();
+    const timer = await restored.restoreOnStartup();
+    if (timer) clearInterval(timer);
 
     expect(restored.runningCount()).toBe(1);
     expect(restored.get("agent-alive")).toBeDefined();
@@ -146,7 +147,7 @@ describe("SubagentRegistry", () => {
       notifier: makeFakeLarkNotifier() as never,
       registryPath: path,
     });
-    await expect(registry.restoreOnStartup()).resolves.toBeUndefined();
+    await expect(registry.restoreOnStartup()).resolves.toBeNull();
     expect(registry.runningCount()).toBe(0);
   });
 

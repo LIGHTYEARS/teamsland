@@ -219,33 +219,47 @@ export class SubagentRegistry {
    * 2. 解析 JSON 为 RegistryState
    * 3. 对每条记录检查 isAlive(pid)，死进程直接丢弃
    * 4. 将存活的 AgentRecord 重新加载到内存注册表
+   * 5. 对存活的孤儿进程启动周期性健康监控
    *
    * 设计为幂等操作，多次调用无副作用。
+   * 返回孤儿监控定时器 ID，调用方需在关闭时 clearInterval。
+   * 若无存活孤儿则返回 null。
+   *
+   * @returns 孤儿监控定时器 ID，或 null（无孤儿时）
    *
    * @example
    * ```typescript
-   * await registry.restoreOnStartup();
-   * logger.info({ count: registry.runningCount() }, "注册表恢复完成");
+   * const orphanTimer = await registry.restoreOnStartup();
+   * // 关闭时清理定时器
+   * if (orphanTimer) clearInterval(orphanTimer);
    * ```
    */
-  async restoreOnStartup(): Promise<void> {
+  async restoreOnStartup(): Promise<ReturnType<typeof setInterval> | null> {
     const file = Bun.file(this.registryPath);
-    if (!(await file.exists())) return;
+    if (!(await file.exists())) return null;
 
     const text = await file.text();
     const state = JSON.parse(text) as RegistryState;
 
     let restored = 0;
     let cleaned = 0;
+    const orphanIds: string[] = [];
     for (const record of state.agents) {
       if (this.isAlive(record.pid)) {
         this.map.set(record.agentId, record);
+        orphanIds.push(record.agentId);
         restored++;
       } else {
         cleaned++;
       }
     }
     this.logger?.info({ restored, cleaned }, "注册表恢复完成");
+
+    if (orphanIds.length === 0) return null;
+
+    this.logger?.warn({ orphanIds }, "检测到孤儿进程 — 已恢复到注册表但无法重新绑定流处理，将通过周期性探活监控");
+
+    return this.startOrphanMonitor(orphanIds);
   }
 
   /**
@@ -274,5 +288,36 @@ export class SubagentRegistry {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * 启动孤儿进程周期性健康监控
+   *
+   * 每 30 秒检测一次孤儿进程存活状态。
+   * 进程死亡时将其从注册表中移除并标记 status = "failed"。
+   * 所有孤儿进程全部清理完毕后自动停止定时器。
+   */
+  private startOrphanMonitor(orphanIds: string[]): ReturnType<typeof setInterval> {
+    const remaining = new Set(orphanIds);
+    const timer = setInterval(() => {
+      for (const agentId of remaining) {
+        const record = this.map.get(agentId);
+        if (!record) {
+          remaining.delete(agentId);
+          continue;
+        }
+        if (!this.isAlive(record.pid)) {
+          record.status = "failed";
+          this.map.delete(agentId);
+          remaining.delete(agentId);
+          this.logger?.info({ agentId, pid: record.pid }, "孤儿进程已退出，从注册表中清理");
+        }
+      }
+      if (remaining.size === 0) {
+        this.logger?.info("所有孤儿进程已清理完毕，停止监控");
+        clearInterval(timer);
+      }
+    }, 30_000);
+    return timer;
   }
 }

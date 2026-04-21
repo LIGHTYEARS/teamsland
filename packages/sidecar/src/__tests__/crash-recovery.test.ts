@@ -98,7 +98,7 @@ describe("SubagentRegistry 崩溃恢复", () => {
     // 恢复前注册表应为空
     expect(reg2.runningCount()).toBe(0);
 
-    await reg2.restoreOnStartup();
+    const timer2 = await reg2.restoreOnStartup();
 
     // 仅存活 PID 应被恢复
     expect(reg2.runningCount()).toBe(1);
@@ -106,6 +106,9 @@ describe("SubagentRegistry 崩溃恢复", () => {
     expect(reg2.get("agent-alive")?.pid).toBe(process.pid);
     // 死亡 PID 不应出现在注册表中
     expect(reg2.get("agent-dead")).toBeUndefined();
+    // 存活孤儿应返回监控定时器
+    expect(timer2).not.toBeNull();
+    if (timer2) clearInterval(timer2);
   });
 
   it("persist 后仅保存存活记录，第三次实例读取时无死亡记录", async () => {
@@ -127,7 +130,8 @@ describe("SubagentRegistry 崩溃恢复", () => {
       notifier: makeFakeNotifier() as never,
       registryPath,
     });
-    await reg2.restoreOnStartup();
+    const t2 = await reg2.restoreOnStartup();
+    if (t2) clearInterval(t2);
     await reg2.persist();
 
     // 第三个实例读取文件，只应看到存活记录
@@ -136,7 +140,8 @@ describe("SubagentRegistry 崩溃恢复", () => {
       notifier: makeFakeNotifier() as never,
       registryPath,
     });
-    await reg3.restoreOnStartup();
+    const t3 = await reg3.restoreOnStartup();
+    if (t3) clearInterval(t3);
     expect(reg3.runningCount()).toBe(1);
     expect(reg3.get("agent-alive")).toBeDefined();
     expect(reg3.get("agent-dead")).toBeUndefined();
@@ -152,7 +157,7 @@ describe("SubagentRegistry 崩溃恢复", () => {
       registryPath,
     });
 
-    await expect(reg.restoreOnStartup()).resolves.toBeUndefined();
+    await expect(reg.restoreOnStartup()).resolves.toBeNull();
     expect(reg.runningCount()).toBe(0);
   });
 
@@ -174,9 +179,11 @@ describe("SubagentRegistry 崩溃恢复", () => {
       notifier: makeFakeNotifier() as never,
       registryPath,
     });
-    await reg2.restoreOnStartup();
+    const timer = await reg2.restoreOnStartup();
 
     expect(reg2.runningCount()).toBe(0);
     expect(reg2.allRunning()).toHaveLength(0);
+    // 无存活孤儿时不应返回定时器
+    expect(timer).toBeNull();
   });
 });
