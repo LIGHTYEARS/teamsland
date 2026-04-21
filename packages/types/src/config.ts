@@ -527,4 +527,6 @@ export interface AppConfig {
   repoMapping: RepoMappingConfig;
   /** Skill 路由 */
   skillRouting: SkillRoutingConfig;
+  /** Agent 角色模板文件的基础路径 */
+  templateBasePath?: string;
 }

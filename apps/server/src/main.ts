@@ -7,11 +7,19 @@ import { loadConfig, RepoMapping } from "@teamsland/config";
 import { DynamicContextAssembler } from "@teamsland/context";
 import { BunCommandRunner as GitBunCommandRunner, WorktreeManager } from "@teamsland/git";
 import type { LlmClient } from "@teamsland/ingestion";
-import { IntentClassifier } from "@teamsland/ingestion";
+import { DocumentParser, IntentClassifier } from "@teamsland/ingestion";
 import { BunCommandRunner as LarkBunCommandRunner, LarkCli, LarkNotifier } from "@teamsland/lark";
 import { MeegoConnector, MeegoEventBus } from "@teamsland/meego";
 import type { Embedder } from "@teamsland/memory";
-import { LocalEmbedder, MemoryReaper, NullEmbedder, NullMemoryStore, TeamMemoryStore } from "@teamsland/memory";
+import {
+  ExtractLoop,
+  LocalEmbedder,
+  MemoryReaper,
+  MemoryUpdater,
+  NullEmbedder,
+  NullMemoryStore,
+  TeamMemoryStore,
+} from "@teamsland/memory";
 import { createLogger } from "@teamsland/observability";
 import { SessionDB } from "@teamsland/session";
 import { ProcessController, SidecarDataPlane, SubagentRegistry } from "@teamsland/sidecar";
@@ -114,6 +122,7 @@ const TEAM_ID = "default";
       repoMapping,
       memoryStore,
       embedder,
+      templateBasePath: config.templateBasePath,
     });
 
     // ── 17. IntentClassifier（Stub LLM） ──
@@ -124,6 +133,19 @@ const TEAM_ID = "default";
     };
     logger.warn("LLM 未配置，IntentClassifier 将仅使用规则快速路径");
     const intentClassifier = new IntentClassifier({ llm: stubLlmClient });
+
+    // ── 17.5. DocumentParser + Memory Ingestion ──
+    const documentParser = new DocumentParser();
+    const memoryUpdater = memoryStore instanceof TeamMemoryStore ? new MemoryUpdater(memoryStore) : null;
+    const extractLoop =
+      memoryStore instanceof TeamMemoryStore
+        ? new ExtractLoop({
+            llm: stubLlmClient as never,
+            store: memoryStore,
+            teamId: TEAM_ID,
+            maxIterations: config.memory.extractLoopMaxIterations,
+          })
+        : null;
 
     // ── 18. WorktreeManager ──
     const worktreeManager = new WorktreeManager(new GitBunCommandRunner());
@@ -142,6 +164,10 @@ const TEAM_ID = "default";
       notifier,
       config,
       teamId: TEAM_ID,
+      documentParser,
+      memoryStore: memoryStore instanceof TeamMemoryStore ? memoryStore : null,
+      extractLoop,
+      memoryUpdater,
     });
 
     // ── 21. MeegoConnector ──
