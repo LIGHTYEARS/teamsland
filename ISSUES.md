@@ -10,11 +10,11 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 - [x] **[server] Wire SidecarDataPlane into issue.created pipeline** — `ProcessController.spawn()` returns a stdout ReadableStream but no code calls `SidecarDataPlane.processStream()` on it. Agent events are never persisted to SessionDB and Agent status never transitions. Add a `SidecarDataPlane` instance to `EventHandlerDeps` and invoke `dataPlane.processStream(agentId, spawnResult.stdout)` after `registry.register()` in `event-handlers.ts`.
 
-- [ ] **[server] Wire real LLM client instead of stub** — `main.ts` creates a `stubLlmClient` that always throws. Implement a real `LlmClient` backed by the Anthropic SDK, reading API key/model from `config.json`, and inject it into `IntentClassifier` and `TaskPlanner`.
+- [x] **[server] Wire real LLM client instead of stub** — `main.ts` creates a `stubLlmClient` that always throws. Implement a real `LlmClient` backed by the Anthropic SDK, reading API key/model from `config.json`, and inject it into `IntentClassifier` and `TaskPlanner`.
 
 - [x] **[context] Create agent role templates under config/templates/** — `DynamicContextAssembler.buildSectionE()` calls `loadTemplate(agentRole)` which reads `config/templates/{agentRole}.md`. No templates directory exists. Create `config/templates/` with `frontend_dev.md`, `tech_spec.md`, `design.md`, `query.md`, `status_sync.md`, and `confirm.md`.
 
-- [ ] **[meego] Implement real Meego REST poll** — `MeegoConnector.startPoll()` is a pure stub. Implement the actual Meego API call using `config.meego.spaces`, the `plugin_access_token` header, and `lookbackMinutes` to fetch recent issue events and push them to `eventBus.handle()`.
+- [x] **[meego] Implement real Meego REST poll** — `MeegoConnector.startPoll()` is a pure stub. Implement the actual Meego API call using `config.meego.spaces`, the `plugin_access_token` header, and `lookbackMinutes` to fetch recent issue events and push them to `eventBus.handle()`.
 
 - [x] **[meego] Implement webhook signature verification** — `MeegoConnector.startWebhook()` accepts any POST without validating signature. Add HMAC-SHA256 verification using `config.meego.webhookSecret`.
 
@@ -34,7 +34,7 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 - [x] **[swarm] Wire runSwarm into event-handlers for complex tasks** — `runSwarm()` and `TaskPlanner` exist but are never called from the server. Add logic to detect complex tasks and dispatch to `runSwarm()` instead of single-agent spawn.
 
-- [ ] **[meego] Wire ConfirmationWatcher into issue.status_changed handler** — The handler is a placeholder logger. When status transitions require human confirmation, call `ConfirmationWatcher.watch()` and only allow the transition after `"approved"`.
+- [x] **[meego] Wire ConfirmationWatcher into issue.status_changed handler** — The handler is a placeholder logger. When status transitions require human confirmation, call `ConfirmationWatcher.watch()` and only allow the transition after `"approved"`.
 
 - [x] **[ingestion] Wire DocumentParser output into IntentClassifier** — `DocumentParser.parseMarkdown()` extracts entities but they are never passed to `IntentClassifier`. Pass `entities` as context for richer LLM classification results.
 

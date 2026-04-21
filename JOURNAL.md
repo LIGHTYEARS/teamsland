@@ -1310,3 +1310,60 @@ Four test cases exercising `SubagentRegistry.restoreOnStartup()` with real temp 
 
 ---
 
+## Iteration 12 — 2026-04-22
+
+### Tasks Completed
+
+1. **[meego] Wire ConfirmationWatcher into issue.status_changed handler**
+   - Rewrote `createStatusChangedHandler()` from placeholder logger to functional handler
+   - When `event.payload.requiresConfirmation === true`, extracts `assigneeId` and starts fire-and-forget `confirmationWatcher.watch(issueId, assigneeId)`
+   - On timeout result, sends Lark DM to assignee with escalation message
+   - Added `confirmationWatcher` field to `EventHandlerDeps` interface
+   - Updated test deps and added confirmation watcher mock in event-pipeline test
+
+2. **[meego] Implement real Meego REST poll**
+   - Implemented `fetchMeegoEvents()` — calls `POST /{spaceId}/work_item/filter` with `X-Plugin-Token` header and `updated_at_min` filter
+   - `startPoll()` now iterates all configured spaces, fetches events per space, and passes each to `eventBus.handle()`
+   - Graceful skip when `pluginAccessToken` is empty (with warning log)
+   - Added `apiBaseUrl` (default: `https://project.feishu.cn/open_api`) and `pluginAccessToken` (default: `""`) to `MeegoConfig` type and Zod schema
+   - Updated `config/config.json` with new Meego fields
+
+3. **[server] Wire real LLM client instead of stub**
+   - Created `apps/server/src/llm-client.ts` with `AnthropicLlmClient` class
+   - Uses raw `fetch` against Anthropic Messages API — no SDK dependency
+   - `buildAnthropicMessages()` converts system role to top-level param, tool role to `tool_result` content blocks
+   - `buildAnthropicTools()` maps `LlmToolDef` to Anthropic format
+   - `parseAnthropicResponse()` extracts text and tool_use blocks into `LlmResponse`
+   - Added `LlmConfig` type to `@teamsland/types` and optional `llm` schema to `AppConfigSchema`
+   - Rewrote `main.ts` step 17: extracted `buildLlmStack()` helper for conditional initialization
+   - When `config.llm` is present: creates `AnthropicLlmClient` + real `TaskPlanner` (Swarm enabled)
+   - When absent: uses stub client, `taskPlanner: null` (Swarm disabled)
+   - Cognitive complexity stays at ≤15 via helper extraction
+
+### Key Design Decisions
+
+- **Raw fetch over SDK**: `AnthropicLlmClient` avoids `@anthropic-ai/sdk` npm dependency — the Messages API is simple enough to call directly, keeping the dependency graph lean.
+- **Conditional TaskPlanner**: Swarm mode is gated on real LLM availability. The `buildLlmStack()` function returns `{ llmClient, taskPlanner }` — when no LLM config exists, `taskPlanner` is `null` and `shouldUseSwarm()` in event-handlers returns false.
+- **Interface compatibility**: The memory package's `LlmClient` (with `tools?: LlmToolDef[]`) is a superset of both the ingestion and swarm `LlmClient` interfaces, so `AnthropicLlmClient` satisfies all three.
+
+### Test Results
+
+- 256 tests passed, 49 skipped (sqlite-vec dependent), 0 failures
+- Biome lint clean on all modified files
+- Lefthook pre-commit hooks passed (biome-check + file-length)
+
+### Files Modified
+
+- `apps/server/src/llm-client.ts` — NEW: AnthropicLlmClient implementation
+- `apps/server/src/main.ts` — buildLlmStack() helper, conditional LLM/TaskPlanner init
+- `apps/server/src/event-handlers.ts` — ConfirmationWatcher in status_changed handler
+- `apps/server/src/__tests__/event-pipeline.test.ts` — confirmationWatcher mock in deps
+- `packages/meego/src/connector.ts` — real fetchMeegoEvents() and poll iteration
+- `packages/types/src/config.ts` — LlmConfig interface, MeegoConfig additions
+- `packages/types/src/index.ts` — export LlmConfig
+- `packages/config/src/schema.ts` — llm optional schema, MeegoConfig field additions
+- `config/config.json` — apiBaseUrl, pluginAccessToken fields
+
+**Progress:** 26 of 30 ISSUES.md items now complete (87%).
+
+---
