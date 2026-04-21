@@ -71,6 +71,13 @@ function resolveRepoPath(config: AppConfig, projectKey: string): string | undefi
 }
 
 /**
+ * 从事件 payload 中提取 assigneeId（不存在时返回空字符串）
+ */
+function extractAssigneeId(event: MeegoEvent): string {
+  return typeof event.payload.assigneeId === "string" ? event.payload.assigneeId : "";
+}
+
+/**
  * 从事件 payload 中提取描述文本
  *
  * 将 payload 的 title 和 description 字段拼接为可读字符串。
@@ -138,7 +145,14 @@ function createIssueCreatedHandler(deps: EventHandlerDeps): EventHandler {
         // 2. 解析仓库路径
         const repoPath = resolveRepoPath(deps.config, event.projectKey);
         if (!repoPath) {
-          logger.warn({ projectKey: event.projectKey }, "未找到项目对应的仓库映射，跳过处理");
+          logger.warn({ projectKey: event.projectKey, issueId: event.issueId }, "未找到项目对应的仓库映射");
+          const assignee = extractAssigneeId(event);
+          if (assignee) {
+            await deps.notifier.sendDm(
+              assignee,
+              `任务 ${event.issueId} 无法启动 Agent：项目 ${event.projectKey} 未配置仓库映射，请检查 config.json 的 repoMapping 字段。`,
+            );
+          }
           return;
         }
 
@@ -147,7 +161,7 @@ function createIssueCreatedHandler(deps: EventHandlerDeps): EventHandler {
         logger.info({ issueId: event.issueId, worktreePath }, "Git worktree 创建完成");
 
         // 4. 构建 TaskConfig
-        const assigneeId = typeof event.payload.assigneeId === "string" ? event.payload.assigneeId : "";
+        const assigneeId = extractAssigneeId(event);
         const taskConfig: TaskConfig = {
           issueId: event.issueId,
           meegoEvent: event,
@@ -244,7 +258,7 @@ function createAssignedHandler(deps: EventHandlerDeps): EventHandler {
   return {
     async process(event: MeegoEvent): Promise<void> {
       try {
-        const assigneeId = typeof event.payload.assigneeId === "string" ? event.payload.assigneeId : undefined;
+        const assigneeId = extractAssigneeId(event) || undefined;
 
         if (!assigneeId) {
           logger.warn({ eventId: event.eventId, issueId: event.issueId }, "issue.assigned 事件缺少 assigneeId");

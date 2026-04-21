@@ -994,3 +994,21 @@ All templates follow the existing `frontend_dev.md` format: `# 角色标题 Agen
 
 ---
 
+## Evolution Loop — Iteration 6 — 2026-04-21
+
+**Issue:** `[server] Structured error handling for missing repoMapping` (ISSUES.md §4 Quality Improvements)
+
+**Problem:** When `resolveRepoPath()` returned `undefined` (no repo mapping for a Meego project), the `issue.created` handler silently returned with only a warn-level log. The assignee had no idea why their task wasn't picked up.
+
+**Changes:**
+
+| File | Change |
+|------|--------|
+| `apps/server/src/event-handlers.ts` | When `resolveRepoPath()` fails, send a Lark DM to the assignee explaining the missing repo mapping. Extract `extractAssigneeId()` helper to DRY up 3 occurrences of `typeof event.payload.assigneeId === "string"` check. Reduces cognitive complexity from 20 to within limit. |
+
+**Verification:**
+- `bunx biome check apps/server/src/` — 6 files, no issues
+- `bunx --bun vitest run apps/server/` — 15 tests passed
+
+---
+

@@ -72,7 +72,7 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 - [ ] **[test] Concurrent SQLite WAL write test** — Fire 10 concurrent `SessionDB.appendMessage()` calls, assert all succeed without SQLITE_BUSY errors within `busyTimeoutMs` window.
 
-- [ ] **[server] Structured error handling for missing repoMapping** — `resolveRepoPath()` returns `undefined` and the handler silently returns. Send a Lark DM to the assignee or team channel when no repo mapping is found.
+- [x] **[server] Structured error handling for missing repoMapping** — `resolveRepoPath()` returns `undefined` and the handler silently returns. Send a Lark DM to the assignee or team channel when no repo mapping is found.
 
 - [ ] **[session] Expose FTS5 searchMessages method** — FTS5 index is scaffolded but no `searchMessages()` method is exported. Implement and export for agents and dashboard to query past sessions by keyword.
 
