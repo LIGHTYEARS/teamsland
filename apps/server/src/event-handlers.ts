@@ -135,20 +135,35 @@ export function registerEventHandlers(bus: MeegoEventBus, deps: EventHandlerDeps
 /**
  * 解析并异步注入文档到团队记忆（fire-and-forget）
  *
- * 若 memoryStore、extractLoop、memoryUpdater 任一为 null 则跳过。
+ * 若 memoryStore、extractLoop、memoryUpdater 任一为 null，或 parsedDocument 为 null / 无 sections，则跳过。
  * 失败时记录警告日志，不影响调用方流程。
+ *
+ * @param deps - 事件处理器依赖项
+ * @param event - 触发记忆注入的 MeegoEvent
+ * @param agentId - 已分配的 Agent ID，用于关联记忆条目
+ * @param parsedDocument - 由调用方预解析的文档结构（复用，避免重复解析）
+ *
+ * @example
+ * ```typescript
+ * const parsed = deps.documentParser.parseMarkdown(rawDescription);
+ * scheduleMemoryIngestion(deps, event, agentId, parsed);
+ * ```
  */
-function scheduleMemoryIngestion(deps: EventHandlerDeps, event: MeegoEvent, agentId: string): void {
+function scheduleMemoryIngestion(
+  deps: EventHandlerDeps,
+  event: MeegoEvent,
+  agentId: string,
+  parsedDocument: { sections: Array<{ heading: string; content: string }> } | null,
+): void {
   const { memoryStore, extractLoop, memoryUpdater } = deps;
   if (!memoryStore || !extractLoop || !memoryUpdater) {
     return;
   }
-  const rawDescription = extractDescription(event);
-  if (!rawDescription) {
+  if (!parsedDocument || parsedDocument.sections.length === 0) {
     return;
   }
-  const parsed = deps.documentParser.parseMarkdown(rawDescription);
-  const docText = parsed.sections.map((s) => `${s.heading}\n${s.content}`).join("\n\n") || rawDescription;
+  const rawDescription = extractDescription(event);
+  const docText = parsedDocument.sections.map((s) => `${s.heading}\n${s.content}`).join("\n\n") || rawDescription;
   ingestDocument(docText, deps.teamId, agentId, memoryStore, extractLoop, memoryUpdater).catch((ingestErr: unknown) => {
     logger.warn({ issueId: event.issueId, err: ingestErr }, "文档记忆注入失败（不影响 Agent 启动）");
   });
@@ -213,8 +228,12 @@ function createIssueCreatedHandler(deps: EventHandlerDeps): EventHandler {
       try {
         logger.info({ eventId: event.eventId, issueId: event.issueId }, "处理 issue.created 事件");
 
-        // 1. 意图分类
-        const intentResult = await deps.intentClassifier.classify(event);
+        // 1. 文档解析 + 意图分类（解析结果复用于步骤 4.5 记忆注入）
+        const rawDescription = extractDescription(event);
+        const parsedDocument = rawDescription ? deps.documentParser.parseMarkdown(rawDescription) : null;
+        const intentResult = await deps.intentClassifier.classify(event, {
+          entities: parsedDocument?.entities,
+        });
         logger.info(
           { issueId: event.issueId, intentType: intentResult.type, confidence: intentResult.confidence },
           "意图分类完成",
@@ -260,7 +279,7 @@ function createIssueCreatedHandler(deps: EventHandlerDeps): EventHandler {
         const agentId = `agent-${event.issueId}-${randomUUID().slice(0, 8)}`;
 
         // 4.5. 文档解析 + 记忆注入（fire-and-forget, 不阻塞 Agent 启动）
-        scheduleMemoryIngestion(deps, event, agentId);
+        scheduleMemoryIngestion(deps, event, agentId, parsedDocument);
 
         // 5. 组装初始提示词
         const prompt = await deps.assembler.buildInitialPrompt(taskConfig, deps.teamId);

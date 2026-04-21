@@ -73,11 +73,14 @@ export class IntentClassifier {
    *
    * Pipeline 步骤：
    * 1. 若输入为 MeegoEvent，提取 payload.title + payload.description 拼接为字符串
-   * 2. 规则快速路径 — 关键词匹配，置信度 >= 0.8 则直接返回
-   * 3. 若规则置信度 < 0.8，调用 LLM 分类 + 实体提取
-   * 4. 若 LLM 置信度 < 0.5，回退返回 type = "query"
+   * 2. 若提供了 context.entities，将实体列表追加到文本末尾以增强分类精度
+   * 3. 规则快速路径 — 关键词匹配，置信度 >= 0.8 则直接返回
+   * 4. 若规则置信度 < 0.8，调用 LLM 分类 + 实体提取
+   * 5. 若 LLM 置信度 < 0.5，回退返回 type = "query"
    *
    * @param input - 待分类的输入（字符串或 MeegoEvent）
+   * @param context - 可选的上下文信息，包含预提取的实体列表
+   * @param context.entities - 由 DocumentParser 提取的实体名（模块、API 路径、类型声明）
    * @returns IntentResult，包含 type、confidence、entities
    *
    * @example
@@ -95,20 +98,26 @@ export class IntentClassifier {
    * };
    * const result2 = await classifier.classify(event);
    * // { type: "tech_spec", confidence: 0.9, entities: { modules: [], owners: [], domains: [] } }
+   *
+   * // 传入预提取实体以增强分类精度
+   * const parsed = parser.parseMarkdown(description);
+   * const result3 = await classifier.classify(event, { entities: parsed.entities });
    * ```
    */
-  async classify(input: string | MeegoEvent): Promise<IntentResult> {
+  async classify(input: string | MeegoEvent, context?: { entities?: string[] }): Promise<IntentResult> {
     const text = typeof input === "string" ? input : eventToString(input);
-    logger.debug({ textLen: text.length }, "开始意图分类");
+    const enrichedText = context?.entities?.length ? `${text}\n\n提取到的实体: ${context.entities.join(", ")}` : text;
+    logger.debug({ textLen: enrichedText.length }, "开始意图分类");
 
-    const ruleResult = applyRules(text);
+    const ruleResult = applyRules(enrichedText);
     if (ruleResult !== null && ruleResult.confidence >= 0.8) {
       logger.info({ type: ruleResult.type, confidence: ruleResult.confidence, path: "rules" }, "规则快速路径命中");
-      return { ...ruleResult, entities: { modules: [], owners: [], domains: [] } };
+      const modules = context?.entities ?? [];
+      return { ...ruleResult, entities: { modules, owners: [], domains: [] } };
     }
 
     logger.debug("规则置信度不足，回退到 LLM 分类");
-    const llmResult = await this.classifyWithLlm(text);
+    const llmResult = await this.classifyWithLlm(enrichedText);
 
     if (llmResult.confidence < 0.5) {
       logger.warn({ confidence: llmResult.confidence }, "LLM 置信度低于阈值，回退到 query");
