@@ -85,6 +85,7 @@ export class SubagentRegistry {
   private readonly config: SidecarConfig;
   private readonly registryPath: string;
   private readonly logger: Logger | undefined;
+  private readonly listeners: Array<(agents: AgentRecord[]) => void> = [];
 
   constructor(opts: SubagentRegistryOpts) {
     this.config = opts.config;
@@ -122,6 +123,7 @@ export class SubagentRegistry {
     }
     this.map.set(record.agentId, record);
     this.logger?.info({ agentId: record.agentId, pid: record.pid }, "Agent 注册成功");
+    this.notifyListeners();
   }
 
   /**
@@ -140,6 +142,7 @@ export class SubagentRegistry {
   unregister(agentId: string): void {
     this.map.delete(agentId);
     this.logger?.info({ agentId }, "Agent 注销完成");
+    this.notifyListeners();
   }
 
   /**
@@ -188,6 +191,32 @@ export class SubagentRegistry {
    */
   allRunning(): AgentRecord[] {
     return [...this.map.values()];
+  }
+
+  /**
+   * 订阅注册表变更事件
+   *
+   * 每次 `register()` 或 `unregister()` 后，所有订阅者会收到当前完整 Agent 列表快照。
+   * 返回取消订阅函数。
+   *
+   * @param listener - 变更回调，参数为最新 Agent 列表
+   * @returns 取消订阅函数
+   *
+   * @example
+   * ```typescript
+   * const unsub = registry.subscribe((agents) => {
+   *   console.log("Agent 列表变更:", agents.length);
+   * });
+   * // 取消订阅
+   * unsub();
+   * ```
+   */
+  subscribe(listener: (agents: AgentRecord[]) => void): () => void {
+    this.listeners.push(listener);
+    return () => {
+      const idx = this.listeners.indexOf(listener);
+      if (idx >= 0) this.listeners.splice(idx, 1);
+    };
   }
 
   /**
@@ -287,6 +316,15 @@ export class SubagentRegistry {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  /** 通知所有监听者注册表已变更 */
+  private notifyListeners(): void {
+    if (this.listeners.length === 0) return;
+    const snapshot = this.allRunning();
+    for (const listener of this.listeners) {
+      listener(snapshot);
     }
   }
 

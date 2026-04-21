@@ -7,6 +7,7 @@ const isDev = process.env.NODE_ENV === "development";
 export default defineConfig({
   entry: { main: "./src/index.tsx" },
   resolve: { extensions: [".ts", ".tsx", ".js", ".jsx"] },
+  experiments: { css: true },
   module: {
     rules: [
       {
@@ -31,5 +32,9 @@ export default defineConfig({
   plugins: [new rspack.HtmlRspackPlugin({ template: "./src/index.html" }), isDev && new RefreshPlugin()].filter(
     Boolean,
   ),
-  devServer: { port: 5173, hot: true },
+  devServer: {
+    port: 5173,
+    hot: true,
+    proxy: [{ context: ["/api", "/ws", "/health"], target: "http://localhost:3000", ws: true }],
+  },
 });
