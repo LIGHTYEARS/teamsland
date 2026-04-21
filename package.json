@@ -1,7 +1,10 @@
 {
   "name": "teamsland",
   "private": true,
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "bun run --filter @teamsland/server dev",
     "dev:dashboard": "bun run --filter @teamsland/dashboard dev",
@@ -10,10 +13,10 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
-    "test": "vitest",
-    "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage",
-    "typecheck": "tsc --build"
+    "test": "bunx --bun vitest",
+    "test:run": "bunx --bun vitest run",
+    "test:coverage": "bunx --bun vitest run --coverage",
+    "typecheck": "bun run --filter '*' typecheck"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0",
