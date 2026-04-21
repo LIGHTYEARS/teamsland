@@ -2,12 +2,7 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "rootDir": "./src",
-    "outDir": "./dist",
-    "jsx": "react-jsx",
-    "types": ["bun-types"]
+    "jsx": "react-jsx"
   },
-  "include": ["src"],
-  "references": [
-    { "path": "../../packages/types" }
-  ]
+  "include": ["src"]
 }
