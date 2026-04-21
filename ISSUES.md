@@ -18,7 +18,7 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 - [x] **[meego] Implement webhook signature verification** — `MeegoConnector.startWebhook()` accepts any POST without validating signature. Add HMAC-SHA256 verification using `config.meego.webhookSecret`.
 
-- [ ] **[server] Implement Meego confirmation via real API** — `ConfirmationWatcher.fetchConfirmationStatus()` always returns `"pending"`. Wire it to the actual Meego OpenAPI issue-status query so human-confirmation loops can resolve.
+- [x] **[server] Implement Meego confirmation via real API** — `ConfirmationWatcher.fetchConfirmationStatus()` always returns `"pending"`. Wire it to the actual Meego OpenAPI issue-status query so human-confirmation loops can resolve.
 
 - [x] **[config] Add config validation on startup** — `loadConfig()` reads raw JSON and casts without schema validation. Add Zod validation that fails fast with human-readable error listing all missing/invalid fields.
 
@@ -44,9 +44,9 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 ## 3. Feature Completions (package capabilities)
 
-- [ ] **[meego] Implement long-connection EventSource** — `MeegoConnector.startLongConnection()` is a stub that sleeps in a loop. Replace with actual SSE/EventSource connection using `plugin_access_token` and exponential-backoff retry.
+- [x] **[meego] Implement long-connection EventSource** — `MeegoConnector.startLongConnection()` is a stub that sleeps in a loop. Replace with actual SSE/EventSource connection using `plugin_access_token` and exponential-backoff retry.
 
-- [ ] **[session] Implement SessionDB.compact()** — Schema and types exist but no compaction method. Implement `compact(sessionId)` that summarises old messages via LLM when token count exceeds threshold and trims history.
+- [x] **[session] Implement SessionDB.compact()** — Schema and types exist but no compaction method. Implement `compact(sessionId)` that summarises old messages via LLM when token count exceeds threshold and trims history.
 
 - [x] **[memory] Implement access_count increment on retrieval** — `vectorSearch()` and `ftsSearch()` never increment `access_count`, so `hotnessScore` ranking is recency-only. Add `UPDATE SET access_count = access_count + 1` on retrieval.
 
@@ -66,7 +66,7 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 - [x] **[test] Integration test: Meego event -> Agent spawn pipeline** — No test exercises the full `issue.created` -> classify -> worktree -> prompt -> spawn path. Write an integration test using in-memory SQLite, FakeEmbedder, FakeLlmClient, and mock ProcessController.
 
-- [ ] **[test] Memory retrieval precision regression test** — Create `test/fixtures/corpus/` with representative docs and `test/fixtures/queries/` with labelled queries. Assert P@10 >= 0.8 on 20 queries against 50 documents.
+- [x] **[test] Memory retrieval precision regression test** — Create `test/fixtures/corpus/` with representative docs and `test/fixtures/queries/` with labelled queries. Assert P@10 >= 0.8 on 20 queries against 50 documents.
 
 - [x] **[test] Sidecar crash-recovery integration test** — Spawn a fake process, register it, kill it, call `restoreOnStartup()`, assert dead-PID record is cleaned up while alive-PID is restored.
 

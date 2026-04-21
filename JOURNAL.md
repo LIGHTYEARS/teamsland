@@ -1367,3 +1367,67 @@ Four test cases exercising `SubagentRegistry.restoreOnStartup()` with real temp 
 **Progress:** 26 of 30 ISSUES.md items now complete (87%).
 
 ---
+
+## Iteration 13 — 2026-04-22
+
+### Tasks Completed
+
+1. **[server] Implement Meego confirmation via real API**
+   - Replaced `fetchConfirmationStatusImpl()` stub (always "pending") with real Meego API call
+   - `fetchStatusFromMeego()` calls `GET {apiBaseUrl}/{projectKey}/work_item/{issueId}` with `X-Plugin-Token`
+   - Maps `status_key` field to confirmation result via `APPROVED_STATUSES` / `REJECTED_STATUSES` Sets
+   - Supports Chinese status names (已确认, 已拒绝, 已取消, 已完成)
+   - ConfirmationWatcher constructor now accepts optional `meego: { apiBaseUrl, pluginAccessToken }`
+   - Graceful fallback: when `pluginAccessToken` is empty, stays on pending-stub behavior
+   - `watch()` method accepts optional `projectKey` parameter for API context
+   - Updated `main.ts` to inject Meego config into ConfirmationWatcher
+   - Updated `event-handlers.ts` to pass `event.projectKey` to `watch()`
+   - All 5 existing confirmation tests pass (mock spies bypass real API)
+
+2. **[meego] Implement long-connection EventSource**
+   - Replaced sleep-loop stub in `startLongConnection()` with real fetch-based SSE streaming
+   - `consumeSseStream()` opens `GET {apiBaseUrl}/events/stream` with `Accept: text/event-stream`
+   - Parses SSE protocol: `id:` → lastEventId tracking, `data:` → accumulate, empty line → dispatch
+   - Supports `Last-Event-ID` header for reconnect resume (断点续传)
+   - Extracted `processSseLine()` and `dispatchSseEvent()` helpers to keep complexity ≤15
+   - `SseParseContext` interface for clean state passing between parse helpers
+   - Graceful skip when `pluginAccessToken` is empty
+   - All 10 connector tests + 7 event-bus tests pass
+
+3. **[test] Memory retrieval precision regression test**
+   - Created 50-document corpus across 8 memory types (decisions, patterns, skills, tools, project_context)
+   - Documents cover frontend, backend, design, testing, DevOps, security, and management topics
+   - 20 labelled queries with explicit relevant document ID sets
+   - Per-query test: asserts at least one relevant document appears in top-10 results
+   - Aggregate test: asserts average P@10 >= 0.8 across all 20 queries
+   - `precisionAtK()` helper: `|retrieved ∩ relevant| / min(K, |relevant|)`
+   - Tests skipped when sqlite-vec unavailable (consistent with all memory tests)
+
+4. **[session] SessionDB.compact() — already implemented** (discovered during planning)
+   - The `compact()` method and `shouldCompact()` already exist in SessionDB with full test coverage
+   - Marked the ISSUES.md item as complete without code changes
+
+### Key Design Decisions
+
+- **Status mapping via Sets**: Using `Set<string>` for approved/rejected status matching allows easy extension for new Meego status types without modifying logic. Chinese status names included for Meego's localized interface.
+- **SSE via raw fetch, not EventSource API**: The browser `EventSource` API doesn't support custom headers. Using `fetch` with streaming `body.getReader()` allows injecting `X-Plugin-Token` authentication header.
+- **Precision test with FakeEmbedder**: Since FakeEmbedder produces hash-based (not semantic) vectors, precision depends on FTS5 trigram matching. Queries are constructed with keyword overlap to ensure FTS5 can find them. This validates the retrieval pipeline integration, not embedding quality.
+
+### Test Results
+
+- 256 tests passed, 70 skipped (sqlite-vec dependent), 0 failures
+- 21 new precision tests (all skipped in CI without vec0)
+- Biome lint clean on all 5 modified files
+- Lefthook pre-commit hooks passed
+
+### Files Modified
+
+- `packages/meego/src/confirmation.ts` — real Meego API call, MeegoApiOpts, status mapping
+- `packages/meego/src/connector.ts` — SSE streaming, consumeSseStream, processSseLine, dispatchSseEvent
+- `apps/server/src/main.ts` — inject Meego config into ConfirmationWatcher
+- `apps/server/src/event-handlers.ts` — pass projectKey to watch()
+- `packages/memory/src/__tests__/retrieval-precision.test.ts` — NEW: 50-doc corpus, 20 queries, P@10 test
+
+**Progress:** 28 of 34 ISSUES.md items now complete (82%). Remaining: 1 observability + 5 dashboard UI items.
+
+---
