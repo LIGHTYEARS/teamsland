@@ -1,6 +1,8 @@
 import { createLogger } from "@teamsland/observability";
+import type { SessionDB } from "@teamsland/session";
 import type { SubagentRegistry } from "@teamsland/sidecar";
 import type { AgentRecord, DashboardConfig } from "@teamsland/types";
+import { extractToken, type LarkAuthManager } from "./lark-auth.js";
 
 const logger = createLogger("server:dashboard");
 
@@ -11,6 +13,7 @@ const logger = createLogger("server:dashboard");
  * ```typescript
  * const deps: DashboardDeps = {
  *   registry: subagentRegistry,
+ *   sessionDb,
  *   config: { port: 3000, auth: { provider: "lark_oauth", sessionTtlHours: 8, allowedDepartments: [] } },
  * };
  * ```
@@ -18,8 +21,12 @@ const logger = createLogger("server:dashboard");
 export interface DashboardDeps {
   /** Agent 注册表，用于查询运行中的 agent 列表 */
   registry: SubagentRegistry;
+  /** 会话数据库，用于查询会话消息历史 */
+  sessionDb: SessionDB;
   /** Dashboard 配置（端口、鉴权等） */
   config: DashboardConfig;
+  /** Lark OAuth 管理器（provider 为 lark_oauth 时必须提供） */
+  authManager?: LarkAuthManager;
 }
 
 /** WebSocket 推送消息类型 */
@@ -35,6 +42,11 @@ interface WsConnected {
 
 type WsMessage = WsAgentsUpdate | WsConnected;
 
+/** JSON 响应工具函数 */
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+}
+
 /** 序列化并广播到所有连接的客户端 */
 function broadcast(clients: Set<unknown>, message: WsMessage): void {
   const payload = JSON.stringify(message);
@@ -47,39 +59,159 @@ function broadcast(clients: Set<unknown>, message: WsMessage): void {
   }
 }
 
+/** 处理 OAuth 认证相关路由 */
+function handleAuthRoutes(
+  req: Request,
+  url: URL,
+  authManager: LarkAuthManager,
+  config: DashboardConfig,
+): Response | Promise<Response> | null {
+  if (req.method === "GET" && url.pathname === "/auth/lark") {
+    const redirectPath = url.searchParams.get("redirect") ?? "/";
+    return Response.redirect(authManager.getAuthUrl(redirectPath), 302);
+  }
+
+  if (req.method === "GET" && url.pathname === "/auth/lark/callback") {
+    return handleOAuthCallback(url, authManager, config);
+  }
+
+  if (req.method === "GET" && url.pathname === "/auth/me") {
+    const session = authManager.validate(extractToken(req.headers.get("cookie")));
+    if (!session) return jsonResponse({ error: "Unauthorized" }, 401);
+    return jsonResponse({ userId: session.userId, name: session.name, department: session.department });
+  }
+
+  if (req.method === "POST" && url.pathname === "/auth/logout") {
+    const token = extractToken(req.headers.get("cookie"));
+    if (token) authManager.logout(token);
+    return new Response(null, {
+      status: 302,
+      headers: { Location: "/", "Set-Cookie": "teamsland_session=; Path=/; HttpOnly; Max-Age=0" },
+    });
+  }
+
+  return null;
+}
+
+/** 处理 OAuth 回调 code 交换 */
+function handleOAuthCallback(
+  url: URL,
+  authManager: LarkAuthManager,
+  config: DashboardConfig,
+): Response | Promise<Response> {
+  const code = url.searchParams.get("code");
+  const state = url.searchParams.get("state") ?? "/";
+  if (!code) return jsonResponse({ error: "Missing code" }, 400);
+
+  return authManager
+    .handleCallback(code, state)
+    .then(({ token, redirectPath }) => {
+      const maxAge = config.auth.sessionTtlHours * 3600;
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: redirectPath,
+          "Set-Cookie": `teamsland_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`,
+        },
+      });
+    })
+    .catch((err: unknown) => {
+      logger.error({ err }, "OAuth 回调处理失败");
+      return jsonResponse({ error: "Authentication failed" }, 403);
+    });
+}
+
+/** 检查 API 路由的认证状态 */
+function checkApiAuth(
+  req: Request,
+  url: URL,
+  authManager: LarkAuthManager | undefined,
+  authEnabled: boolean,
+): Response | null {
+  if (!authEnabled || !url.pathname.startsWith("/api/")) return null;
+  if (!authManager) return null;
+  const session = authManager.validate(extractToken(req.headers.get("cookie")));
+  if (!session) return jsonResponse({ error: "Unauthorized" }, 401);
+  return null;
+}
+
+/** 路由主请求（从 Bun.serve fetch 中调出以降低 cognitive complexity） */
+function routeRequest(
+  req: Request,
+  url: URL,
+  ctx: {
+    registry: SubagentRegistry;
+    sessionDb: SessionDB;
+    config: DashboardConfig;
+    authManager: LarkAuthManager | undefined;
+    authEnabled: boolean;
+  },
+): Response | Promise<Response> | null {
+  if (req.method === "GET" && url.pathname === "/health") {
+    return jsonResponse({ status: "ok", uptime: process.uptime() });
+  }
+
+  if (ctx.authEnabled && ctx.authManager) {
+    const authResult = handleAuthRoutes(req, url, ctx.authManager, ctx.config);
+    if (authResult) return authResult;
+  }
+
+  const authBlock = checkApiAuth(req, url, ctx.authManager, ctx.authEnabled);
+  if (authBlock) return authBlock;
+
+  return handleApiRoutes(req, url, ctx.registry, ctx.sessionDb);
+}
+function handleApiRoutes(req: Request, url: URL, registry: SubagentRegistry, sessionDb: SessionDB): Response | null {
+  if (req.method === "GET" && url.pathname === "/api/agents") {
+    return jsonResponse(registry.allRunning());
+  }
+
+  const sessionMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
+  if (req.method === "GET" && sessionMatch) {
+    const sessionId = sessionMatch[1] ?? "";
+    const limit = Number(url.searchParams.get("limit") ?? "1000");
+    const offset = Number(url.searchParams.get("offset") ?? "0");
+    const messages = sessionDb.getMessages(sessionId, { limit, offset });
+    const ndjson = messages.map((m) => JSON.stringify(m)).join("\n");
+    return new Response(ndjson ? `${ndjson}\n` : "", {
+      status: 200,
+      headers: { "Content-Type": "application/x-ndjson" },
+    });
+  }
+
+  return null;
+}
+
 /**
  * 启动 Dashboard HTTP/WebSocket 服务
  *
  * 基于 Bun.serve 启动一个轻量 HTTP 服务，提供以下路由：
- * - `GET /health` — 健康检查，返回 `{ status: "ok", uptime }` (200)
- * - `GET /api/agents` — 返回所有运行中的 agent 列表 (200)
- * - `GET /ws` — WebSocket 升级端点，推送实时 agent 列表变更
- * - 其他路由 — 返回 `{ error: "Not Found" }` (404)
+ * - `GET /health` — 健康检查 (200)
+ * - `GET /auth/lark` — 飞书 OAuth 授权跳转
+ * - `GET /auth/lark/callback` — OAuth 回调
+ * - `GET /auth/me` — 当前登录用户信息
+ * - `POST /auth/logout` — 登出
+ * - `GET /api/agents` — agent 列表 (需认证)
+ * - `GET /api/sessions/:id/messages` — 会话消息 NDJSON (需认证)
+ * - `GET /ws` — WebSocket 升级
  *
- * WebSocket 连接建立后立即推送当前 agent 列表。
- * 之后每次注册表变更（register/unregister）自动广播更新。
- *
- * @param deps - Dashboard 依赖（注册表 + 配置）
+ * @param deps - Dashboard 依赖
  * @param signal - 可选的 AbortSignal，用于优雅关闭
  * @returns Bun.serve 返回的 Server 实例
  *
  * @example
  * ```typescript
- * import { startDashboard } from "./dashboard.js";
- *
- * const ac = new AbortController();
  * const server = startDashboard(
- *   { registry: subagentRegistry, config: dashboardConfig },
- *   ac.signal,
+ *   { registry, sessionDb, config: dashboardConfig, authManager },
+ *   controller.signal,
  * );
- * ac.abort(); // 优雅关闭
  * ```
  */
 export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): ReturnType<typeof Bun.serve> {
-  const { registry, config } = deps;
+  const { registry, sessionDb, config, authManager } = deps;
   const clients = new Set<unknown>();
+  const authEnabled = config.auth.provider === "lark_oauth" && authManager;
 
-  // 订阅注册表变更，广播给所有 WebSocket 客户端
   const unsubscribe = registry.subscribe((agents) => {
     broadcast(clients, { type: "agents_update", agents });
   });
@@ -92,33 +224,12 @@ export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): Retur
 
       if (url.pathname === "/ws") {
         const upgraded = server.upgrade(req);
-        if (upgraded) {
-          return undefined as unknown as Response;
-        }
-        return new Response(JSON.stringify({ error: "WebSocket upgrade failed" }), {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        });
+        if (upgraded) return undefined as unknown as Response;
+        return jsonResponse({ error: "WebSocket upgrade failed" }, 400);
       }
 
-      if (req.method === "GET" && url.pathname === "/health") {
-        return new Response(JSON.stringify({ status: "ok", uptime: process.uptime() }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-
-      if (req.method === "GET" && url.pathname === "/api/agents") {
-        return new Response(JSON.stringify(registry.allRunning()), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-
-      return new Response(JSON.stringify({ error: "Not Found" }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      });
+      const ctx = { registry, sessionDb, config, authManager, authEnabled: Boolean(authEnabled) };
+      return routeRequest(req, url, ctx) ?? jsonResponse({ error: "Not Found" }, 404);
     },
 
     websocket: {
@@ -128,7 +239,6 @@ export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): Retur
         logger.debug({ clientCount: clients.size }, "WebSocket 客户端已连接");
       },
       message(_ws, message) {
-        // 客户端消息暂不处理（预留 ping/pong 或命令扩展）
         logger.debug({ message: String(message).slice(0, 100) }, "WebSocket 收到客户端消息");
       },
       close(ws) {
@@ -138,7 +248,7 @@ export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): Retur
     },
   });
 
-  logger.info({ port: config.port }, "Dashboard 服务已启动");
+  logger.info({ port: config.port, authEnabled: Boolean(authEnabled) }, "Dashboard 服务已启动");
 
   if (signal) {
     signal.addEventListener("abort", () => {

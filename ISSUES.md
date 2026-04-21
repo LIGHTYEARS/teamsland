@@ -58,7 +58,7 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 - [x] **[memory] Make LocalEmbedder.embedBatch parallel** — Currently a serial for-loop. Use `Promise.all` with concurrency limit to speed up multi-document embedding.
 
-- [ ] **[observability] Add OpenTelemetry span instrumentation** — No OTel spans are created or exported to Jaeger. Add `@opentelemetry/sdk-node` and instrument `ProcessController.spawn`, `TeamMemoryStore.vectorSearch`, and `DynamicContextAssembler.buildInitialPrompt`.
+- [x] **[observability] Add OpenTelemetry span instrumentation** — No OTel spans are created or exported to Jaeger. Add `@opentelemetry/sdk-node` and instrument `ProcessController.spawn`, `TeamMemoryStore.vectorSearch`, and `DynamicContextAssembler.buildInitialPrompt`.
 
 ---
 
@@ -86,8 +86,8 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 - [x] **[dashboard] Implement real WebSocket push in server** — `dashboard.ts` sends `"connected"` then closes. Implement proper server-side push with registry change event subscriptions.
 
-- [ ] **[dashboard] Stream-JSON event viewer** — Panel that shows raw NDJSON stream events for a selected agent's session via `GET /api/sessions/:sessionId/messages`.
+- [x] **[dashboard] Stream-JSON event viewer** — Panel that shows raw NDJSON stream events for a selected agent's session via `GET /api/sessions/:sessionId/messages`.
 
-- [ ] **[dashboard] Lark OAuth authentication** — `DashboardConfig` has `auth.provider: "lark_oauth"` but no middleware. Implement Lark OAuth flow and gate `/api/*` routes.
+- [x] **[dashboard] Lark OAuth authentication** — `DashboardConfig` has `auth.provider: "lark_oauth"` but no middleware. Implement Lark OAuth flow and gate `/api/*` routes.
 
 - [x] **[dashboard] Configure rspack + Tailwind build** — Add proper `rspack.config.ts`, configure TailwindCSS/shadcn/ui, add `dev` script with API proxy, verify hot-reload.

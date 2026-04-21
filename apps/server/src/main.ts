@@ -20,13 +20,14 @@ import {
   NullMemoryStore,
   TeamMemoryStore,
 } from "@teamsland/memory";
-import { createLogger } from "@teamsland/observability";
+import { createLogger, initTracing, shutdownTracing } from "@teamsland/observability";
 import { SessionDB } from "@teamsland/session";
 import { ObservableMessageBus, ProcessController, SidecarDataPlane, SubagentRegistry } from "@teamsland/sidecar";
 import { TaskPlanner } from "@teamsland/swarm";
 import type { LlmConfig } from "@teamsland/types";
 import { startDashboard } from "./dashboard.js";
 import { registerEventHandlers } from "./event-handlers.js";
+import { LarkAuthManager } from "./lark-auth.js";
 import { AnthropicLlmClient } from "./llm-client.js";
 import {
   createAlerter,
@@ -66,7 +67,8 @@ function buildLlmStack(llmConfig: LlmConfig | undefined, logger: ReturnType<type
     // ── 1. 配置 ──
     const config = await loadConfig();
 
-    // ── 2. Logger ──
+    // ── 2. Logger + Tracing ──
+    initTracing("teamsland-server", "0.1.0");
     const logger = createLogger("server:main");
 
     // ── 3. AbortController（优雅关闭信号源） ──
@@ -215,7 +217,14 @@ function buildLlmStack(llmConfig: LlmConfig | undefined, logger: ReturnType<type
     logger.info("MeegoConnector 已启动");
 
     // ── 22. Dashboard ──
-    const dashboardServer = startDashboard({ registry, config: config.dashboard }, controller.signal);
+    const authManager =
+      config.dashboard.auth.provider === "lark_oauth"
+        ? new LarkAuthManager(config.lark, config.dashboard.auth, `http://localhost:${config.dashboard.port}`)
+        : undefined;
+    const dashboardServer = startDashboard(
+      { registry, sessionDb, config: config.dashboard, authManager },
+      controller.signal,
+    );
 
     // ── 23. 定时任务 ──
     const alerter = createAlerter(notifier, config.lark.notification.teamChannelId);
@@ -247,6 +256,7 @@ function buildLlmStack(llmConfig: LlmConfig | undefined, logger: ReturnType<type
       if (fts5OptimizeTimer) clearInterval(fts5OptimizeTimer);
       if (orphanTimer) clearInterval(orphanTimer);
       dashboardServer.stop();
+      await shutdownTracing();
       await registry.persist();
       sessionDb.close();
       memoryStore.close();

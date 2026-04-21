@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Logger } from "@teamsland/observability";
+import { withSpan } from "@teamsland/observability";
 
 /**
  * 子进程启动参数
@@ -107,34 +108,42 @@ export class ProcessController {
    * ```
    */
   async spawn(params: SpawnParams): Promise<SpawnResult> {
-    const proc = Bun.spawn(
-      [
-        "claude",
-        "-p",
-        "--output-format",
-        "stream-json",
-        "--input-format",
-        "stream-json",
-        "--verbose",
-        "--permission-mode",
-        "bypassPermissions",
-      ],
-      { cwd: params.worktreePath, stdin: "pipe", stdout: "pipe", stderr: "pipe" },
-    );
+    return withSpan("sidecar:process-controller", "ProcessController.spawn", async (span) => {
+      span.setAttribute("issue.id", params.issueId);
+      span.setAttribute("worktree.path", params.worktreePath);
 
-    const envelope = JSON.stringify({ prompt: params.initialPrompt });
-    proc.stdin.write(`${envelope}\n`);
-    proc.stdin.end();
+      const proc = Bun.spawn(
+        [
+          "claude",
+          "-p",
+          "--output-format",
+          "stream-json",
+          "--input-format",
+          "stream-json",
+          "--verbose",
+          "--permission-mode",
+          "bypassPermissions",
+        ],
+        { cwd: params.worktreePath, stdin: "pipe", stdout: "pipe", stderr: "pipe" },
+      );
 
-    this.logger.info({ pid: proc.pid, issueId: params.issueId }, "Claude CLI 子进程已启动");
+      const envelope = JSON.stringify({ prompt: params.initialPrompt });
+      proc.stdin.write(`${envelope}\n`);
+      proc.stdin.end();
 
-    const { sessionId, bufferedChunks } = await this.readFirstLine(proc.stdout);
-    const stdout = this.buildCombinedStream(bufferedChunks, proc.stdout);
-    const [streamForConsumer, streamForDebug] = stdout.tee();
+      span.setAttribute("process.pid", proc.pid);
+      this.logger.info({ pid: proc.pid, issueId: params.issueId }, "Claude CLI 子进程已启动");
 
-    this.scheduleDebugWrite(`/tmp/req-${params.issueId}.jsonl`, streamForDebug);
+      const { sessionId, bufferedChunks } = await this.readFirstLine(proc.stdout);
+      span.setAttribute("session.id", sessionId);
 
-    return { pid: proc.pid, sessionId, stdout: streamForConsumer };
+      const stdout = this.buildCombinedStream(bufferedChunks, proc.stdout);
+      const [streamForConsumer, streamForDebug] = stdout.tee();
+
+      this.scheduleDebugWrite(`/tmp/req-${params.issueId}.jsonl`, streamForDebug);
+
+      return { pid: proc.pid, sessionId, stdout: streamForConsumer };
+    });
   }
 
   /**

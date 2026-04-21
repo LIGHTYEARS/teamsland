@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { createLogger } from "@teamsland/observability";
+import { createLogger, withSpan } from "@teamsland/observability";
 import type { AbstractMemoryStore, MemoryEntry, MemoryType, StorageConfig } from "@teamsland/types";
 import type { Embedder } from "./embedder.js";
 
@@ -186,34 +186,41 @@ export class TeamMemoryStore implements AbstractMemoryStore {
    * ```
    */
   async vectorSearch(queryVec: number[], limit = 10): Promise<MemoryEntry[]> {
-    // Step 1: 从 vec0 查询最近邻 ID
-    const vecResults = this.db
-      .query(`SELECT entry_id, distance FROM memory_vec WHERE embedding MATCH ? AND k = ?`)
-      .all(new Float32Array(queryVec), limit) as Array<{ entry_id: string; distance: number }>;
+    return withSpan("memory:store", "TeamMemoryStore.vectorSearch", async (span) => {
+      span.setAttribute("query.limit", limit);
+      span.setAttribute("query.dimensions", queryVec.length);
 
-    if (vecResults.length === 0) return [];
+      // Step 1: 从 vec0 查询最近邻 ID
+      const vecResults = this.db
+        .query(`SELECT entry_id, distance FROM memory_vec WHERE embedding MATCH ? AND k = ?`)
+        .all(new Float32Array(queryVec), limit) as Array<{ entry_id: string; distance: number }>;
 
-    // Step 2: 批量从 memory_entries 获取完整记录
-    const placeholders = vecResults.map(() => "?").join(", ");
-    const ids = vecResults.map((r) => r.entry_id);
-    const rows = this.db
-      .query(`SELECT * FROM memory_entries WHERE entry_id IN (${placeholders})`)
-      .all(...ids) as RawEntryRow[];
+      span.setAttribute("vec.result_count", vecResults.length);
+      if (vecResults.length === 0) return [];
 
-    // 按 vec0 返回的距离顺序排序
-    const rowMap = new Map<string, RawEntryRow>();
-    for (const row of rows) {
-      rowMap.set(row.entry_id, row);
-    }
+      // Step 2: 批量从 memory_entries 获取完整记录
+      const placeholders = vecResults.map(() => "?").join(", ");
+      const ids = vecResults.map((r) => r.entry_id);
+      const rows = this.db
+        .query(`SELECT * FROM memory_entries WHERE entry_id IN (${placeholders})`)
+        .all(...ids) as RawEntryRow[];
 
-    const results: MemoryEntry[] = [];
-    for (const vr of vecResults) {
-      const row = rowMap.get(vr.entry_id);
-      if (row) {
-        results.push(this.mapRow(row));
+      // 按 vec0 返回的距离顺序排序
+      const rowMap = new Map<string, RawEntryRow>();
+      for (const row of rows) {
+        rowMap.set(row.entry_id, row);
       }
-    }
-    return results;
+
+      const results: MemoryEntry[] = [];
+      for (const vr of vecResults) {
+        const row = rowMap.get(vr.entry_id);
+        if (row) {
+          results.push(this.mapRow(row));
+        }
+      }
+      span.setAttribute("result.count", results.length);
+      return results;
+    });
   }
 
   /**

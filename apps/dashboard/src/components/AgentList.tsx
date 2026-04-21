@@ -24,9 +24,11 @@ function formatDuration(startTs: number): string {
 
 interface AgentListProps {
   agents: AgentRecord[];
+  selectedSessionId: string | null;
+  onSelectSession: (sessionId: string | null) => void;
 }
 
-export function AgentList({ agents }: AgentListProps) {
+export function AgentList({ agents, selectedSessionId, onSelectSession }: AgentListProps) {
   if (agents.length === 0) {
     return (
       <div className="text-center py-12 text-gray-500">
@@ -51,23 +53,30 @@ export function AgentList({ agents }: AgentListProps) {
           </tr>
         </thead>
         <tbody>
-          {agents.map((agent) => (
-            <tr key={agent.agentId} className="border-b hover:bg-gray-50 transition-colors">
-              <td className="px-4 py-3 font-mono text-xs">{agent.agentId}</td>
-              <td className="px-4 py-3">{agent.issueId}</td>
-              <td className="px-4 py-3 font-mono">{agent.pid}</td>
-              <td className="px-4 py-3">
-                <span
-                  className={`px-2 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[agent.status] ?? "bg-gray-100"}`}
-                >
-                  {agent.status}
-                </span>
-              </td>
-              <td className="px-4 py-3">{agent.retryCount}</td>
-              <td className="px-4 py-3">{formatTime(agent.createdAt)}</td>
-              <td className="px-4 py-3">{formatDuration(agent.createdAt)}</td>
-            </tr>
-          ))}
+          {agents.map((agent) => {
+            const isSelected = agent.sessionId === selectedSessionId;
+            return (
+              <tr
+                key={agent.agentId}
+                onClick={() => onSelectSession(isSelected ? null : agent.sessionId)}
+                className={`border-b cursor-pointer transition-colors ${isSelected ? "bg-blue-50" : "hover:bg-gray-50"}`}
+              >
+                <td className="px-4 py-3 font-mono text-xs">{agent.agentId}</td>
+                <td className="px-4 py-3">{agent.issueId}</td>
+                <td className="px-4 py-3 font-mono">{agent.pid}</td>
+                <td className="px-4 py-3">
+                  <span
+                    className={`px-2 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[agent.status] ?? "bg-gray-100"}`}
+                  >
+                    {agent.status}
+                  </span>
+                </td>
+                <td className="px-4 py-3">{agent.retryCount}</td>
+                <td className="px-4 py-3">{formatTime(agent.createdAt)}</td>
+                <td className="px-4 py-3">{formatDuration(agent.createdAt)}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

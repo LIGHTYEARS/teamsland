@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { AgentList } from "./components/AgentList";
+import { EventViewer } from "./components/EventViewer";
 import { useAgents } from "./hooks/useAgents";
 
 const STATUS_DOT: Record<string, string> = {
@@ -9,6 +11,7 @@ const STATUS_DOT: Record<string, string> = {
 
 export function App() {
   const { agents, status } = useAgents();
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -27,8 +30,10 @@ export function App() {
           <div className="px-4 py-3 border-b">
             <h2 className="text-lg font-medium text-gray-900">运行中的 Agent</h2>
           </div>
-          <AgentList agents={agents} />
+          <AgentList agents={agents} selectedSessionId={selectedSessionId} onSelectSession={setSelectedSessionId} />
         </div>
+
+        <EventViewer sessionId={selectedSessionId} onClose={() => setSelectedSessionId(null)} />
       </main>
     </div>
   );

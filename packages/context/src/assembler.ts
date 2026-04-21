@@ -1,7 +1,7 @@
 import type { RepoMapping } from "@teamsland/config";
 import type { Embedder, TeamMemoryStore } from "@teamsland/memory";
 import { retrieve } from "@teamsland/memory";
-import { createLogger } from "@teamsland/observability";
+import { createLogger, withSpan } from "@teamsland/observability";
 import type { AbstractMemoryStore, AppConfig, TaskConfig } from "@teamsland/types";
 import { loadTemplate } from "./template-loader.js";
 
@@ -101,19 +101,26 @@ export class DynamicContextAssembler {
    * ```
    */
   async buildInitialPrompt(task: TaskConfig, teamId: string): Promise<string> {
-    logger.info({ issueId: task.issueId, teamId, agentRole: task.agentRole }, "开始组装初始提示词");
+    return withSpan("context:assembler", "DynamicContextAssembler.buildInitialPrompt", async (span) => {
+      span.setAttribute("issue.id", task.issueId);
+      span.setAttribute("team.id", teamId);
+      span.setAttribute("agent.role", task.agentRole);
+      logger.info({ issueId: task.issueId, teamId, agentRole: task.agentRole }, "开始组装初始提示词");
 
-    const [sectionA, sectionB, sectionC, sectionD, sectionE] = await Promise.all([
-      this.buildSectionA(task),
-      this.buildSectionB(task, teamId),
-      this.buildSectionC(task),
-      this.buildSectionD(task),
-      this.buildSectionE(task),
-    ]);
+      const [sectionA, sectionB, sectionC, sectionD, sectionE] = await Promise.all([
+        this.buildSectionA(task),
+        this.buildSectionB(task, teamId),
+        this.buildSectionC(task),
+        this.buildSectionD(task),
+        this.buildSectionE(task),
+      ]);
 
-    const prompt = [sectionA, sectionB, sectionC, sectionD, sectionE].join("\n\n");
-    logger.info({ issueId: task.issueId, promptLength: prompt.length }, "初始提示词组装完成");
-    return prompt;
+      const prompt = [sectionA, sectionB, sectionC, sectionD, sectionE].join("\n\n");
+      span.setAttribute("prompt.length", prompt.length);
+      span.setAttribute("prompt.sections", 5);
+      logger.info({ issueId: task.issueId, promptLength: prompt.length }, "初始提示词组装完成");
+      return prompt;
+    });
   }
 
   /** §A — Issue 上下文 */

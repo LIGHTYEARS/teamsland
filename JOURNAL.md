@@ -1493,3 +1493,104 @@ Four test cases exercising `SubagentRegistry.restoreOnStartup()` with real temp 
 **Progress:** 31 of 34 ISSUES.md items now complete (91%). Remaining: 1 observability + 2 dashboard (Stream-JSON viewer, Lark OAuth).
 
 ---
+
+## Iteration 15 — 2026-04-22
+
+### Tasks Completed
+
+1. **[observability] Add OpenTelemetry span instrumentation**
+2. **[dashboard] Stream-JSON event viewer**
+3. **[dashboard] Lark OAuth authentication**
+
+### Summary
+
+This is the **final iteration** — all 34 ISSUES.md items are now complete.
+
+#### OpenTelemetry Span Instrumentation
+
+Added `@opentelemetry/api`, `@opentelemetry/sdk-trace-base`, `@opentelemetry/exporter-trace-otlp-http`, `@opentelemetry/resources`, and `@opentelemetry/semantic-conventions` to `@teamsland/observability`. Created `tracer.ts` with:
+
+- `initTracing(serviceName, version)` — idempotent TracerProvider setup using `BasicTracerProvider` (Bun-compatible; `NodeTracerProvider` relies on Node-specific `register()`)
+- `getTracer(name)` — returns a tracer from the global provider (NoOp when uninitialized)
+- `withSpan(tracerName, spanName, fn, attrs?)` — async wrapper that creates a span, propagates context, records attributes, handles errors with `SpanStatusCode.ERROR` + `recordException()`, and auto-ends the span
+- `shutdownTracing()` — flushes pending spans on process exit
+
+Instrumented three target functions:
+- `ProcessController.spawn` — records `issue.id`, `worktree.path`, `process.pid`, `session.id`
+- `TeamMemoryStore.vectorSearch` — records `query.limit`, `query.dimensions`, `vec.result_count`, `result.count`
+- `DynamicContextAssembler.buildInitialPrompt` — records `issue.id`, `team.id`, `agent.role`, `prompt.length`
+
+Wired `initTracing()` at server startup (step 2) and `shutdownTracing()` in graceful shutdown. OTel exports to `OTEL_EXPORTER_OTLP_ENDPOINT` env var (defaults `http://localhost:4318`), development mode uses `SimpleSpanProcessor`, production uses `BatchSpanProcessor`.
+
+5 unit tests for the tracer module (getTracer, withSpan OK/ERROR, initial attributes, nested spans).
+
+#### Stream-JSON Event Viewer
+
+Server-side:
+- Added `sessionDb: SessionDB` to `DashboardDeps` interface
+- Added `GET /api/sessions/:sessionId/messages` route returning `application/x-ndjson` (one JSON line per message)
+- Wired `sessionDb` from `main.ts` into `startDashboard()`
+
+Client-side:
+- `useSessionMessages(sessionId)` hook — fetches NDJSON from the new endpoint, parses line-by-line, supports manual refresh via `useReducer` version bump
+- `EventViewer` component — table with columns: ID, Time, Role (color-coded badge), Tool, Content (truncated 200 chars), Trace ID
+- Updated `AgentList` to accept `selectedSessionId`/`onSelectSession` props — clicking a row selects/deselects and shows the event viewer panel below
+- Updated `App.tsx` with `useState` for session selection, renders `EventViewer` conditionally
+
+#### Lark OAuth Authentication
+
+Server-side (`lark-auth.ts`):
+- `LarkAuthManager` class with in-memory session `Map<token, AuthSession>`
+- `getAuthUrl(redirectPath)` — constructs Lark OpenAPI authorize URL with state
+- `handleCallback(code, state)` — exchanges code via `app_access_token` → `user_access_token` → `user_info`, enforces `allowedDepartments` whitelist
+- `validate(token)` — checks session exists and not expired
+- `logout(token)` — removes session
+- `extractToken(cookieHeader)` — parses `teamsland_session` cookie
+
+Dashboard routes (in `dashboard.ts`):
+- `GET /auth/lark` → redirect to Lark authorize page
+- `GET /auth/lark/callback` → exchange code, set `HttpOnly` session cookie, redirect to state path
+- `GET /auth/me` → return current user info or 401
+- `POST /auth/logout` → clear cookie, redirect to `/`
+- All `/api/*` routes gated by auth middleware (when `provider === "lark_oauth"`)
+
+Client-side:
+- `useAuth()` hook — checks `/auth/me`, handles 404 (auth disabled) as pass-through
+- `AuthGate` component wraps `<App>` — shows login page with "飞书登录" button when unauthenticated, shows user name + logout when authenticated
+
+Wired in `main.ts`: `LarkAuthManager` instantiated conditionally when `config.dashboard.auth.provider === "lark_oauth"`, using `config.lark.appId/appSecret`.
+
+Extracted `handleAuthRoutes()`, `handleOAuthCallback()`, `handleApiRoutes()`, `checkApiAuth()`, and `routeRequest()` from the `fetch` handler to keep cognitive complexity under 15.
+
+### Test Results
+
+- 32 test files passed, 7 skipped (vec0-dependent)
+- 261 tests passed, 70 skipped
+- 5 new tracer tests all green
+- Biome lint clean (exit 0, 1 acceptable false-positive warning on `useReducer` dependency pattern)
+
+### Files Modified
+
+- `packages/observability/src/tracer.ts` — NEW: OTel TracerProvider, withSpan, getTracer
+- `packages/observability/src/index.ts` — re-export tracer module
+- `packages/observability/src/__tests__/tracer.test.ts` — NEW: 5 tracer unit tests
+- `packages/observability/package.json` — @opentelemetry/* dependencies
+- `packages/sidecar/src/process-controller.ts` — withSpan instrumentation on spawn()
+- `packages/memory/src/team-memory-store.ts` — withSpan instrumentation on vectorSearch()
+- `packages/context/src/assembler.ts` — withSpan instrumentation on buildInitialPrompt()
+- `apps/server/src/main.ts` — initTracing(), shutdownTracing(), LarkAuthManager wiring, sessionDb pass-through
+- `apps/server/src/dashboard.ts` — sessionDb dep, session messages endpoint, auth routes, extracted route handlers
+- `apps/server/src/lark-auth.ts` — NEW: LarkAuthManager, extractToken
+- `apps/dashboard/src/App.tsx` — EventViewer integration, session selection state
+- `apps/dashboard/src/index.tsx` — AuthGate wrapper
+- `apps/dashboard/src/hooks/useSessionMessages.ts` — NEW: NDJSON fetch hook
+- `apps/dashboard/src/hooks/useAuth.ts` — NEW: auth status hook
+- `apps/dashboard/src/components/EventViewer.tsx` — NEW: NDJSON event viewer panel
+- `apps/dashboard/src/components/AuthGate.tsx` — NEW: auth gate component
+- `apps/dashboard/src/components/AgentList.tsx` — row selection props
+- `ISSUES.md` — marked 3 items complete
+- `bun.lock` — updated lockfile
+
+**Progress:** 34 of 34 ISSUES.md items now complete (100%). All tasks in the backlog are done.
+
+---
