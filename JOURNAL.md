@@ -883,3 +883,23 @@ After 5 iterations of split-doc polish (iterations 8-12):
 
 ---
 
+## Evolution Loop — Iteration 1 — 2026-04-21
+
+**Issue:** `[server] Wire SidecarDataPlane into issue.created pipeline` (ISSUES.md §1 Critical Gaps)
+
+**Problem:** `ProcessController.spawn()` returns `spawnResult.stdout` (a `ReadableStream<Uint8Array>` of NDJSON), but no code ever consumed it. Agent events were never persisted to SessionDB and agent status never transitioned from `"running"` to `"completed"` or `"failed"`.
+
+**Changes:**
+
+| File | Change |
+|------|--------|
+| `apps/server/src/event-handlers.ts` | Added `SidecarDataPlane` to imports; added `dataPlane: SidecarDataPlane` field to `EventHandlerDeps` interface; added fire-and-forget `deps.dataPlane.processStream(agentId, spawnResult.stdout)` call after `registry.register()` in `issue.created` handler (step 8) |
+| `apps/server/src/main.ts` | Import `SidecarDataPlane`; construct `new SidecarDataPlane({ registry, sessionDb, logger })` as step 14; pass `dataPlane` in `registerEventHandlers()` deps; renumbered steps 15-24 |
+| `apps/server/src/__tests__/event-pipeline.test.ts` | Added `dataPlane: { processStream: vi.fn() }` mock to `registerEventHandlers` call |
+
+**Verification:**
+- `bunx biome check apps/server/src/` — 6 files, no issues
+- `bunx --bun vitest run apps/server/` — 15 tests passed (2 test files)
+
+---
+

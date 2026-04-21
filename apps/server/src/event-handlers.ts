@@ -5,7 +5,7 @@ import type { IntentClassifier } from "@teamsland/ingestion";
 import type { LarkNotifier } from "@teamsland/lark";
 import type { MeegoEventBus } from "@teamsland/meego";
 import { createLogger } from "@teamsland/observability";
-import type { ProcessController, SubagentRegistry } from "@teamsland/sidecar";
+import type { ProcessController, SidecarDataPlane, SubagentRegistry } from "@teamsland/sidecar";
 import { CapacityError } from "@teamsland/sidecar";
 import type { AppConfig, EventHandler, MeegoEvent, TaskConfig } from "@teamsland/types";
 
@@ -26,6 +26,7 @@ const CONFIDENCE_THRESHOLD = 0.5;
  * const deps: EventHandlerDeps = {
  *   intentClassifier: classifier,
  *   processController: controller,
+ *   dataPlane: sidecarDataPlane,
  *   assembler: contextAssembler,
  *   registry: subagentRegistry,
  *   worktreeManager: worktreeManager,
@@ -40,6 +41,8 @@ export interface EventHandlerDeps {
   intentClassifier: IntentClassifier;
   /** Claude Code 子进程控制器 */
   processController: ProcessController;
+  /** Sidecar 数据平面 — 消费 Agent 子进程的 NDJSON 流 */
+  dataPlane: SidecarDataPlane;
   /** 动态上下文组装器 */
   assembler: DynamicContextAssembler;
   /** Agent 注册表 */
@@ -185,6 +188,11 @@ function createIssueCreatedHandler(deps: EventHandlerDeps): EventHandler {
             createdAt: Date.now(),
           });
           logger.info({ agentId, issueId: event.issueId }, "Agent 注册完成");
+
+          // 8. 启动数据平面流处理（fire-and-forget）
+          deps.dataPlane.processStream(agentId, spawnResult.stdout).catch((streamErr: unknown) => {
+            logger.error({ agentId, issueId: event.issueId, err: streamErr }, "数据平面流处理异常");
+          });
         } catch (err: unknown) {
           if (err instanceof CapacityError) {
             logger.warn({ current: err.current, max: err.max, issueId: event.issueId }, "Agent 注册表容量已满");

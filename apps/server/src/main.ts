@@ -14,7 +14,7 @@ import type { Embedder } from "@teamsland/memory";
 import { LocalEmbedder, MemoryReaper, NullEmbedder, NullMemoryStore, TeamMemoryStore } from "@teamsland/memory";
 import { createLogger } from "@teamsland/observability";
 import { SessionDB } from "@teamsland/session";
-import { ProcessController, SubagentRegistry } from "@teamsland/sidecar";
+import { ProcessController, SidecarDataPlane, SubagentRegistry } from "@teamsland/sidecar";
 import { startDashboard } from "./dashboard.js";
 import { registerEventHandlers } from "./event-handlers.js";
 import { startFts5Optimize, startMemoryReaper, startSeenEventsSweep, startWorktreeReaper } from "./scheduled-tasks.js";
@@ -94,10 +94,14 @@ const TEAM_ID = "default";
     await registry.restoreOnStartup();
     logger.info("SubagentRegistry 启动恢复完成");
 
-    // ── 14. RepoMapping ──
+    // ── 14. SidecarDataPlane ──
+    const dataPlane = new SidecarDataPlane({ registry, sessionDb, logger });
+    logger.info("SidecarDataPlane 已初始化");
+
+    // ── 15. RepoMapping ──
     const repoMapping = RepoMapping.fromConfig(config.repoMapping);
 
-    // ── 15. DynamicContextAssembler ──
+    // ── 16. DynamicContextAssembler ──
     const assembler = new DynamicContextAssembler({
       config,
       repoMapping,
@@ -105,7 +109,7 @@ const TEAM_ID = "default";
       embedder,
     });
 
-    // ── 16. IntentClassifier（Stub LLM） ──
+    // ── 17. IntentClassifier（Stub LLM） ──
     const stubLlmClient: LlmClient = {
       async chat(): Promise<{ content: string }> {
         throw new Error("LLM 未配置 — 需要在配置中添加 API 密钥和模型端点");
@@ -114,16 +118,17 @@ const TEAM_ID = "default";
     logger.warn("LLM 未配置，IntentClassifier 将仅使用规则快速路径");
     const intentClassifier = new IntentClassifier({ llm: stubLlmClient });
 
-    // ── 17. WorktreeManager ──
+    // ── 18. WorktreeManager ──
     const worktreeManager = new WorktreeManager(new GitBunCommandRunner());
 
-    // ── 18. MeegoEventBus ──
+    // ── 19. MeegoEventBus ──
     const eventBus = new MeegoEventBus(eventDb);
 
-    // ── 19. 注册事件处理器 ──
+    // ── 20. 注册事件处理器 ──
     registerEventHandlers(eventBus, {
       intentClassifier,
       processController,
+      dataPlane,
       assembler,
       registry,
       worktreeManager,
@@ -132,15 +137,15 @@ const TEAM_ID = "default";
       teamId: TEAM_ID,
     });
 
-    // ── 20. MeegoConnector ──
+    // ── 21. MeegoConnector ──
     const connector = new MeegoConnector({ config: config.meego, eventBus });
     await connector.start(controller.signal);
     logger.info("MeegoConnector 已启动");
 
-    // ── 21. Dashboard ──
+    // ── 22. Dashboard ──
     const dashboardServer = startDashboard({ registry, config: config.dashboard }, controller.signal);
 
-    // ── 22. 定时任务 ──
+    // ── 23. 定时任务 ──
     const worktreeReaperTimer = startWorktreeReaper(worktreeManager, registry, 3_600_000);
     const memoryReaperTimer = memoryReaper ? startMemoryReaper(memoryReaper, 86_400_000) : null;
     const seenEventsSweepTimer = startSeenEventsSweep(eventBus, 3_600_000);
@@ -149,7 +154,7 @@ const TEAM_ID = "default";
         ? startFts5Optimize(memoryStore, config.storage.fts5.optimizeIntervalHours * 3_600_000)
         : null;
 
-    // ── 23. 系统启动完成 ──
+    // ── 24. 系统启动完成 ──
     logger.info("系统启动完成");
 
     // ── 优雅关闭 ──

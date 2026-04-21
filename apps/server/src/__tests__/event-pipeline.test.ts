@@ -123,6 +123,7 @@ describe("事件管线端到端", () => {
     registerEventHandlers(eventBus, {
       intentClassifier,
       processController: processController as never,
+      dataPlane: { processStream: vi.fn().mockResolvedValue(undefined) } as never,
       assembler: assembler as never,
       registry,
       worktreeManager: worktreeManager as never,

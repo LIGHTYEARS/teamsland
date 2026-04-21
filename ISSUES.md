@@ -8,7 +8,7 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 ## 1. Critical Gaps (blocking a working v0.1 demo)
 
-- [ ] **[server] Wire SidecarDataPlane into issue.created pipeline** — `ProcessController.spawn()` returns a stdout ReadableStream but no code calls `SidecarDataPlane.processStream()` on it. Agent events are never persisted to SessionDB and Agent status never transitions. Add a `SidecarDataPlane` instance to `EventHandlerDeps` and invoke `dataPlane.processStream(agentId, spawnResult.stdout)` after `registry.register()` in `event-handlers.ts`.
+- [x] **[server] Wire SidecarDataPlane into issue.created pipeline** — `ProcessController.spawn()` returns a stdout ReadableStream but no code calls `SidecarDataPlane.processStream()` on it. Agent events are never persisted to SessionDB and Agent status never transitions. Add a `SidecarDataPlane` instance to `EventHandlerDeps` and invoke `dataPlane.processStream(agentId, spawnResult.stdout)` after `registry.register()` in `event-handlers.ts`.
 
 - [ ] **[server] Wire real LLM client instead of stub** — `main.ts` creates a `stubLlmClient` that always throws. Implement a real `LlmClient` backed by the Anthropic SDK, reading API key/model from `config.json`, and inject it into `IntentClassifier` and `TaskPlanner`.
 
