@@ -112,6 +112,9 @@ describe("事件管线端到端", () => {
     // Mock LarkNotifier
     const notifier = { sendCard: vi.fn().mockResolvedValue(undefined), sendDm: vi.fn().mockResolvedValue(undefined) };
 
+    // Mock LarkCli
+    const larkCli = { contactSearch: vi.fn().mockResolvedValue([]), groupSearch: vi.fn().mockResolvedValue([]) };
+
     // 真实 SubagentRegistry
     registry = new SubagentRegistry({
       config: testConfig.sidecar,
@@ -128,12 +131,14 @@ describe("事件管线端到端", () => {
       registry,
       worktreeManager: worktreeManager as never,
       notifier: notifier as never,
+      larkCli: larkCli as never,
       config: testConfig,
       teamId: "default",
       documentParser: { parseMarkdown: vi.fn().mockReturnValue({ title: "", sections: [], entities: [] }) } as never,
       memoryStore: null,
       extractLoop: null,
       memoryUpdater: null,
+      taskPlanner: null,
     });
 
     // 启动 webhook

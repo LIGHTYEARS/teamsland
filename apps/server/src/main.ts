@@ -116,7 +116,7 @@ const TEAM_ID = "default";
       notifier,
       logger,
     });
-    await registry.restoreOnStartup();
+    const orphanTimer = await registry.restoreOnStartup();
     logger.info("SubagentRegistry 启动恢复完成");
 
     // ── 14. ObservableMessageBus ──
@@ -176,12 +176,14 @@ const TEAM_ID = "default";
       registry,
       worktreeManager,
       notifier,
+      larkCli,
       config,
       teamId: TEAM_ID,
       documentParser,
       memoryStore: memoryStore instanceof TeamMemoryStore ? memoryStore : null,
       extractLoop,
       memoryUpdater,
+      taskPlanner: null, // Swarm 需要真实 LLM — stub 模式下禁用
     });
 
     // ── 21. MeegoConnector ──
@@ -220,6 +222,7 @@ const TEAM_ID = "default";
       if (memoryReaperTimer) clearInterval(memoryReaperTimer);
       clearInterval(seenEventsSweepTimer);
       if (fts5OptimizeTimer) clearInterval(fts5OptimizeTimer);
+      if (orphanTimer) clearInterval(orphanTimer);
       dashboardServer.stop();
       await registry.persist();
       sessionDb.close();

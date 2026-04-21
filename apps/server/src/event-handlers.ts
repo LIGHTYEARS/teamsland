@@ -2,19 +2,24 @@ import { randomUUID } from "node:crypto";
 import type { DynamicContextAssembler } from "@teamsland/context";
 import type { WorktreeManager } from "@teamsland/git";
 import type { DocumentParser, IntentClassifier } from "@teamsland/ingestion";
-import type { LarkNotifier } from "@teamsland/lark";
+import type { LarkCli, LarkNotifier } from "@teamsland/lark";
 import type { MeegoEventBus } from "@teamsland/meego";
 import type { ExtractLoop, MemoryUpdater, TeamMemoryStore } from "@teamsland/memory";
 import { ingestDocument } from "@teamsland/memory";
 import { createLogger } from "@teamsland/observability";
 import type { ProcessController, SidecarDataPlane, SubagentRegistry } from "@teamsland/sidecar";
 import { CapacityError } from "@teamsland/sidecar";
-import type { AppConfig, EventHandler, MeegoEvent, TaskConfig } from "@teamsland/types";
+import type { TaskPlanner } from "@teamsland/swarm";
+import { runSwarm } from "@teamsland/swarm";
+import type { AppConfig, ComplexTask, EventHandler, MeegoEvent, TaskConfig } from "@teamsland/types";
 
 const logger = createLogger("server:events");
 
 /** 意图分类的最低置信度阈值，低于此值将跳过处理 */
 const CONFIDENCE_THRESHOLD = 0.5;
+
+/** 描述或实体数量超过此阈值时视为复杂任务，使用 Swarm 模式 */
+const SWARM_ENTITY_THRESHOLD = 3;
 
 /**
  * 事件处理器依赖项
@@ -33,12 +38,14 @@ const CONFIDENCE_THRESHOLD = 0.5;
  *   registry: subagentRegistry,
  *   worktreeManager: worktreeManager,
  *   notifier: larkNotifier,
+ *   larkCli: larkCli,
  *   config: appConfig,
  *   teamId: "team-001",
  *   documentParser: parser,
  *   memoryStore: teamMemoryStore,
  *   extractLoop: loop,
  *   memoryUpdater: updater,
+ *   taskPlanner: planner,
  * };
  * ```
  */
@@ -57,6 +64,8 @@ export interface EventHandlerDeps {
   worktreeManager: WorktreeManager;
   /** 飞书通知器 */
   notifier: LarkNotifier;
+  /** 飞书 CLI（联系人/群组搜索） */
+  larkCli: LarkCli;
   /** 全局应用配置 */
   config: AppConfig;
   /** 团队 ID */
@@ -69,6 +78,8 @@ export interface EventHandlerDeps {
   extractLoop: ExtractLoop | null;
   /** 记忆更新器（NullMemoryStore 时为 null） */
   memoryUpdater: MemoryUpdater | null;
+  /** 任务拆解器（LLM 未配置时为 null，不启用 Swarm） */
+  taskPlanner: TaskPlanner | null;
 }
 
 /**
@@ -170,6 +181,43 @@ function scheduleMemoryIngestion(
 }
 
 /**
+ * 解析实体中的 owner 名称并通过飞书通知相关人员（fire-and-forget）
+ *
+ * 对每个 owner 名调用 `LarkCli.contactSearch`，找到对应的 Lark userId 后
+ * 发送 DM 通知。同时向团队群发送任务创建通知卡片。
+ * 搜索或发送失败时仅记录警告日志，不影响调用方流程。
+ *
+ * @param deps - 事件处理器依赖项
+ * @param event - 原始 Meego 事件
+ * @param owners - 从 IntentClassifier 提取的负责人名列表
+ *
+ * @example
+ * ```typescript
+ * resolveAndNotifyOwners(deps, event, ["张三", "李四"]);
+ * ```
+ */
+function resolveAndNotifyOwners(deps: EventHandlerDeps, event: MeegoEvent, owners: string[]): void {
+  if (owners.length === 0) return;
+
+  const doResolve = async () => {
+    for (const owner of owners) {
+      const contacts = await deps.larkCli.contactSearch(owner, 1);
+      if (contacts.length === 0) {
+        logger.debug({ owner, issueId: event.issueId }, "未找到匹配联系人");
+        continue;
+      }
+      const userId = contacts[0].userId;
+      await deps.notifier.sendDm(userId, `任务 ${event.issueId}（项目 ${event.projectKey}）与您相关，请关注。`);
+      logger.info({ owner, userId, issueId: event.issueId }, "已向相关人员发送 DM");
+    }
+  };
+
+  doResolve().catch((err: unknown) => {
+    logger.warn({ owners, issueId: event.issueId, err }, "联系人解析/通知失败（不影响 Agent 启动）");
+  });
+}
+
+/**
  * 将已启动的 Agent 注册到注册表并启动数据平面流
  *
  * 容量不足时向指派人发送 DM 通知并返回 false；成功返回 true。
@@ -217,6 +265,56 @@ async function registerAgent(
 }
 
 /**
+ * 判断任务是否应使用 Swarm 模式（多 Agent 协作）
+ *
+ * 条件：TaskPlanner 可用 且 解析出的实体数量 >= SWARM_ENTITY_THRESHOLD。
+ *
+ * @example
+ * ```typescript
+ * const useSwarm = shouldUseSwarm(deps, ["UserService", "AuthController", "LoginPage"]);
+ * // useSwarm === true (3 个实体 >= 阈值)
+ * ```
+ */
+function shouldUseSwarm(deps: EventHandlerDeps, entities: string[]): boolean {
+  return deps.taskPlanner !== null && entities.length >= SWARM_ENTITY_THRESHOLD;
+}
+
+/**
+ * 以 Swarm 模式执行复杂任务
+ *
+ * 将 TaskConfig 转换为 ComplexTask，调用 runSwarm 进行多 Agent 协作。
+ * 失败时记录错误日志并通过飞书 DM 通知指派人。
+ *
+ * @example
+ * ```typescript
+ * await dispatchSwarm(deps, taskConfig);
+ * ```
+ */
+async function dispatchSwarm(deps: EventHandlerDeps, taskConfig: TaskConfig): Promise<void> {
+  if (!deps.taskPlanner) return;
+  const complexTask: ComplexTask = { ...taskConfig, subtasks: [] };
+  const result = await runSwarm(complexTask, {
+    planner: deps.taskPlanner,
+    registry: deps.registry,
+    assembler: deps.assembler,
+    processController: deps.processController,
+    config: deps.config.sidecar,
+    teamId: deps.teamId,
+  });
+  if (!result.success) {
+    logger.warn({ issueId: taskConfig.issueId, failedTaskIds: result.failedTaskIds }, "Swarm 未通过法定人数");
+    if (taskConfig.assigneeId) {
+      await deps.notifier.sendDm(
+        taskConfig.assigneeId,
+        `任务 ${taskConfig.issueId} 的 Swarm 协作未完全成功（失败子任务: ${result.failedTaskIds.join(", ")}）`,
+      );
+    }
+  } else {
+    logger.info({ issueId: taskConfig.issueId }, "Swarm 任务执行成功");
+  }
+}
+
+/**
  * 创建 issue.created 事件处理器
  *
  * 完整流水线：意图分类 → worktree 创建 → 文档记忆注入 → 提示词组装 → Agent 进程启动 → 注册表写入。
@@ -243,6 +341,9 @@ function createIssueCreatedHandler(deps: EventHandlerDeps): EventHandler {
           logger.info({ issueId: event.issueId, confidence: intentResult.confidence }, "置信度低于阈值，跳过处理");
           return;
         }
+
+        // 1.5. 联系人解析 + 通知（fire-and-forget, 不阻塞后续流程）
+        resolveAndNotifyOwners(deps, event, intentResult.entities.owners);
 
         // 2. 解析仓库路径
         const repoPath = resolveRepoPath(deps.config, event.projectKey);
@@ -281,7 +382,15 @@ function createIssueCreatedHandler(deps: EventHandlerDeps): EventHandler {
         // 4.5. 文档解析 + 记忆注入（fire-and-forget, 不阻塞 Agent 启动）
         scheduleMemoryIngestion(deps, event, agentId, parsedDocument);
 
-        // 5. 组装初始提示词
+        // 4.6. 复杂任务检测 → Swarm 分支
+        const entities = parsedDocument?.entities ?? [];
+        if (shouldUseSwarm(deps, entities)) {
+          logger.info({ issueId: event.issueId, entityCount: entities.length }, "检测到复杂任务，使用 Swarm 模式");
+          await dispatchSwarm(deps, taskConfig);
+          return;
+        }
+
+        // 5. 组装初始提示词（单 Agent 路径）
         const prompt = await deps.assembler.buildInitialPrompt(taskConfig, deps.teamId);
         logger.info({ issueId: event.issueId, promptLength: prompt.length }, "初始提示词组装完成");
 
