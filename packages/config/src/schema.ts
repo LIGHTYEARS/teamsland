@@ -92,7 +92,10 @@ const MemoryConfigSchema = z.object({
   decayHalfLifeDays: z.number().positive(),
   extractLoopMaxIterations: z.number().int().positive(),
   exemptTypes: z.array(MemoryTypeSchema).default([]),
-  perTypeTtl: z.record(MemoryTypeSchema, z.number().positive()).default({}),
+  perTypeTtl: z
+    .record(MemoryTypeSchema, z.number().positive())
+    .optional()
+    .default({} as Record<string, never>),
 });
 
 const SqliteVecSchema = z.object({

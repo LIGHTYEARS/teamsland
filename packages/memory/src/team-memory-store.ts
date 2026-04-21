@@ -427,7 +427,7 @@ export class TeamMemoryStore implements AbstractMemoryStore {
     const placeholders = entryIds.map(() => "?").join(", ");
     this.db.run(
       `UPDATE memory_entries SET access_count = access_count + 1 WHERE entry_id IN (${placeholders})`,
-      ...entryIds,
+      entryIds,
     );
   }
 
