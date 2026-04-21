@@ -2,6 +2,7 @@
 // 启动编排、事件管线、定时任务、优雅关闭
 
 import { Database } from "bun:sqlite";
+import { mkdirSync } from "node:fs";
 import { loadConfig, RepoMapping } from "@teamsland/config";
 import { DynamicContextAssembler } from "@teamsland/context";
 import { BunCommandRunner as GitBunCommandRunner, WorktreeManager } from "@teamsland/git";
@@ -9,7 +10,8 @@ import type { LlmClient } from "@teamsland/ingestion";
 import { IntentClassifier } from "@teamsland/ingestion";
 import { BunCommandRunner as LarkBunCommandRunner, LarkCli, LarkNotifier } from "@teamsland/lark";
 import { MeegoConnector, MeegoEventBus } from "@teamsland/meego";
-import { LocalEmbedder, MemoryReaper, TeamMemoryStore } from "@teamsland/memory";
+import type { Embedder } from "@teamsland/memory";
+import { LocalEmbedder, MemoryReaper, NullEmbedder, NullMemoryStore, TeamMemoryStore } from "@teamsland/memory";
 import { createLogger } from "@teamsland/observability";
 import { SessionDB } from "@teamsland/session";
 import { ProcessController, SubagentRegistry } from "@teamsland/sidecar";
@@ -22,6 +24,9 @@ const TEAM_ID = "default";
 
 (async () => {
   try {
+    // ── 0. 确保数据目录存在 ──
+    mkdirSync("data", { recursive: true });
+
     // ── 1. 配置 ──
     const config = await loadConfig();
 
@@ -39,17 +44,34 @@ const TEAM_ID = "default";
     const eventDb = new Database(":memory:");
     logger.info("事件去重数据库已创建");
 
-    // ── 6. 本地 Embedding ──
-    const embedder = new LocalEmbedder(config.storage.embedding);
-    await embedder.init();
-    logger.info("LocalEmbedder 初始化完成");
+    // ── 6. Embedding（优雅降级） ──
+    let embedder: Embedder;
+    try {
+      const realEmbedder = new LocalEmbedder(config.storage.embedding);
+      const initTimeout = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("LocalEmbedder 初始化超时（5秒）— 模型可能尚未下载")), 5_000);
+      });
+      await Promise.race([realEmbedder.init(), initTimeout]);
+      embedder = realEmbedder;
+      logger.info("LocalEmbedder 初始化完成");
+    } catch (embErr: unknown) {
+      logger.warn({ err: embErr }, "LocalEmbedder 初始化失败，使用 NullEmbedder");
+      embedder = new NullEmbedder(config.storage.embedding.contextSize);
+      await embedder.init();
+    }
 
-    // ── 7. 团队记忆存储 ──
-    const memoryStore = new TeamMemoryStore(TEAM_ID, config.storage, embedder);
-    logger.info("TeamMemoryStore 已初始化");
+    // ── 7. 团队记忆存储（优雅降级） ──
+    let memoryStore: TeamMemoryStore | NullMemoryStore;
+    try {
+      memoryStore = new TeamMemoryStore(TEAM_ID, config.storage, embedder);
+      logger.info("TeamMemoryStore 已初始化");
+    } catch (memErr: unknown) {
+      logger.warn({ err: memErr }, "TeamMemoryStore 初始化失败（sqlite-vec 未安装？），使用 NullMemoryStore");
+      memoryStore = new NullMemoryStore();
+    }
 
-    // ── 8. 记忆回收器 ──
-    const memoryReaper = new MemoryReaper(memoryStore, config.memory);
+    // ── 8. 记忆回收器（仅在 TeamMemoryStore 可用时） ──
+    const memoryReaper = memoryStore instanceof TeamMemoryStore ? new MemoryReaper(memoryStore, config.memory) : null;
 
     // ── 9. Lark 命令运行器 ──
     const larkCmdRunner = new LarkBunCommandRunner();
@@ -116,13 +138,16 @@ const TEAM_ID = "default";
     logger.info("MeegoConnector 已启动");
 
     // ── 21. Dashboard ──
-    startDashboard({ registry, config: config.dashboard }, controller.signal);
+    const dashboardServer = startDashboard({ registry, config: config.dashboard }, controller.signal);
 
     // ── 22. 定时任务 ──
     const worktreeReaperTimer = startWorktreeReaper(worktreeManager, registry, 3_600_000);
-    const memoryReaperTimer = startMemoryReaper(memoryReaper, 86_400_000);
+    const memoryReaperTimer = memoryReaper ? startMemoryReaper(memoryReaper, 86_400_000) : null;
     const seenEventsSweepTimer = startSeenEventsSweep(eventBus, 3_600_000);
-    const fts5OptimizeTimer = startFts5Optimize(memoryStore, config.storage.fts5.optimizeIntervalHours * 3_600_000);
+    const fts5OptimizeTimer =
+      memoryStore instanceof TeamMemoryStore
+        ? startFts5Optimize(memoryStore, config.storage.fts5.optimizeIntervalHours * 3_600_000)
+        : null;
 
     // ── 23. 系统启动完成 ──
     logger.info("系统启动完成");
@@ -132,9 +157,10 @@ const TEAM_ID = "default";
       logger.info("收到关闭信号，开始优雅关闭");
       controller.abort();
       clearInterval(worktreeReaperTimer);
-      clearInterval(memoryReaperTimer);
+      if (memoryReaperTimer) clearInterval(memoryReaperTimer);
       clearInterval(seenEventsSweepTimer);
-      clearInterval(fts5OptimizeTimer);
+      if (fts5OptimizeTimer) clearInterval(fts5OptimizeTimer);
+      dashboardServer.stop();
       await registry.persist();
       sessionDb.close();
       memoryStore.close();

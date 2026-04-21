@@ -24,5 +24,7 @@ export type {
 export { EXTRACT_TOOLS } from "./llm-client.js";
 export { MemoryReaper } from "./memory-reaper.js";
 export { MemoryUpdater } from "./memory-updater.js";
+export { NullEmbedder } from "./null-embedder.js";
+export { NullMemoryStore } from "./null-memory-store.js";
 export { retrieve } from "./retriever.js";
 export { TeamMemoryStore } from "./team-memory-store.js";

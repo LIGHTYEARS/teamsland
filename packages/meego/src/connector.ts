@@ -108,12 +108,21 @@ export class MeegoConnector {
       hostname: host,
       port,
       fetch: async (req) => {
+        const url = new URL(req.url);
+
+        // 健康检查端点
+        if (req.method === "GET" && url.pathname === "/health") {
+          return new Response(JSON.stringify({ status: "ok", uptime: process.uptime() }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
         if (req.method !== "POST") {
           return new Response("Method Not Allowed", { status: 405 });
         }
 
-        const expectedUrl = `http://${host}:${port}${path}`;
-        if (req.url !== expectedUrl) {
+        if (url.pathname !== path) {
           return new Response("Not Found", { status: 404 });
         }
 

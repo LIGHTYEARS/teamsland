@@ -1,9 +1,9 @@
 {
   "meego": {
     "spaces": [{ "spaceId": "xxx", "name": "开放平台前端" }, { "spaceId": "yyy", "name": "开放平台基础" }],
-    "eventMode": "both",
+    "eventMode": "webhook",
     "webhook": {
-      "host": "0.0.0.0",
+      "host": "127.0.0.1",
       "port": 8080,
       "path": "/meego/webhook"
     },
@@ -12,7 +12,7 @@
       "lookbackMinutes": 5
     },
     "longConnection": {
-      "enabled": true,
+      "enabled": false,
       "reconnectIntervalSeconds": 10
     }
   },
