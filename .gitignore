@@ -10,3 +10,6 @@ hermes-agent/
 multica/
 OpenViking/
 qmd/
+
+# auto-evolve ephemeral state
+session_plan/
