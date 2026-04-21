@@ -1,8 +1,10 @@
 import type { WorktreeManager } from "@teamsland/git";
+import type { LarkNotifier } from "@teamsland/lark";
 import type { MeegoEventBus } from "@teamsland/meego";
 import type { MemoryReaper, TeamMemoryStore } from "@teamsland/memory";
 import { createLogger } from "@teamsland/observability";
-import type { SubagentRegistry } from "@teamsland/sidecar";
+import type { AlertNotifier, SubagentRegistry } from "@teamsland/sidecar";
+import { Alerter } from "@teamsland/sidecar";
 
 const logger = createLogger("server:scheduler");
 
@@ -145,6 +147,83 @@ export function startFts5Optimize(memoryStore: TeamMemoryStore, intervalMs: numb
       logger.info("FTS5 索引优化完成");
     } catch (err: unknown) {
       logger.error({ err }, "FTS5 索引优化失败");
+    }
+  }, intervalMs);
+}
+
+/**
+ * LarkNotifier → AlertNotifier 适配器
+ *
+ * 将 Alerter 所需的 `AlertNotifier.sendCard(channelId, card)` 调用
+ * 桥接到 `LarkNotifier.sendCard(title, content, level)` 上。
+ * channelId 参数被忽略（LarkNotifier 内部已绑定频道）。
+ *
+ * @example
+ * ```typescript
+ * const adapter = new LarkAlertAdapter(notifier);
+ * const alerter = new Alerter({ notifier: adapter, channelId: "oc_xxx" });
+ * ```
+ */
+class LarkAlertAdapter implements AlertNotifier {
+  constructor(private readonly notifier: LarkNotifier) {}
+
+  async sendCard(_channelId: string, card: { title: string; content: string; timestamp: string }): Promise<void> {
+    await this.notifier.sendCard(card.title, `${card.content}\n时间: ${card.timestamp}`, "warning");
+  }
+}
+
+/**
+ * 创建健康检查所需的 Alerter 实例
+ *
+ * 内部使用 LarkAlertAdapter 桥接 LarkNotifier 到 AlertNotifier 接口。
+ *
+ * @param notifier - 飞书通知器
+ * @param channelId - 告警目标频道 ID
+ * @returns 配置完成的 Alerter 实例
+ *
+ * @example
+ * ```typescript
+ * const alerter = createAlerter(notifier, "oc_team_channel");
+ * ```
+ */
+export function createAlerter(notifier: LarkNotifier, channelId: string): Alerter {
+  return new Alerter({ notifier: new LarkAlertAdapter(notifier), channelId });
+}
+
+/**
+ * 启动健康检查定时任务
+ *
+ * 定期检查 Agent 并发数是否超过容量阈值（maxConcurrentSessions 的 90%），
+ * 超过时通过 Alerter 发送飞书告警卡片。
+ * 回调内部的错误会被捕获并记录，不会向外抛出。
+ *
+ * @param alerter - 告警器实例
+ * @param registry - Agent 注册表
+ * @param threshold - 告警阈值（建议为 maxConcurrentSessions * 0.9）
+ * @param intervalMs - 执行间隔（毫秒）
+ * @returns setInterval 返回的定时器 ID，可用于 clearInterval 停止任务
+ *
+ * @example
+ * ```typescript
+ * import { startHealthCheck } from "./scheduled-tasks.js";
+ *
+ * const timer = startHealthCheck(alerter, registry, 18, 60_000);
+ * clearInterval(timer);
+ * ```
+ */
+export function startHealthCheck(
+  alerter: Alerter,
+  registry: SubagentRegistry,
+  threshold: number,
+  intervalMs: number,
+): ReturnType<typeof setInterval> {
+  logger.info({ intervalMs, threshold }, "健康检查任务已启动");
+
+  return setInterval(async () => {
+    try {
+      await alerter.check("concurrent_agents", registry.runningCount(), threshold);
+    } catch (err: unknown) {
+      logger.error({ err }, "健康检查失败");
     }
   }, intervalMs);
 }

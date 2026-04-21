@@ -17,7 +17,14 @@ import { SessionDB } from "@teamsland/session";
 import { ProcessController, SidecarDataPlane, SubagentRegistry } from "@teamsland/sidecar";
 import { startDashboard } from "./dashboard.js";
 import { registerEventHandlers } from "./event-handlers.js";
-import { startFts5Optimize, startMemoryReaper, startSeenEventsSweep, startWorktreeReaper } from "./scheduled-tasks.js";
+import {
+  createAlerter,
+  startFts5Optimize,
+  startHealthCheck,
+  startMemoryReaper,
+  startSeenEventsSweep,
+  startWorktreeReaper,
+} from "./scheduled-tasks.js";
 
 /** 默认团队 ID */
 const TEAM_ID = "default";
@@ -146,6 +153,13 @@ const TEAM_ID = "default";
     const dashboardServer = startDashboard({ registry, config: config.dashboard }, controller.signal);
 
     // ── 23. 定时任务 ──
+    const alerter = createAlerter(notifier, config.lark.notification.teamChannelId);
+    const healthCheckTimer = startHealthCheck(
+      alerter,
+      registry,
+      Math.floor(config.sidecar.maxConcurrentSessions * 0.9),
+      60_000,
+    );
     const worktreeReaperTimer = startWorktreeReaper(worktreeManager, registry, 3_600_000);
     const memoryReaperTimer = memoryReaper ? startMemoryReaper(memoryReaper, 86_400_000) : null;
     const seenEventsSweepTimer = startSeenEventsSweep(eventBus, 3_600_000);
@@ -161,6 +175,7 @@ const TEAM_ID = "default";
     const shutdown = async () => {
       logger.info("收到关闭信号，开始优雅关闭");
       controller.abort();
+      clearInterval(healthCheckTimer);
       clearInterval(worktreeReaperTimer);
       if (memoryReaperTimer) clearInterval(memoryReaperTimer);
       clearInterval(seenEventsSweepTimer);
