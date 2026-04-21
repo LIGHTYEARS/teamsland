@@ -172,5 +172,6 @@ export const AppConfigSchema = z.object({
   confirmation: ConfirmationConfigSchema,
   dashboard: DashboardConfigSchema,
   repoMapping: z.array(RepoMappingEntrySchema),
-  skillRouting: z.record(z.string(), z.array(z.string())),
+  skillRouting: z.record(z.string(), z.array(z.string())).default({}),
+  templateBasePath: z.string().optional().default("config/templates"),
 });
