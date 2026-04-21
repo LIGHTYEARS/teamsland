@@ -28,9 +28,8 @@ export default defineConfig({
       },
     ],
   },
-  plugins: [
-    new rspack.HtmlRspackPlugin({ template: "./src/index.html" }),
-    isDev && new RefreshPlugin(),
-  ].filter(Boolean),
+  plugins: [new rspack.HtmlRspackPlugin({ template: "./src/index.html" }), isDev && new RefreshPlugin()].filter(
+    Boolean,
+  ),
   devServer: { port: 5173, hot: true },
 });

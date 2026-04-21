@@ -6,9 +6,7 @@ export default defineConfig({
   description: "Team AI Collaboration Platform — Architecture & API Documentation",
   themeConfig: {
     sidebar: {
-      "/": [
-        { text: "Introduction", link: "/index" },
-      ],
+      "/": [{ text: "Introduction", link: "/index" }],
     },
   },
 });
