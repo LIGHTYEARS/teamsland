@@ -1,0 +1,124 @@
+# evolve.config.yaml -- teamsland auto-evolution configuration
+# Project: teamsland (Team AI Collaboration Platform)
+# Generated: 2026-04-21
+# Strategy: issue-driven from ISSUES.md + assessment-first fallback
+
+project:
+  name: "teamsland"
+  path: "."
+  goal: "feature-development"
+  metric: "test_pass_rate"
+  metric_direction: "higher"
+  mutable_paths:
+    - "apps/server/src/"
+    - "apps/dashboard/src/"
+    - "apps/docs/"
+    - "packages/config/src/"
+    - "packages/context/src/"
+    - "packages/git/src/"
+    - "packages/ingestion/src/"
+    - "packages/lark/src/"
+    - "packages/meego/src/"
+    - "packages/memory/src/"
+    - "packages/observability/src/"
+    - "packages/session/src/"
+    - "packages/sidecar/src/"
+    - "packages/swarm/src/"
+    - "packages/types/src/"
+    - "config/"
+    - "test/"
+    - "ISSUES.md"
+  protected_paths:
+    - ".github/"
+    - "evolve.config.yaml"
+    - "memory/"
+    - "CLAUDE.md"
+    - "JOURNAL.md"
+    - "package.json"
+    - "bun.lock"
+    - "biome.json"
+    - "lefthook.yml"
+    - "tsconfig.json"
+    - "vitest.config.ts"
+    - "docker-compose.yml"
+    - "docs/"
+    - "hermes-agent/"
+    - "multica/"
+    - "OpenViking/"
+    - "qmd/"
+
+propose:
+  strategy: "issue-driven"
+  issue_source: "file"
+  issue_file: "ISSUES.md"
+  tasks_per_cycle: 3
+  max_files_per_task: 8
+  max_time_per_task: 1200
+  fallback_strategy: "assessment-first"
+
+evaluate:
+  gates:
+    - "build"
+    - "test"
+    - "lint"
+    - "evaluator-agent"
+  build_command: "bun run typecheck 2>&1"
+  test_command: "bunx --bun vitest run 2>&1"
+  lint_command: "bunx biome check . 2>&1"
+  metric_extract: "bunx --bun vitest run 2>&1 | grep -o '[0-9]* passed' | grep -o '[0-9]*'"
+  fix_attempts_build: 5
+  fix_attempts_eval: 3
+  evaluator_prompt: |
+    You are reviewing a code change in the teamsland monorepo (Bun + TypeScript strict).
+    Apply these quality gates strictly:
+
+    1. NO `any` types — must use `unknown` + type narrowing
+    2. NO `!` non-null assertions — use early return or narrowing
+    3. All exported functions MUST have JSDoc in Chinese with @example
+    4. All type imports MUST use `import type`
+    5. Use `node:` protocol for Node.js built-ins
+    6. Prefer Bun APIs (Bun.file, Bun.write, Bun.spawn) over Node equivalents
+    7. Use structured logging via @teamsland/observability — NO console.log
+    8. Max cognitive complexity per function: 15
+    9. Max file length: 800 lines
+    10. Prefer `for...of` over `.forEach()`
+
+    If ALL rules are satisfied and the change is well-structured: Verdict: PASS
+    If ANY rule is violated: Verdict: FAIL (list violations)
+
+rollback:
+  strategy: "checkpoint-restart"
+  max_consecutive_failures: 5
+  log_failures: true
+
+memory:
+  architecture: "hybrid"
+  learnings_file: "memory/learnings.jsonl"
+  metrics_file: "memory/metrics.tsv"
+  context_file: "memory/active_context.md"
+  synthesis_frequency: 5
+  context_budget_tokens: 3000
+
+agent:
+  model: "claude-sonnet-4-20250514"
+  invoke: "claude -p"
+  thinking: "medium"
+  timeout_assess: 600
+  timeout_plan: 600
+  timeout_implement: 1200
+  timeout_eval: 300
+  internet: false
+  allowed_commands:
+    - "bun"
+    - "bunx"
+    - "git"
+    - "grep"
+    - "tsc"
+
+loop:
+  schedule: "continuous"
+  cooldown_seconds: 1200
+  max_cycles: 0
+  time_budget_per_cycle: 3600
+  stop_on_plateau: 5
+  ci_cd: false
