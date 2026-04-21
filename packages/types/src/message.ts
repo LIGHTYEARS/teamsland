@@ -10,7 +10,7 @@
  * const msgType: TeamMessageType = "task_result";
  * ```
  */
-export type TeamMessageType = "task_result" | "delegation" | "status_update" | "query";
+export type TeamMessageType = "task_result" | "task_error" | "delegation" | "status_update" | "query";
 
 /**
  * 团队消息

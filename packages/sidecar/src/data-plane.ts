@@ -1,5 +1,7 @@
 import type { Logger } from "@teamsland/observability";
 import type { SessionDB } from "@teamsland/session";
+import type { TeamMessageType } from "@teamsland/types";
+import type { ObservableMessageBus } from "./message-bus.js";
 import type { SubagentRegistry } from "./registry.js";
 
 /**
@@ -37,11 +39,17 @@ const INTERCEPTED_TOOLS: Set<string> = new Set(["delegate", "spawn_agent", "memo
  * 消费 Claude Code 的 NDJSON stdout 流，按事件类型路由，
  * 持久化消息到 SessionDB，并拦截 Worker 不应执行的工具调用。
  *
+ * 可选接受 `messageBus` 参数（`ObservableMessageBus`）。
+ * 若已配置，在 Agent 产生 `result` 或 `error` 事件时，通过总线
+ * 向 `"orchestrator"` 发送 `task_result` 消息，实现可观测事件通知。
+ *
  * @example
  * ```typescript
- * import { SidecarDataPlane } from "@teamsland/sidecar";
+ * import { ObservableMessageBus, SidecarDataPlane } from "@teamsland/sidecar";
+ * import { createLogger } from "@teamsland/observability";
  *
- * const dataPlane = new SidecarDataPlane({ registry, sessionDb, logger });
+ * const messageBus = new ObservableMessageBus({ logger: createLogger("sidecar:bus") });
+ * const dataPlane = new SidecarDataPlane({ registry, sessionDb, logger, messageBus });
  *
  * // 消费进程 stdout 流（后台运行，不阻塞调用方）
  * dataPlane.processStream("agent-001", spawnResult.stdout).catch((err) => {
@@ -53,11 +61,18 @@ export class SidecarDataPlane {
   private readonly registry: SubagentRegistry;
   private readonly sessionDb: SessionDB;
   private readonly logger: Logger;
+  private readonly messageBus: ObservableMessageBus | null;
 
-  constructor(opts: { registry: SubagentRegistry; sessionDb: SessionDB; logger: Logger }) {
+  constructor(opts: {
+    registry: SubagentRegistry;
+    sessionDb: SessionDB;
+    logger: Logger;
+    messageBus?: ObservableMessageBus;
+  }) {
     this.registry = opts.registry;
     this.sessionDb = opts.sessionDb;
     this.logger = opts.logger;
+    this.messageBus = opts.messageBus ?? null;
   }
 
   /**
@@ -140,11 +155,13 @@ export class SidecarDataPlane {
       case "result": {
         await this.appendToSession(agentId, event);
         this.updateStatus(agentId, "completed");
+        this.emitMessage(agentId, "task_result", event);
         break;
       }
       case "error": {
         await this.appendToSession(agentId, event);
         this.updateStatus(agentId, "failed");
+        this.emitMessage(agentId, "task_error", event);
         this.logger.error({ agentId, event }, "Agent 进程报错");
         break;
       }
@@ -188,5 +205,32 @@ export class SidecarDataPlane {
     if (record) {
       record.status = status;
     }
+  }
+
+  /**
+   * 通过 ObservableMessageBus 发送 task_result 消息
+   *
+   * 仅在 messageBus 已配置时生效。将 Agent 的 result/error 事件
+   * 封装为 TeamMessage 发送给 orchestrator，用于可观测事件通知。
+   *
+   * @param agentId - 产生事件的 Agent ID
+   * @param type - 消息类型（task_result 或 task_error）
+   * @param event - 原始 NDJSON 事件对象
+   *
+   * @example
+   * ```typescript
+   * this.emitMessage("agent-001", "task_result", { type: "result", content: "done" });
+   * ```
+   */
+  private emitMessage(agentId: string, type: TeamMessageType, event: Record<string, unknown>): void {
+    if (!this.messageBus) return;
+    this.messageBus.send({
+      fromAgent: agentId,
+      toAgent: "orchestrator",
+      type,
+      payload: event,
+      timestamp: Date.now(),
+      traceId: "",
+    });
   }
 }

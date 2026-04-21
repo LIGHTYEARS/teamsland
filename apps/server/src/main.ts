@@ -23,7 +23,7 @@ import {
 } from "@teamsland/memory";
 import { createLogger } from "@teamsland/observability";
 import { SessionDB } from "@teamsland/session";
-import { ProcessController, SidecarDataPlane, SubagentRegistry } from "@teamsland/sidecar";
+import { ObservableMessageBus, ProcessController, SidecarDataPlane, SubagentRegistry } from "@teamsland/sidecar";
 import { startDashboard } from "./dashboard.js";
 import { registerEventHandlers } from "./event-handlers.js";
 import {
@@ -119,8 +119,12 @@ const TEAM_ID = "default";
     await registry.restoreOnStartup();
     logger.info("SubagentRegistry 启动恢复完成");
 
-    // ── 14. SidecarDataPlane ──
-    const dataPlane = new SidecarDataPlane({ registry, sessionDb, logger });
+    // ── 14. ObservableMessageBus ──
+    const messageBus = new ObservableMessageBus({ logger: createLogger("sidecar:bus") });
+    logger.info("ObservableMessageBus 已初始化");
+
+    // ── 14.5. SidecarDataPlane ──
+    const dataPlane = new SidecarDataPlane({ registry, sessionDb, logger, messageBus });
     logger.info("SidecarDataPlane 已初始化");
 
     // ── 15. RepoMapping ──
