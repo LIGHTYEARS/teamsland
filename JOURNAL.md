@@ -1213,3 +1213,53 @@ Four test cases exercising `SubagentRegistry.restoreOnStartup()` with real temp 
 
 ---
 
+## Iteration 10 — 2026-04-22
+
+### Tasks Completed
+
+1. **[ingestion] Wire DocumentParser output into IntentClassifier**
+   - Added `context?: { entities?: string[] }` parameter to `IntentClassifier.classify()`
+   - Enriches classification text with `\n\n提取到的实体: ...` when entities are present
+   - Rule fast-path now includes parsed entities in returned `modules` field
+   - Fixed `scheduleMemoryIngestion` call in event-handlers.ts — was missing `parsedDocument` argument (TS2554 error)
+   - Commits: `1d2e7e5`
+
+2. **[server] Wire ObservableMessageBus**
+   - Added `emitMessage()` private method to `SidecarDataPlane` — sends `task_result` / `task_error` TeamMessages through the bus
+   - Added `"task_error"` to `TeamMessageType` union in `@teamsland/types`
+   - Instantiate `ObservableMessageBus` in `main.ts` (step 14) and inject into `SidecarDataPlane` constructor
+   - Commits: `7c13cc2`
+
+3. **[test] Integration test: Meego event -> Agent spawn pipeline**
+   - Added 2 new test scenarios to `event-pipeline.test.ts` (now 5 total):
+     - Missing repoMapping → spawn skipped, DM sent to assignee
+     - Capacity full → CapacityError caught gracefully, registry stays at max
+   - Commits: `1947fb3`
+
+4. **Bug fixes (bonus)**
+   - Fixed `perTypeTtl` Zod schema default — cast empty object as `Record<string, never>` to satisfy `z.record()` overload in Zod 4
+   - Fixed `incrementAccessCount` in `TeamMemoryStore` — pass `entryIds` as array instead of spread args for `bun:sqlite` compatibility
+   - Commits: `5fd03a1`
+
+### Test Results
+
+- All 256 tests pass, 49 skipped (sqlite-vec dependent)
+- 31 test files passed / 6 skipped
+- Zero TypeScript errors across all packages (`tsc --noEmit` clean)
+- Zero biome lint/format errors
+
+### Files Modified
+
+- `packages/ingestion/src/intent-classifier.ts` — added context parameter, entity enrichment
+- `apps/server/src/event-handlers.ts` — pass parsedDocument to scheduleMemoryIngestion
+- `packages/sidecar/src/data-plane.ts` — emitMessage() for result/error events
+- `packages/types/src/message.ts` — added task_error to TeamMessageType
+- `apps/server/src/main.ts` — instantiate ObservableMessageBus, inject into SidecarDataPlane
+- `apps/server/src/__tests__/event-pipeline.test.ts` — 2 new test scenarios
+- `packages/config/src/schema.ts` — fix perTypeTtl default type
+- `packages/memory/src/team-memory-store.ts` — fix incrementAccessCount bind args
+
+**Progress:** 20 of 30 ISSUES.md items now complete (67%).
+
+---
+

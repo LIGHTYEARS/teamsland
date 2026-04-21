@@ -30,13 +30,13 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 - [x] **[server] Integrate Alerter into scheduled health-check** — `Alerter` class exists but is never instantiated. Add a periodic health-check that calls `alerter.check("concurrent_agents", registry.runningCount(), threshold)` and sends Lark alerts when exceeded.
 
-- [ ] **[server] Wire ObservableMessageBus** — `ObservableMessageBus` is defined but never wired. Instantiate it, subscribe `SidecarDataPlane`, and pass it to Swarm workers so all inter-agent messages carry a `traceId`.
+- [x] **[server] Wire ObservableMessageBus** — `ObservableMessageBus` is defined but never wired. Instantiate it, subscribe `SidecarDataPlane`, and pass it to Swarm workers so all inter-agent messages carry a `traceId`.
 
 - [ ] **[swarm] Wire runSwarm into event-handlers for complex tasks** — `runSwarm()` and `TaskPlanner` exist but are never called from the server. Add logic to detect complex tasks and dispatch to `runSwarm()` instead of single-agent spawn.
 
 - [ ] **[meego] Wire ConfirmationWatcher into issue.status_changed handler** — The handler is a placeholder logger. When status transitions require human confirmation, call `ConfirmationWatcher.watch()` and only allow the transition after `"approved"`.
 
-- [ ] **[ingestion] Wire DocumentParser output into IntentClassifier** — `DocumentParser.parseMarkdown()` extracts entities but they are never passed to `IntentClassifier`. Pass `entities` as context for richer LLM classification results.
+- [x] **[ingestion] Wire DocumentParser output into IntentClassifier** — `DocumentParser.parseMarkdown()` extracts entities but they are never passed to `IntentClassifier`. Pass `entities` as context for richer LLM classification results.
 
 - [ ] **[lark] Wire contact/group resolution in issue.created handler** — `LarkCli.contactSearch()` and `groupSearch()` are implemented but never called. After intent classification, resolve `entities.owners` to Lark user IDs and send group notification.
 
@@ -64,7 +64,7 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 ## 4. Quality Improvements (tests, error handling)
 
-- [ ] **[test] Integration test: Meego event -> Agent spawn pipeline** — No test exercises the full `issue.created` -> classify -> worktree -> prompt -> spawn path. Write an integration test using in-memory SQLite, FakeEmbedder, FakeLlmClient, and mock ProcessController.
+- [x] **[test] Integration test: Meego event -> Agent spawn pipeline** — No test exercises the full `issue.created` -> classify -> worktree -> prompt -> spawn path. Write an integration test using in-memory SQLite, FakeEmbedder, FakeLlmClient, and mock ProcessController.
 
 - [ ] **[test] Memory retrieval precision regression test** — Create `test/fixtures/corpus/` with representative docs and `test/fixtures/queries/` with labelled queries. Assert P@10 >= 0.8 on 20 queries against 50 documents.
 
