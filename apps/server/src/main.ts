@@ -12,6 +12,7 @@ import { BunCommandRunner as LarkBunCommandRunner, LarkCli, LarkNotifier } from 
 import { MeegoConnector, MeegoEventBus } from "@teamsland/meego";
 import type { Embedder } from "@teamsland/memory";
 import {
+  checkVec0Available,
   ExtractLoop,
   LocalEmbedder,
   MemoryReaper,
@@ -77,12 +78,21 @@ const TEAM_ID = "default";
 
     // ── 7. 团队记忆存储（优雅降级） ──
     let memoryStore: TeamMemoryStore | NullMemoryStore;
-    try {
-      memoryStore = new TeamMemoryStore(TEAM_ID, config.storage, embedder);
-      logger.info("TeamMemoryStore 已初始化");
-    } catch (memErr: unknown) {
-      logger.warn({ err: memErr }, "TeamMemoryStore 初始化失败（sqlite-vec 未安装？），使用 NullMemoryStore");
+    const vec0Check = checkVec0Available();
+    if (!vec0Check.ok) {
+      logger.warn(
+        { error: vec0Check.error },
+        "sqlite-vec (vec0) 扩展不可用 — 向量记忆功能将降级为 NullMemoryStore。安装方法: bun add sqlite-vec",
+      );
       memoryStore = new NullMemoryStore();
+    } else {
+      try {
+        memoryStore = new TeamMemoryStore(TEAM_ID, config.storage, embedder);
+        logger.info("TeamMemoryStore 已初始化（sqlite-vec 可用）");
+      } catch (memErr: unknown) {
+        logger.warn({ err: memErr }, "TeamMemoryStore 初始化失败，使用 NullMemoryStore");
+        memoryStore = new NullMemoryStore();
+      }
     }
 
     // ── 8. 记忆回收器（仅在 TeamMemoryStore 可用时） ──

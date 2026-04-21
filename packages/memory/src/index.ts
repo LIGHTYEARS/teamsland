@@ -27,4 +27,4 @@ export { MemoryUpdater } from "./memory-updater.js";
 export { NullEmbedder } from "./null-embedder.js";
 export { NullMemoryStore } from "./null-memory-store.js";
 export { retrieve } from "./retriever.js";
-export { TeamMemoryStore } from "./team-memory-store.js";
+export { checkVec0Available, TeamMemoryStore } from "./team-memory-store.js";

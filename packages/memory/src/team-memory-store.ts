@@ -41,6 +41,37 @@ interface RawEntryRow {
 }
 
 /**
+ * 预检 sqlite-vec (vec0) 扩展是否可用
+ *
+ * 使用内存数据库尝试加载 vec0 扩展，立即关闭。
+ * 不抛出异常 — 返回结构化的检测结果。
+ *
+ * @returns 检测结果：`ok: true` 表示可用，`ok: false` 附带错误信息
+ *
+ * @example
+ * ```typescript
+ * import { checkVec0Available } from "@teamsland/memory";
+ *
+ * const result = checkVec0Available();
+ * if (!result.ok) {
+ *   console.error(`sqlite-vec 不可用: ${result.error}`);
+ * }
+ * ```
+ */
+export function checkVec0Available(): { ok: true } | { ok: false; error: string } {
+  const testDb = new Database(":memory:");
+  try {
+    testDb.loadExtension("vec0");
+    return { ok: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: message };
+  } finally {
+    testDb.close();
+  }
+}
+
+/**
  * 团队记忆存储
  *
  * 基于 bun:sqlite + sqlite-vec 扩展 + FTS5 全文索引的记忆存储实现。
