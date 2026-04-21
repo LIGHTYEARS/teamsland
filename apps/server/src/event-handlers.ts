@@ -3,7 +3,7 @@ import type { DynamicContextAssembler } from "@teamsland/context";
 import type { WorktreeManager } from "@teamsland/git";
 import type { DocumentParser, IntentClassifier } from "@teamsland/ingestion";
 import type { LarkCli, LarkNotifier } from "@teamsland/lark";
-import type { MeegoEventBus } from "@teamsland/meego";
+import type { ConfirmationWatcher, MeegoEventBus } from "@teamsland/meego";
 import type { ExtractLoop, MemoryUpdater, TeamMemoryStore } from "@teamsland/memory";
 import { ingestDocument } from "@teamsland/memory";
 import { createLogger } from "@teamsland/observability";
@@ -46,6 +46,7 @@ const SWARM_ENTITY_THRESHOLD = 3;
  *   extractLoop: loop,
  *   memoryUpdater: updater,
  *   taskPlanner: planner,
+ *   confirmationWatcher: watcher,
  * };
  * ```
  */
@@ -80,6 +81,8 @@ export interface EventHandlerDeps {
   memoryUpdater: MemoryUpdater | null;
   /** 任务拆解器（LLM 未配置时为 null，不启用 Swarm） */
   taskPlanner: TaskPlanner | null;
+  /** 人工确认监视器 */
+  confirmationWatcher: ConfirmationWatcher;
 }
 
 /**
@@ -136,7 +139,7 @@ function extractDescription(event: MeegoEvent): string {
  */
 export function registerEventHandlers(bus: MeegoEventBus, deps: EventHandlerDeps): void {
   bus.on("issue.created", createIssueCreatedHandler(deps));
-  bus.on("issue.status_changed", createStatusChangedHandler());
+  bus.on("issue.status_changed", createStatusChangedHandler(deps));
   bus.on("issue.assigned", createAssignedHandler(deps));
   bus.on("sprint.started", createSprintStartedHandler());
 
@@ -425,20 +428,41 @@ function createIssueCreatedHandler(deps: EventHandlerDeps): EventHandler {
 /**
  * 创建 issue.status_changed 事件处理器
  *
- * 占位实现：记录状态变更事件的日志。
+ * 当 payload 中包含 `requiresConfirmation: true` 时，启动 ConfirmationWatcher
+ * 对指派人发起确认轮询。确认结果通过飞书 DM 通知。
+ * 不需要确认的状态变更仅记录日志。
  */
-function createStatusChangedHandler(): EventHandler {
+function createStatusChangedHandler(deps: EventHandlerDeps): EventHandler {
   return {
     async process(event: MeegoEvent): Promise<void> {
       try {
         logger.info(
-          {
-            eventId: event.eventId,
-            issueId: event.issueId,
-            payload: event.payload,
-          },
-          "issue.status_changed 事件已接收（占位处理器）",
+          { eventId: event.eventId, issueId: event.issueId, payload: event.payload },
+          "issue.status_changed 事件已接收",
         );
+
+        const requiresConfirmation = event.payload.requiresConfirmation === true;
+        if (!requiresConfirmation) return;
+
+        const assigneeId = extractAssigneeId(event);
+        if (!assigneeId) {
+          logger.warn({ issueId: event.issueId }, "状态变更需要确认但缺少 assigneeId");
+          return;
+        }
+
+        logger.info({ issueId: event.issueId, assigneeId }, "启动人工确认监控");
+
+        deps.confirmationWatcher
+          .watch(event.issueId, assigneeId)
+          .then(async (result) => {
+            logger.info({ issueId: event.issueId, result }, "确认监控完成");
+            if (result === "timeout") {
+              await deps.notifier.sendDm(assigneeId, `任务 ${event.issueId} 确认超时，请联系管理员处理。`);
+            }
+          })
+          .catch((err: unknown) => {
+            logger.error({ issueId: event.issueId, err }, "确认监控异常");
+          });
       } catch (err: unknown) {
         logger.error({ eventId: event.eventId, error: err }, "issue.status_changed 处理失败");
       }

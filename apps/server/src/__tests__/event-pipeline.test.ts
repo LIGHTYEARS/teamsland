@@ -31,6 +31,8 @@ const meegoConfig: MeegoConfig = {
   webhook: { host: "127.0.0.1", port: TEST_PORT, path: "/meego/webhook" },
   poll: { intervalSeconds: 60, lookbackMinutes: 5 },
   longConnection: { enabled: false, reconnectIntervalSeconds: 10 },
+  apiBaseUrl: "https://project.feishu.cn/open_api",
+  pluginAccessToken: "",
 };
 
 // ─── 最小化 AppConfig（仅 event-handlers 实际读取的字段） ───
@@ -139,6 +141,7 @@ describe("事件管线端到端", () => {
       extractLoop: null,
       memoryUpdater: null,
       taskPlanner: null,
+      confirmationWatcher: { watch: vi.fn().mockResolvedValue("approved") } as never,
     });
 
     // 启动 webhook

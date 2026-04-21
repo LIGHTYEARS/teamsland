@@ -113,6 +113,10 @@ export interface MeegoConfig {
   poll: MeegoPollConfig;
   /** 长连接配置 */
   longConnection: MeegoLongConnectionConfig;
+  /** Meego OpenAPI 基础地址 */
+  apiBaseUrl: string;
+  /** 插件访问令牌（Plugin Access Token） */
+  pluginAccessToken: string;
 }
 
 // ─── lark.yaml ───
@@ -493,6 +497,37 @@ export type RepoMappingConfig = RepoMappingEntry[];
  */
 export type SkillRoutingConfig = Record<string, string[]>;
 
+// ─── LLM 配置 ───
+
+/**
+ * LLM 客户端配置
+ *
+ * @example
+ * ```typescript
+ * import type { LlmConfig } from "@teamsland/types";
+ *
+ * const cfg: LlmConfig = {
+ *   provider: "anthropic",
+ *   apiKey: "sk-ant-...",
+ *   model: "claude-sonnet-4-20250514",
+ *   baseUrl: "https://api.anthropic.com",
+ *   maxTokens: 4096,
+ * };
+ * ```
+ */
+export interface LlmConfig {
+  /** LLM 提供商 */
+  provider: "anthropic";
+  /** API 密钥 */
+  apiKey: string;
+  /** 模型标识 */
+  model: string;
+  /** API 基础地址（可选，用于代理） */
+  baseUrl?: string;
+  /** 最大输出 Token 数 */
+  maxTokens: number;
+}
+
 // ─── 聚合根类型 ───
 
 /**
@@ -529,4 +564,6 @@ export interface AppConfig {
   skillRouting: SkillRoutingConfig;
   /** Agent 角色模板文件的基础路径 */
   templateBasePath?: string;
+  /** LLM 配置（未配置时使用 stub，功能降级） */
+  llm?: LlmConfig;
 }

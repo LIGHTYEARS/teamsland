@@ -6,10 +6,9 @@ import { mkdirSync } from "node:fs";
 import { loadConfig, RepoMapping } from "@teamsland/config";
 import { DynamicContextAssembler } from "@teamsland/context";
 import { BunCommandRunner as GitBunCommandRunner, WorktreeManager } from "@teamsland/git";
-import type { LlmClient } from "@teamsland/ingestion";
 import { DocumentParser, IntentClassifier } from "@teamsland/ingestion";
 import { BunCommandRunner as LarkBunCommandRunner, LarkCli, LarkNotifier } from "@teamsland/lark";
-import { MeegoConnector, MeegoEventBus } from "@teamsland/meego";
+import { ConfirmationWatcher, MeegoConnector, MeegoEventBus } from "@teamsland/meego";
 import type { Embedder } from "@teamsland/memory";
 import {
   checkVec0Available,
@@ -24,8 +23,11 @@ import {
 import { createLogger } from "@teamsland/observability";
 import { SessionDB } from "@teamsland/session";
 import { ObservableMessageBus, ProcessController, SidecarDataPlane, SubagentRegistry } from "@teamsland/sidecar";
+import { TaskPlanner } from "@teamsland/swarm";
+import type { LlmConfig } from "@teamsland/types";
 import { startDashboard } from "./dashboard.js";
 import { registerEventHandlers } from "./event-handlers.js";
+import { AnthropicLlmClient } from "./llm-client.js";
 import {
   createAlerter,
   startFts5Optimize,
@@ -37,6 +39,24 @@ import {
 
 /** 默认团队 ID */
 const TEAM_ID = "default";
+
+/** 根据配置构建 LLM 客户端和 TaskPlanner */
+function buildLlmStack(llmConfig: LlmConfig | undefined, logger: ReturnType<typeof createLogger>) {
+  if (llmConfig) {
+    const client = new AnthropicLlmClient(llmConfig);
+    logger.info({ model: llmConfig.model }, "AnthropicLlmClient 已初始化");
+    const planner = new TaskPlanner({ llm: client });
+    logger.info("TaskPlanner 已初始化 — Swarm 模式可用");
+    return { llmClient: client, taskPlanner: planner };
+  }
+  logger.warn("LLM 未配置，IntentClassifier 将仅使用规则快速路径");
+  const stub = {
+    async chat(): Promise<{ content: string }> {
+      throw new Error("LLM 未配置 — 需要在配置中添加 API 密钥和模型端点");
+    },
+  };
+  return { llmClient: stub, taskPlanner: null };
+}
 
 (async () => {
   try {
@@ -139,14 +159,9 @@ const TEAM_ID = "default";
       templateBasePath: config.templateBasePath,
     });
 
-    // ── 17. IntentClassifier（Stub LLM） ──
-    const stubLlmClient: LlmClient = {
-      async chat(): Promise<{ content: string }> {
-        throw new Error("LLM 未配置 — 需要在配置中添加 API 密钥和模型端点");
-      },
-    };
-    logger.warn("LLM 未配置，IntentClassifier 将仅使用规则快速路径");
-    const intentClassifier = new IntentClassifier({ llm: stubLlmClient });
+    // ── 17. LLM 客户端 + TaskPlanner（条件初始化） ──
+    const { llmClient, taskPlanner } = buildLlmStack(config.llm, logger);
+    const intentClassifier = new IntentClassifier({ llm: llmClient });
 
     // ── 17.5. DocumentParser + Memory Ingestion ──
     const documentParser = new DocumentParser();
@@ -154,7 +169,7 @@ const TEAM_ID = "default";
     const extractLoop =
       memoryStore instanceof TeamMemoryStore
         ? new ExtractLoop({
-            llm: stubLlmClient as never,
+            llm: llmClient as never,
             store: memoryStore,
             teamId: TEAM_ID,
             maxIterations: config.memory.extractLoopMaxIterations,
@@ -163,6 +178,9 @@ const TEAM_ID = "default";
 
     // ── 18. WorktreeManager ──
     const worktreeManager = new WorktreeManager(new GitBunCommandRunner());
+
+    // ── 18.5. ConfirmationWatcher ──
+    const confirmationWatcher = new ConfirmationWatcher({ notifier, config: config.confirmation });
 
     // ── 19. MeegoEventBus ──
     const eventBus = new MeegoEventBus(eventDb);
@@ -183,7 +201,8 @@ const TEAM_ID = "default";
       memoryStore: memoryStore instanceof TeamMemoryStore ? memoryStore : null,
       extractLoop,
       memoryUpdater,
-      taskPlanner: null, // Swarm 需要真实 LLM — stub 模式下禁用
+      taskPlanner,
+      confirmationWatcher,
     });
 
     // ── 21. MeegoConnector ──

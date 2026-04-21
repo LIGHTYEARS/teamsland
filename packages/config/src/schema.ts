@@ -56,6 +56,8 @@ const MeegoConfigSchema = z.object({
   webhook: MeegoWebhookSchema,
   poll: MeegoPollSchema,
   longConnection: MeegoLongConnectionSchema,
+  apiBaseUrl: z.string().url().default("https://project.feishu.cn/open_api"),
+  pluginAccessToken: z.string().default(""),
 });
 
 const LarkBotSchema = z.object({
@@ -177,4 +179,13 @@ export const AppConfigSchema = z.object({
   repoMapping: z.array(RepoMappingEntrySchema),
   skillRouting: z.record(z.string(), z.array(z.string())).default({}),
   templateBasePath: z.string().optional().default("config/templates"),
+  llm: z
+    .object({
+      provider: z.literal("anthropic"),
+      apiKey: z.string().min(1),
+      model: z.string().min(1),
+      baseUrl: z.string().url().optional(),
+      maxTokens: z.number().int().positive().default(4096),
+    })
+    .optional(),
 });

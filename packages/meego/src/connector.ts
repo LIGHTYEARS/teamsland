@@ -5,6 +5,75 @@ import type { MeegoEventBus } from "./event-bus.js";
 
 const logger = createLogger("meego:connector");
 
+/**
+ * 从 Meego OpenAPI 拉取指定空间自 `since` 以来的事件列表
+ *
+ * 使用 `plugin_access_token` 认证，请求 `/work_item/filter` 接口。
+ * 返回的原始数据被转换为 `MeegoEvent[]` 格式供 EventBus 消费。
+ * 网络或解析错误时返回空数组并记录警告日志。
+ *
+ * @param apiBaseUrl - Meego OpenAPI 基础地址
+ * @param token - 插件访问令牌
+ * @param spaceId - Meego 空间 ID
+ * @param since - 起始时间戳（Unix 毫秒）
+ * @returns 事件数组
+ *
+ * @example
+ * ```typescript
+ * const events = await fetchMeegoEvents("https://project.feishu.cn/open_api", "token", "space1", Date.now() - 300000);
+ * ```
+ */
+async function fetchMeegoEvents(
+  apiBaseUrl: string,
+  token: string,
+  spaceId: string,
+  since: number,
+): Promise<MeegoEvent[]> {
+  const url = `${apiBaseUrl}/${spaceId}/work_item/filter`;
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Plugin-Token": token,
+      },
+      body: JSON.stringify({
+        work_item_type_keys: ["story", "bug", "task"],
+        updated_at_min: Math.floor(since / 1000),
+      }),
+    });
+
+    if (!resp.ok) {
+      logger.warn({ status: resp.status, spaceId, url }, "Meego API 返回非 200 状态");
+      return [];
+    }
+
+    const body = (await resp.json()) as {
+      data?: Array<{
+        id: string;
+        name: string;
+        work_item_type_key: string;
+        updated_at: number;
+        [key: string]: unknown;
+      }>;
+    };
+
+    if (!body.data || !Array.isArray(body.data)) return [];
+
+    return body.data.map((item) => ({
+      eventId: `poll-${spaceId}-${item.id}-${item.updated_at}`,
+      issueId: item.id,
+      projectKey: spaceId,
+      type: "issue.created" as const,
+      payload: { title: item.name, ...item },
+      timestamp: item.updated_at * 1000,
+    }));
+  } catch (err: unknown) {
+    logger.warn({ spaceId, err }, "Meego API 调用失败");
+    return [];
+  }
+}
+
 /** 处理 webhook POST 请求：验签 → JSON 解析 → 事件分发 */
 async function handleWebhookPost(req: Request, secret: string | undefined, eventBus: MeegoEventBus): Promise<Response> {
   let rawBody: string;
@@ -194,16 +263,24 @@ export class MeegoConnector {
    */
   private startPoll(signal?: AbortSignal): void {
     const { intervalSeconds, lookbackMinutes } = this.config.poll;
+    const { spaces, apiBaseUrl, pluginAccessToken } = this.config;
     const eventBus = this.eventBus;
 
+    if (!pluginAccessToken) {
+      logger.warn("pluginAccessToken 未配置，轮询模式将跳过 API 调用");
+    }
+
     const poll = async (): Promise<void> => {
-      logger.debug({ lookbackMinutes }, "poll tick");
-      // 占位实现：真实 Meego REST API 接入时替换此处
-      // const since = Date.now() - lookbackMinutes * 60 * 1000;
-      // const events = await fetchMeegoEvents(since);
-      // for (const event of events) { await eventBus.handle(event); }
-      void lookbackMinutes;
-      void eventBus;
+      if (!pluginAccessToken) return;
+      const since = Date.now() - lookbackMinutes * 60 * 1000;
+      logger.debug({ lookbackMinutes, since, spaceCount: spaces.length }, "poll tick");
+
+      for (const space of spaces) {
+        const events = await fetchMeegoEvents(apiBaseUrl, pluginAccessToken, space.spaceId, since);
+        for (const event of events) {
+          await eventBus.handle(event);
+        }
+      }
     };
 
     const timer = setInterval(() => {

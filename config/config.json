@@ -14,7 +14,9 @@
     "longConnection": {
       "enabled": false,
       "reconnectIntervalSeconds": 10
-    }
+    },
+    "apiBaseUrl": "https://project.feishu.cn/open_api",
+    "pluginAccessToken": ""
   },
   "lark": {
     "appId": "${LARK_APP_ID}",

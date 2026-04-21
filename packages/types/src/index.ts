@@ -13,6 +13,7 @@ export type {
   LarkBotConfig,
   LarkConfig,
   LarkNotificationConfig,
+  LlmConfig,
   MeegoConfig,
   MeegoEventMode,
   MeegoLongConnectionConfig,
