@@ -26,7 +26,7 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 ## 2. Missing Integrations (wiring between packages)
 
-- [ ] **[server] Integrate DocumentParser + ingestDocument into issue.created handler** — When a new issue arrives, its title/description should be ingested into team memory via `ingestDocument()`. Currently the handler only spawns an agent but never writes the PRD to memory.
+- [x] **[server] Integrate DocumentParser + ingestDocument into issue.created handler** — When a new issue arrives, its title/description should be ingested into team memory via `ingestDocument()`. Currently the handler only spawns an agent but never writes the PRD to memory.
 
 - [x] **[server] Integrate Alerter into scheduled health-check** — `Alerter` class exists but is never instantiated. Add a periodic health-check that calls `alerter.check("concurrent_agents", registry.runningCount(), threshold)` and sends Lark alerts when exceeded.
 
@@ -52,9 +52,9 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 - [ ] **[sidecar] Implement orphan-recovery on restoreOnStartup** — `restoreOnStartup()` loads alive PIDs but doesn't re-attach stream processing. Surviving orphans are unmonitored. Add re-attach or re-spawn logic.
 
-- [ ] **[config] Add skillRouting to config schema and config.json** — `DynamicContextAssembler.buildSectionC()` reads `config.skillRouting[task.triggerType]` but no `skillRouting` field exists. Add to both TypeScript type and config.json.
+- [x] **[config] Add skillRouting to config schema and config.json** — `DynamicContextAssembler.buildSectionC()` reads `config.skillRouting[task.triggerType]` but no `skillRouting` field exists. Add to both TypeScript type and config.json.
 
-- [ ] **[context] Add templateBasePath to AppConfig** — `DynamicContextAssembler` defaults to `"config/templates"` but has no config override. Add `context.templateBasePath` to AppConfig and config.json.
+- [x] **[context] Add templateBasePath to AppConfig** — `DynamicContextAssembler` defaults to `"config/templates"` but has no config override. Add `context.templateBasePath` to AppConfig and config.json.
 
 - [x] **[memory] Make LocalEmbedder.embedBatch parallel** — Currently a serial for-loop. Use `Promise.all` with concurrency limit to speed up multi-document embedding.
 

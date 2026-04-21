@@ -1084,3 +1084,70 @@ All templates follow the existing `frontend_dev.md` format: `# 角色标题 Agen
 
 ---
 
+## Evolution Loop — Iteration 8 — 2026-04-22
+
+**Issues completed this iteration:**
+
+1. `[config] Add skillRouting to config schema and config.json` (ISSUES.md §3 Features)
+2. `[context] Add templateBasePath to AppConfig` (ISSUES.md §3 Features)
+3. `[server] Integrate DocumentParser + ingestDocument into issue.created handler` (ISSUES.md §2 Integrations)
+
+---
+
+### Task 1: skillRouting schema default
+
+**Problem:** The `skillRouting` field existed in `AppConfig` type and `config.json` but the Zod schema had no `.default({})`, so omitting the key caused a validation error on startup.
+
+**Changes:**
+
+| File | Change |
+|------|--------|
+| `packages/config/src/schema.ts` | Added `.default({})` to `skillRouting` in `AppConfigSchema`, making the field optional with graceful fallback. |
+
+---
+
+### Task 2: templateBasePath config
+
+**Problem:** `DynamicContextAssembler` hardcoded `"config/templates"` as the template directory. The path was not configurable via `config.json` — the config system and assembler were disconnected.
+
+**Changes:**
+
+| File | Change |
+|------|--------|
+| `packages/types/src/config.ts` | Added `templateBasePath?: string` to `AppConfig` interface with Chinese JSDoc. |
+| `packages/config/src/schema.ts` | Added `templateBasePath: z.string().optional().default("config/templates")` to `AppConfigSchema`. |
+| `config/config.json` | Added `"templateBasePath": "config/templates"` field. |
+| `apps/server/src/main.ts` | Wired `templateBasePath: config.templateBasePath` into `DynamicContextAssembler` constructor. |
+
+---
+
+### Task 3: DocumentParser + ingestDocument integration
+
+**Problem:** When a new Meego issue arrived, the `issue.created` handler spawned an agent but never ingested the issue description into team memory. The `DocumentParser` and `ingestDocument` pipeline existed but were unwired.
+
+**Design decisions:**
+- Ingestion is **fire-and-forget** (`.catch()` logs warning) — must not block agent startup
+- Gated on `memoryStore instanceof TeamMemoryStore` — NullMemoryStore lacks `exists()`/`saveRawCorpus()`
+- Extracted `scheduleMemoryIngestion()` and `registerAgent()` helpers from `createIssueCreatedHandler` to keep cognitive complexity under 15
+- Hoisted `agentId` computation before ingestion step so both ingestion and registry use the same ID
+- `ExtractLoop` uses `stubLlmClient as never` — extraction will throw (fire-and-forget silences it) until real LLM is configured
+
+**Changes:**
+
+| File | Change |
+|------|--------|
+| `apps/server/src/event-handlers.ts` | Added 4 new fields to `EventHandlerDeps`: `documentParser`, `memoryStore`, `extractLoop`, `memoryUpdater`. Extracted `scheduleMemoryIngestion()` (parse + ingest fire-and-forget) and `registerAgent()` (registry + dataPlane) helpers. Added step 4.5 in pipeline: parse description → ingest to memory. |
+| `apps/server/src/main.ts` | Added step 17.5: construct `DocumentParser`, `MemoryUpdater`, `ExtractLoop`. Passed all 4 new deps to `registerEventHandlers()`. |
+| `apps/server/src/__tests__/event-pipeline.test.ts` | Added mock values for 4 new deps: `documentParser` with mock `parseMarkdown`, and `null` for `memoryStore`/`extractLoop`/`memoryUpdater`. |
+
+---
+
+**Verification:**
+- `bunx biome check` — 9 files checked, no fixes applied
+- `bunx --bun vitest run` — 245 tests passed, 49 skipped (sqlite-vec), 0 failures
+- Full test suite: 28 passed / 6 skipped test files
+
+**Progress:** 14 of 30 ISSUES.md items now complete.
+
+---
+
