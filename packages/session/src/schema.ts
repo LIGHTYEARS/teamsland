@@ -46,7 +46,8 @@ CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
   content,
   session_id UNINDEXED,
   content=messages,
-  content_rowid=id
+  content_rowid=id,
+  tokenize='trigram'
 );
 
 CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN

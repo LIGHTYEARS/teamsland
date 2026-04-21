@@ -256,31 +256,53 @@ export class SessionDB {
   /**
    * 通过 FTS5 全文搜索消息内容
    *
-   * @param query - FTS5 查询字符串
+   * 使用 `messages_fts` 虚拟表（FTS5 content table）进行全文匹配，
+   * 再 JOIN 回 `messages` 基表获取完整行数据。
+   * 相比 LIKE 查询，FTS5 支持词干匹配、短语查询等高级语法，且性能更优。
+   *
+   * @param query - FTS5 查询字符串，支持 FTS5 查询语法（如 `"exact phrase"`、`token*`）
    * @param opts - 过滤选项
-   * @returns 匹配的消息列表
+   * @param opts.sessionId - 可选，限定搜索范围到指定会话
+   * @param opts.limit - 最多返回条数，默认 100
+   * @returns 匹配的消息列表，按创建时间升序排列
    *
    * @example
    * ```typescript
-   * const results = db.searchMessages("登录", { sessionId: "sess-001", limit: 20 });
+   * // 基础全文搜索
+   * const results = db.searchMessages("登录", { limit: 20 });
+   *
+   * // 限定会话范围搜索
+   * const scoped = db.searchMessages("登录", { sessionId: "sess-001", limit: 20 });
+   *
+   * // FTS5 短语查询
+   * const phrase = db.searchMessages('"用户 登录"', { sessionId: "sess-002" });
    * ```
    */
   searchMessages(query: string, opts?: { sessionId?: string; limit?: number }): MessageRow[] {
     const limit = opts?.limit ?? 100;
-    const likePattern = `%${query}%`;
 
     try {
       if (opts?.sessionId) {
         const rows = this.db
-          .prepare(`SELECT * FROM messages WHERE content LIKE ? AND session_id = ? ORDER BY created_at ASC LIMIT ?`)
-          .all(likePattern, opts.sessionId, limit) as RawMessageRow[];
+          .prepare(
+            `SELECT m.* FROM messages m
+             INNER JOIN messages_fts f ON m.id = f.rowid
+             WHERE messages_fts MATCH ? AND f.session_id = ?
+             ORDER BY m.created_at ASC LIMIT ?`,
+          )
+          .all(query, opts.sessionId, limit) as RawMessageRow[];
 
         return rows.map((row) => this.mapMessageRow(row));
       }
 
       const rows = this.db
-        .prepare(`SELECT * FROM messages WHERE content LIKE ? ORDER BY created_at ASC LIMIT ?`)
-        .all(likePattern, limit) as RawMessageRow[];
+        .prepare(
+          `SELECT m.* FROM messages m
+           INNER JOIN messages_fts f ON m.id = f.rowid
+           WHERE messages_fts MATCH ?
+           ORDER BY m.created_at ASC LIMIT ?`,
+        )
+        .all(query, limit) as RawMessageRow[];
 
       return rows.map((row) => this.mapMessageRow(row));
     } catch (err: unknown) {

@@ -176,7 +176,8 @@ describe("SessionDB", () => {
       await db.appendMessage({ sessionId, role: "assistant", content: "好的，我来实现登录页面" });
       await db.appendMessage({ sessionId, role: "user", content: "谢谢" });
 
-      const results = db.searchMessages("登录");
+      // trigram 分词器要求查询串 ≥ 3 个字符；"实现登录"同时出现在前两条消息中
+      const results = db.searchMessages("实现登录");
       expect(results.length).toBeGreaterThanOrEqual(2);
       for (const r of results) {
         expect(r.content).toContain("登录");
