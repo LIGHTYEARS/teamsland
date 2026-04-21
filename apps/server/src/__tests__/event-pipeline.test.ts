@@ -219,4 +219,79 @@ describe("事件管线端到端", () => {
     expect(body.status).toBe("ok");
     expect(typeof body.uptime).toBe("number");
   });
+
+  it("缺少 repoMapping 时跳过 Agent 启动并发送 DM", async () => {
+    spawnFn.mockClear();
+
+    const event: MeegoEvent = {
+      eventId: "evt-pipeline-003",
+      issueId: "I-003",
+      projectKey: "unknown_project",
+      type: "issue.created",
+      payload: { title: "前端开发新功能", description: "需要组件重构", assigneeId: "user-001" },
+      timestamp: Date.now(),
+    };
+
+    const resp = await fetch(`${BASE_URL}/meego/webhook`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(event),
+    });
+
+    expect(resp.status).toBe(200);
+
+    await new Promise((r) => setTimeout(r, 100));
+
+    // spawn 不应被调用（仓库映射缺失）
+    expect(spawnFn).not.toHaveBeenCalled();
+  });
+
+  it("注册表容量满时跳过 Agent 注册并发送 DM", async () => {
+    spawnFn.mockClear();
+
+    // 填充注册表到上限（当前 1 条 + 填充 19 条 = 20 = maxConcurrentSessions）
+    const padCount = testConfig.sidecar.maxConcurrentSessions - registry.runningCount();
+    for (let i = 0; i < padCount; i++) {
+      registry.register({
+        agentId: `pad-agent-${i}`,
+        pid: 10000 + i,
+        sessionId: `sess-pad-${i}`,
+        issueId: `PAD-${i}`,
+        worktreePath: `/tmp/pad-${i}`,
+        status: "running",
+        retryCount: 0,
+        createdAt: Date.now(),
+      });
+    }
+
+    const event: MeegoEvent = {
+      eventId: "evt-pipeline-004",
+      issueId: "I-004",
+      projectKey: "project_xxx",
+      type: "issue.created",
+      payload: { title: "前端开发数据面板", description: "实现 Dashboard 组件", assigneeId: "user-002" },
+      timestamp: Date.now(),
+    };
+
+    const resp = await fetch(`${BASE_URL}/meego/webhook`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(event),
+    });
+
+    expect(resp.status).toBe(200);
+
+    await new Promise((r) => setTimeout(r, 100));
+
+    // spawn 会被调用（进程启动在注册之前）
+    expect(spawnFn).toHaveBeenCalledOnce();
+
+    // 但 registry 不应新增记录（容量已满，CapacityError 被捕获）
+    expect(registry.runningCount()).toBe(testConfig.sidecar.maxConcurrentSessions);
+
+    // 清理填充的 agents
+    for (let i = 0; i < padCount; i++) {
+      registry.unregister(`pad-agent-${i}`);
+    }
+  });
 });
