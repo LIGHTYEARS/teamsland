@@ -59,6 +59,13 @@ describe("loadConfig", () => {
     await expect(loadConfig(resolve(FIXTURES_DIR, "malformed-config.txt"))).rejects.toThrow(SyntaxError);
   });
 
+  it("Zod 校验失败时抛出包含字段路径的错误", async () => {
+    process.env.TEST_LARK_ID = "cli_test";
+    process.env.TEST_LARK_SECRET = "secret_test";
+
+    await expect(loadConfig(resolve(FIXTURES_DIR, "invalid-schema-config.json"))).rejects.toThrow();
+  });
+
   it("环境变量缺失时通过 loadConfig 完整流程抛出错误（集成）", async () => {
     await expect(loadConfig(resolve(FIXTURES_DIR, "valid-config.json"))).rejects.toThrow(
       "环境变量未定义: TEST_LARK_ID",

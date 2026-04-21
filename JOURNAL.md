@@ -903,3 +903,27 @@ After 5 iterations of split-doc polish (iterations 8-12):
 
 ---
 
+## Evolution Loop — Iteration 2 — 2026-04-21
+
+**Issue:** `[config] Add config validation on startup` (ISSUES.md §1 Critical Gaps)
+
+**Problem:** `loadConfig()` read JSON and cast `as AppConfig` with zero runtime validation. Invalid or missing fields would silently produce a broken config, surfacing as cryptic `TypeError: cannot read properties of undefined` errors deep in downstream code.
+
+**Changes:**
+
+| File | Change |
+|------|--------|
+| `packages/config/src/schema.ts` | **New file** — Zod schema mirroring the full `AppConfig` TypeScript type (10 top-level sections, ~30 nested objects). `MemoryConfig.exemptTypes` and `perTypeTtl` default to `[]` and `{}` for backward compat. |
+| `packages/config/src/loader.ts` | Replace `as AppConfig` cast with `AppConfigSchema.parse(resolved)`. Env-var resolution runs first, then Zod validates the resolved object. |
+| `packages/config/src/index.ts` | Export `AppConfigSchema` from barrel. |
+| `packages/config/package.json` | Add `zod@^4.3` dependency. |
+| `packages/config/src/__tests__/loader.test.ts` | Add test: invalid schema config throws `ZodError`. |
+| `packages/config/src/__tests__/fixtures/invalid-schema-config.json` | **New fixture** — intentionally broken config (spaces not an array, missing fields). |
+
+**Verification:**
+- `bunx biome check packages/config/src/` — 10 files, no issues
+- `bunx --bun vitest run packages/config/` — 7 tests passed
+- `bunx --bun vitest run apps/server/` — 15 tests passed (no regression)
+
+---
+

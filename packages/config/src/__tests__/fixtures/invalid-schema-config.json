@@ -1,0 +1,10 @@
+{
+  "meego": {
+    "spaces": "not-an-array",
+    "eventMode": "invalid_mode"
+  },
+  "lark": {
+    "appId": "${TEST_LARK_ID}",
+    "appSecret": "${TEST_LARK_SECRET}"
+  }
+}

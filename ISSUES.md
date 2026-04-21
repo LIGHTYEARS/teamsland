@@ -20,7 +20,7 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 - [ ] **[server] Implement Meego confirmation via real API** — `ConfirmationWatcher.fetchConfirmationStatus()` always returns `"pending"`. Wire it to the actual Meego OpenAPI issue-status query so human-confirmation loops can resolve.
 
-- [ ] **[config] Add config validation on startup** — `loadConfig()` reads raw JSON and casts without schema validation. Add Zod validation that fails fast with human-readable error listing all missing/invalid fields.
+- [x] **[config] Add config validation on startup** — `loadConfig()` reads raw JSON and casts without schema validation. Add Zod validation that fails fast with human-readable error listing all missing/invalid fields.
 
 ---
 
