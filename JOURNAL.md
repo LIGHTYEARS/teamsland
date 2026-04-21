@@ -951,3 +951,25 @@ All templates follow the existing `frontend_dev.md` format: `# 角色标题 Agen
 
 ---
 
+## Evolution Loop — Iteration 4 — 2026-04-21
+
+**Issue:** `[meego] Implement webhook signature verification` (ISSUES.md §1 Critical Gaps)
+
+**Problem:** `MeegoConnector.startWebhook()` accepted any POST without validating the sender's identity. Any network host could inject fake Meego events.
+
+**Changes:**
+
+| File | Change |
+|------|--------|
+| `packages/types/src/config.ts` | Add optional `secret?: string` to `MeegoWebhookConfig` |
+| `packages/config/src/schema.ts` | Add `secret: z.string().optional()` to `MeegoWebhookSchema` |
+| `packages/meego/src/connector.ts` | Extract `handleWebhookPost()` and `verifySignature()` helper functions. Replace `req.json()` with `req.text()` + `JSON.parse()` so raw body is available for HMAC. When `secret` is configured, verify `x-meego-signature` header using HMAC-SHA256 with timing-safe comparison; return 401 on mismatch or missing header. Health endpoint is exempt. |
+| `packages/meego/src/__tests__/connector.test.ts` | Add 4 tests: valid signature → 200, missing signature → 401, wrong signature → 401, health endpoint exempt. Update `makeConfig()` to accept optional `secret`. |
+
+**Verification:**
+- `bunx biome check packages/meego/src/` — 7 files, no issues
+- `bunx --bun vitest run packages/meego/` — 10 tests passed (6 existing + 4 new)
+- `bunx --bun vitest run apps/server/` — 15 tests passed (no regression)
+
+---
+

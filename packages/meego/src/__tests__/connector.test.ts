@@ -1,13 +1,14 @@
 import { Database } from "bun:sqlite";
+import { createHmac } from "node:crypto";
 import type { MeegoConfig } from "@teamsland/types";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MeegoConnector } from "../connector.js";
 import { MeegoEventBus } from "../event-bus.js";
 
-const makeConfig = (port: number): MeegoConfig => ({
+const makeConfig = (port: number, secret?: string): MeegoConfig => ({
   spaces: [],
   eventMode: "webhook",
-  webhook: { host: "127.0.0.1", port, path: "/meego/webhook" },
+  webhook: { host: "127.0.0.1", port, path: "/meego/webhook", secret },
   poll: { intervalSeconds: 60, lookbackMinutes: 5 },
   longConnection: { enabled: false, reconnectIntervalSeconds: 10 },
 });
@@ -85,6 +86,109 @@ describe("MeegoConnector — webhook 模式", () => {
 
     // 连接应被拒绝
     await expect(fetch("http://127.0.0.1:18083/meego/webhook")).rejects.toThrow();
+  });
+});
+
+describe("MeegoConnector — webhook 签名验证", () => {
+  const SECRET = "test-webhook-secret-key";
+
+  function sign(body: string, secret: string): string {
+    return createHmac("sha256", secret).update(body).digest("hex");
+  }
+
+  it("配置了 secret 时，正确签名的请求返回 200", async () => {
+    const db = new Database(":memory:");
+    const bus = new MeegoEventBus(db);
+    const handleSpy = vi.spyOn(bus, "handle");
+
+    const ac = new AbortController();
+    const connector = new MeegoConnector({ config: makeConfig(18090, SECRET), eventBus: bus });
+    await connector.start(ac.signal);
+
+    const body = JSON.stringify({
+      eventId: "e-sig-1",
+      issueId: "I-10",
+      projectKey: "FE",
+      type: "issue.created",
+      payload: {},
+      timestamp: Date.now(),
+    });
+
+    const resp = await fetch("http://127.0.0.1:18090/meego/webhook", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-meego-signature": sign(body, SECRET),
+      },
+      body,
+    });
+    expect(resp.status).toBe(200);
+    expect(handleSpy).toHaveBeenCalledOnce();
+    ac.abort();
+  });
+
+  it("配置了 secret 时，缺少签名头返回 401", async () => {
+    const db = new Database(":memory:");
+    const bus = new MeegoEventBus(db);
+
+    const ac = new AbortController();
+    const connector = new MeegoConnector({ config: makeConfig(18091, SECRET), eventBus: bus });
+    await connector.start(ac.signal);
+
+    const resp = await fetch("http://127.0.0.1:18091/meego/webhook", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        eventId: "e2",
+        issueId: "I-2",
+        projectKey: "FE",
+        type: "issue.created",
+        payload: {},
+        timestamp: Date.now(),
+      }),
+    });
+    expect(resp.status).toBe(401);
+    ac.abort();
+  });
+
+  it("配置了 secret 时，错误签名返回 401", async () => {
+    const db = new Database(":memory:");
+    const bus = new MeegoEventBus(db);
+
+    const ac = new AbortController();
+    const connector = new MeegoConnector({ config: makeConfig(18092, SECRET), eventBus: bus });
+    await connector.start(ac.signal);
+
+    const resp = await fetch("http://127.0.0.1:18092/meego/webhook", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-meego-signature": "0000000000000000000000000000000000000000000000000000000000000000",
+      },
+      body: JSON.stringify({
+        eventId: "e3",
+        issueId: "I-3",
+        projectKey: "FE",
+        type: "issue.created",
+        payload: {},
+        timestamp: Date.now(),
+      }),
+    });
+    expect(resp.status).toBe(401);
+    ac.abort();
+  });
+
+  it("健康检查端点不受签名验证影响", async () => {
+    const db = new Database(":memory:");
+    const bus = new MeegoEventBus(db);
+
+    const ac = new AbortController();
+    const connector = new MeegoConnector({ config: makeConfig(18093, SECRET), eventBus: bus });
+    await connector.start(ac.signal);
+
+    const resp = await fetch("http://127.0.0.1:18093/health");
+    expect(resp.status).toBe(200);
+    ac.abort();
   });
 });
 

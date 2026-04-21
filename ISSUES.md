@@ -16,7 +16,7 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 - [ ] **[meego] Implement real Meego REST poll** — `MeegoConnector.startPoll()` is a pure stub. Implement the actual Meego API call using `config.meego.spaces`, the `plugin_access_token` header, and `lookbackMinutes` to fetch recent issue events and push them to `eventBus.handle()`.
 
-- [ ] **[meego] Implement webhook signature verification** — `MeegoConnector.startWebhook()` accepts any POST without validating signature. Add HMAC-SHA256 verification using `config.meego.webhookSecret`.
+- [x] **[meego] Implement webhook signature verification** — `MeegoConnector.startWebhook()` accepts any POST without validating signature. Add HMAC-SHA256 verification using `config.meego.webhookSecret`.
 
 - [ ] **[server] Implement Meego confirmation via real API** — `ConfirmationWatcher.fetchConfirmationStatus()` always returns `"pending"`. Wire it to the actual Meego OpenAPI issue-status query so human-confirmation loops can resolve.
 

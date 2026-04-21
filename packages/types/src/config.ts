@@ -48,6 +48,8 @@ export interface MeegoWebhookConfig {
   port: number;
   /** Webhook 路径 */
   path: string;
+  /** HMAC-SHA256 签名密钥（可选，未配置时跳过验签） */
+  secret?: string;
 }
 
 /**

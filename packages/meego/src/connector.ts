@@ -1,8 +1,43 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { createLogger } from "@teamsland/observability";
 import type { MeegoConfig, MeegoEvent } from "@teamsland/types";
 import type { MeegoEventBus } from "./event-bus.js";
 
 const logger = createLogger("meego:connector");
+
+/** 处理 webhook POST 请求：验签 → JSON 解析 → 事件分发 */
+async function handleWebhookPost(req: Request, secret: string | undefined, eventBus: MeegoEventBus): Promise<Response> {
+  let rawBody: string;
+  try {
+    rawBody = await req.text();
+  } catch {
+    return new Response("Bad Request", { status: 400 });
+  }
+
+  if (secret) {
+    const signature = req.headers.get("x-meego-signature");
+    if (!signature || !verifySignature(rawBody, signature, secret)) {
+      logger.warn("webhook 签名验证失败或缺少签名头");
+      return new Response("Unauthorized", { status: 401 });
+    }
+  }
+
+  let event: MeegoEvent;
+  try {
+    event = JSON.parse(rawBody) as MeegoEvent;
+  } catch {
+    return new Response("Bad Request", { status: 400 });
+  }
+
+  await eventBus.handle(event);
+  return new Response("OK", { status: 200 });
+}
+function verifySignature(rawBody: string, signature: string, secret: string): boolean {
+  const expected = createHmac("sha256", secret).update(rawBody).digest("hex");
+  const sigBuffer = Buffer.from(signature, "hex");
+  const expectedBuffer = Buffer.from(expected, "hex");
+  return sigBuffer.length === expectedBuffer.length && timingSafeEqual(sigBuffer, expectedBuffer);
+}
 
 /**
  * Meego 事件连接器
@@ -101,8 +136,12 @@ export class MeegoConnector {
    * ```
    */
   private startWebhook(signal?: AbortSignal): void {
-    const { host, port, path } = this.config.webhook;
+    const { host, port, path, secret } = this.config.webhook;
     const eventBus = this.eventBus;
+
+    if (!secret) {
+      logger.warn("webhook.secret 未配置，跳过签名验证 — 生产环境请务必设置");
+    }
 
     const server = Bun.serve({
       hostname: host,
@@ -110,7 +149,7 @@ export class MeegoConnector {
       fetch: async (req) => {
         const url = new URL(req.url);
 
-        // 健康检查端点
+        // 健康检查端点（免验签）
         if (req.method === "GET" && url.pathname === "/health") {
           return new Response(JSON.stringify({ status: "ok", uptime: process.uptime() }), {
             status: 200,
@@ -126,15 +165,7 @@ export class MeegoConnector {
           return new Response("Not Found", { status: 404 });
         }
 
-        let event: MeegoEvent;
-        try {
-          event = (await req.json()) as MeegoEvent;
-        } catch {
-          return new Response("Bad Request", { status: 400 });
-        }
-
-        await eventBus.handle(event);
-        return new Response("OK", { status: 200 });
+        return handleWebhookPost(req, secret, eventBus);
       },
     });
 

@@ -37,6 +37,7 @@ const MeegoWebhookSchema = z.object({
   host: z.string(),
   port: z.number().int().positive(),
   path: z.string(),
+  secret: z.string().optional(),
 });
 
 const MeegoPollSchema = z.object({
