@@ -1012,3 +1012,75 @@ All templates follow the existing `frontend_dev.md` format: `# 角色标题 Agen
 
 ---
 
+## Evolution Loop — Iteration 7 — 2026-04-21
+
+**Issues completed this iteration:**
+
+1. `[session] Expose FTS5 searchMessages method` (ISSUES.md §4 Quality)
+2. `[server] Integrate Alerter into scheduled health-check` (ISSUES.md §2 Integrations)
+3. `[memory] Make LocalEmbedder.embedBatch parallel` (ISSUES.md §3 Features)
+
+---
+
+### Task 1: FTS5 searchMessages
+
+**Problem:** `SessionDB.searchMessages()` used `LIKE '%query%'` against the base `messages` table, ignoring the `messages_fts` FTS5 virtual table that was already scaffolded with insert/delete triggers.
+
+**Changes:**
+
+| File | Change |
+|------|--------|
+| `packages/session/src/session-db.ts` | Replaced `LIKE`-based queries with `INNER JOIN messages_fts f ON m.id = f.rowid WHERE messages_fts MATCH ?`. Supports optional `session_id` filtering via FTS5 UNINDEXED column. Updated JSDoc to document FTS5 query syntax. |
+| `packages/session/src/schema.ts` | Added `tokenize='trigram'` to the `messages_fts` virtual table definition. The default `unicode61` tokenizer treats CJK text as single-token sequences, making sub-word Chinese queries fail. Trigram tokenizer handles arbitrary substring matches. |
+| `packages/session/src/__tests__/session-db.test.ts` | Updated search test query from `"登录"` (2 chars, below trigram minimum) to `"实现登录"` (4 chars) to match trigram requirements. |
+
+---
+
+### Task 2: Alerter Health-Check Integration
+
+**Problem:** The `Alerter` class in `@teamsland/sidecar` was fully implemented (threshold check with per-metric cooldown) but never instantiated or wired into the server's scheduled task system.
+
+**Design decision:** `Alerter` requires `AlertNotifier.sendCard(channelId, card)` but `LarkNotifier.sendCard(title, content, level)` has a different signature. Created a private `LarkAlertAdapter` class in `scheduled-tasks.ts` to bridge the two interfaces, keeping the adapter internal to the server.
+
+**Changes:**
+
+| File | Change |
+|------|--------|
+| `apps/server/src/scheduled-tasks.ts` | Added private `LarkAlertAdapter` class (implements `AlertNotifier`, bridges to `LarkNotifier`). Added `createAlerter(notifier, channelId)` factory. Added `startHealthCheck(alerter, registry, threshold, intervalMs)` — checks `concurrent_agents` metric at 60s intervals with threshold at 90% of `maxConcurrentSessions`. |
+| `apps/server/src/main.ts` | Wired `createAlerter` and `startHealthCheck` into section 23 (定时任务). Added `clearInterval(healthCheckTimer)` to graceful shutdown. |
+
+---
+
+### Task 3: Parallel embedBatch
+
+**Problem:** `LocalEmbedder.embedBatch()` was a serial `for...of` loop, processing texts one at a time despite the ability to pipeline multiple embed() calls.
+
+**Changes:**
+
+| File | Change |
+|------|--------|
+| `packages/memory/src/embedder.ts` | Replaced serial loop with concurrent worker pool (concurrency=4). Workers share a `cursor` counter (safe in single-threaded JS) and write results by index to maintain alignment. Empty-array fast-path added. |
+
+---
+
+### Bonus fix: AbstractMemoryStore interface gap
+
+**Problem:** Previous iteration added `incrementAccessCount()` to `TeamMemoryStore` and called it from `retrieve()`, but didn't add it to the `AbstractMemoryStore` interface. This caused `FakeMemoryStore` in assembler tests to fail (9 tests).
+
+**Changes:**
+
+| File | Change |
+|------|--------|
+| `packages/types/src/memory.ts` | Added `incrementAccessCount(entryIds: string[]): void` to `AbstractMemoryStore` interface. |
+| `packages/memory/src/null-memory-store.ts` | Added no-op `incrementAccessCount()` implementation. |
+| `packages/context/src/__tests__/assembler.test.ts` | Added `incrementAccessCount()` to `FakeMemoryStore`. |
+
+---
+
+**Verification:**
+- `bunx biome check` — all changed files clean, no fixes applied
+- `bunx --bun vitest run` — 245 tests passed, 49 skipped (sqlite-vec dependent), 0 failures
+- Full test suite: 28 passed / 6 skipped test files
+
+---
+

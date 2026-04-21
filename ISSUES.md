@@ -28,7 +28,7 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 - [ ] **[server] Integrate DocumentParser + ingestDocument into issue.created handler** — When a new issue arrives, its title/description should be ingested into team memory via `ingestDocument()`. Currently the handler only spawns an agent but never writes the PRD to memory.
 
-- [ ] **[server] Integrate Alerter into scheduled health-check** — `Alerter` class exists but is never instantiated. Add a periodic health-check that calls `alerter.check("concurrent_agents", registry.runningCount(), threshold)` and sends Lark alerts when exceeded.
+- [x] **[server] Integrate Alerter into scheduled health-check** — `Alerter` class exists but is never instantiated. Add a periodic health-check that calls `alerter.check("concurrent_agents", registry.runningCount(), threshold)` and sends Lark alerts when exceeded.
 
 - [ ] **[server] Wire ObservableMessageBus** — `ObservableMessageBus` is defined but never wired. Instantiate it, subscribe `SidecarDataPlane`, and pass it to Swarm workers so all inter-agent messages carry a `traceId`.
 
@@ -56,7 +56,7 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 - [ ] **[context] Add templateBasePath to AppConfig** — `DynamicContextAssembler` defaults to `"config/templates"` but has no config override. Add `context.templateBasePath` to AppConfig and config.json.
 
-- [ ] **[memory] Make LocalEmbedder.embedBatch parallel** — Currently a serial for-loop. Use `Promise.all` with concurrency limit to speed up multi-document embedding.
+- [x] **[memory] Make LocalEmbedder.embedBatch parallel** — Currently a serial for-loop. Use `Promise.all` with concurrency limit to speed up multi-document embedding.
 
 - [ ] **[observability] Add OpenTelemetry span instrumentation** — No OTel spans are created or exported to Jaeger. Add `@opentelemetry/sdk-node` and instrument `ProcessController.spawn`, `TeamMemoryStore.vectorSearch`, and `DynamicContextAssembler.buildInitialPrompt`.
 
@@ -74,7 +74,7 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 - [x] **[server] Structured error handling for missing repoMapping** — `resolveRepoPath()` returns `undefined` and the handler silently returns. Send a Lark DM to the assignee or team channel when no repo mapping is found.
 
-- [ ] **[session] Expose FTS5 searchMessages method** — FTS5 index is scaffolded but no `searchMessages()` method is exported. Implement and export for agents and dashboard to query past sessions by keyword.
+- [x] **[session] Expose FTS5 searchMessages method** — FTS5 index is scaffolded but no `searchMessages()` method is exported. Implement and export for agents and dashboard to query past sessions by keyword.
 
 - [ ] **[observability] Startup health-check for sqlite-vec extension** — If `vec0` native extension is not installed, crash is unhandled. Add explicit pre-flight check with clear installation message and graceful exit.
 
