@@ -3,7 +3,7 @@ import type { Embedder, TeamMemoryStore } from "@teamsland/memory";
 import { retrieve } from "@teamsland/memory";
 import { createLogger } from "@teamsland/observability";
 import type { AbstractMemoryStore, AppConfig, TaskConfig } from "@teamsland/types";
-import { TemplateLoader } from "./template-loader.js";
+import { loadTemplate } from "./template-loader.js";
 
 const logger = createLogger("context:assembler");
 
@@ -47,7 +47,7 @@ export interface AssemblerOptions {
  * - §B — 历史记忆（retrieve 检索结果）
  * - §C — 可用技能（config.skillRouting 路由表）
  * - §D — 仓库信息（repoMapping.resolve + task.worktreePath）
- * - §E — 角色指令（TemplateLoader 加载的 Markdown 模板）
+ * - §E — 角色指令（loadTemplate 加载的 Markdown 模板）
  *
  * @example
  * ```typescript
@@ -162,7 +162,7 @@ export class DynamicContextAssembler {
   /** §E — 角色指令 */
   private async buildSectionE(task: TaskConfig): Promise<string> {
     logger.debug({ agentRole: task.agentRole, basePath: this.templateBasePath }, "加载角色模板");
-    const template = await TemplateLoader.load(task.agentRole, this.templateBasePath);
+    const template = await loadTemplate(task.agentRole, this.templateBasePath);
     return `## §E — 角色指令\n\n${template}`;
   }
 }
