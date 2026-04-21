@@ -1151,3 +1151,65 @@ All templates follow the existing `frontend_dev.md` format: `# 角色标题 Agen
 
 ---
 
+## Evolution Loop — Iteration 9 — 2026-04-22
+
+**Issues completed this iteration:**
+
+1. `[test] Concurrent SQLite WAL write test` (ISSUES.md §4 Quality)
+2. `[test] Sidecar crash-recovery integration test` (ISSUES.md §4 Quality)
+3. `[observability] Startup health-check for sqlite-vec extension` (ISSUES.md §4 Quality)
+
+---
+
+### Task 1: Concurrent SQLite WAL write test
+
+**New file:** `packages/session/src/__tests__/concurrent-wal.test.ts`
+
+Two test cases verifying WAL mode handles concurrent writes correctly:
+
+| Test | Description |
+|------|-------------|
+| `10 个并发 appendMessage 调用全部成功且无 SQLITE_BUSY 错误` | Fires 10 `appendMessage()` via `Promise.all`, asserts all IDs unique, all messages persisted, all content intact. |
+| `多个会话的并发写入互不干扰` | 3 sessions × 5 writes = 15 total concurrent writes, asserts each session has exactly 5 messages with no cross-contamination. |
+
+---
+
+### Task 2: Sidecar crash-recovery integration test
+
+**New file:** `packages/sidecar/src/__tests__/crash-recovery.test.ts`
+
+Four test cases exercising `SubagentRegistry.restoreOnStartup()` with real temp files:
+
+| Test | Description |
+|------|-------------|
+| `restoreOnStartup 恢复存活进程并清理死亡进程` | Registers `process.pid` (alive) + `999999999` (dead), persists, new instance restores — only alive PID restored. |
+| `persist 后仅保存存活记录` | Three-phase: populate → restore+persist → third instance reads only alive records. Confirms dead PIDs are permanently purged. |
+| `restoreOnStartup 在注册表文件不存在时静默返回` | Nonexistent path → empty registry, no error. |
+| `所有进程都已死亡时恢复后注册表为空` | All dead PIDs → empty registry after restore. |
+
+---
+
+### Task 3: sqlite-vec startup health-check
+
+**Problem:** When `vec0` extension is missing, `TeamMemoryStore` constructor throws a cryptic OS-level dlopen error. The server catches it but the message doesn't help users fix the problem.
+
+**Changes:**
+
+| File | Change |
+|------|--------|
+| `packages/memory/src/team-memory-store.ts` | Added exported `checkVec0Available()` function — opens in-memory DB, tries `loadExtension("vec0")`, returns `{ ok: true }` or `{ ok: false, error }`. No side effects. |
+| `packages/memory/src/index.ts` | Added `checkVec0Available` to exports. |
+| `apps/server/src/main.ts` | Step 7 now calls `checkVec0Available()` first. On failure, logs a clear warning with installation instructions ("安装方法: bun add sqlite-vec") and skips straight to NullMemoryStore without attempting the full constructor. |
+| `packages/memory/src/__tests__/vec0-check.test.ts` | New test file — 3 tests verifying return shape handles both available and unavailable cases. |
+
+---
+
+**Verification:**
+- `bunx biome check` — 6 files checked, no fixes applied
+- `bunx --bun vitest run` — 254 tests passed, 49 skipped (sqlite-vec), 0 failures
+- Test files: 31 passed / 6 skipped (3 new test files added)
+
+**Progress:** 17 of 30 ISSUES.md items now complete (57%).
+
+---
+

@@ -68,15 +68,15 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 - [ ] **[test] Memory retrieval precision regression test** — Create `test/fixtures/corpus/` with representative docs and `test/fixtures/queries/` with labelled queries. Assert P@10 >= 0.8 on 20 queries against 50 documents.
 
-- [ ] **[test] Sidecar crash-recovery integration test** — Spawn a fake process, register it, kill it, call `restoreOnStartup()`, assert dead-PID record is cleaned up while alive-PID is restored.
+- [x] **[test] Sidecar crash-recovery integration test** — Spawn a fake process, register it, kill it, call `restoreOnStartup()`, assert dead-PID record is cleaned up while alive-PID is restored.
 
-- [ ] **[test] Concurrent SQLite WAL write test** — Fire 10 concurrent `SessionDB.appendMessage()` calls, assert all succeed without SQLITE_BUSY errors within `busyTimeoutMs` window.
+- [x] **[test] Concurrent SQLite WAL write test** — Fire 10 concurrent `SessionDB.appendMessage()` calls, assert all succeed without SQLITE_BUSY errors within `busyTimeoutMs` window.
 
 - [x] **[server] Structured error handling for missing repoMapping** — `resolveRepoPath()` returns `undefined` and the handler silently returns. Send a Lark DM to the assignee or team channel when no repo mapping is found.
 
 - [x] **[session] Expose FTS5 searchMessages method** — FTS5 index is scaffolded but no `searchMessages()` method is exported. Implement and export for agents and dashboard to query past sessions by keyword.
 
-- [ ] **[observability] Startup health-check for sqlite-vec extension** — If `vec0` native extension is not installed, crash is unhandled. Add explicit pre-flight check with clear installation message and graceful exit.
+- [x] **[observability] Startup health-check for sqlite-vec extension** — If `vec0` native extension is not installed, crash is unhandled. Add explicit pre-flight check with clear installation message and graceful exit.
 
 ---
 
