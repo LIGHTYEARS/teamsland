@@ -82,12 +82,12 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 ## 5. Dashboard UI
 
-- [ ] **[dashboard] WebSocket real-time agent list** — Replace placeholder `<h1>` with a React component that connects to `ws://localhost:3000/ws` and displays a live table of running agents.
+- [x] **[dashboard] WebSocket real-time agent list** — Replace placeholder `<h1>` with a React component that connects to `ws://localhost:3000/ws` and displays a live table of running agents.
 
-- [ ] **[dashboard] Implement real WebSocket push in server** — `dashboard.ts` sends `"connected"` then closes. Implement proper server-side push with registry change event subscriptions.
+- [x] **[dashboard] Implement real WebSocket push in server** — `dashboard.ts` sends `"connected"` then closes. Implement proper server-side push with registry change event subscriptions.
 
 - [ ] **[dashboard] Stream-JSON event viewer** — Panel that shows raw NDJSON stream events for a selected agent's session via `GET /api/sessions/:sessionId/messages`.
 
 - [ ] **[dashboard] Lark OAuth authentication** — `DashboardConfig` has `auth.provider: "lark_oauth"` but no middleware. Implement Lark OAuth flow and gate `/api/*` routes.
 
-- [ ] **[dashboard] Configure rspack + Tailwind build** — Add proper `rspack.config.ts`, configure TailwindCSS/shadcn/ui, add `dev` script with API proxy, verify hot-reload.
+- [x] **[dashboard] Configure rspack + Tailwind build** — Add proper `rspack.config.ts`, configure TailwindCSS/shadcn/ui, add `dev` script with API proxy, verify hot-reload.

@@ -1431,3 +1431,65 @@ Four test cases exercising `SubagentRegistry.restoreOnStartup()` with real temp 
 **Progress:** 28 of 34 ISSUES.md items now complete (82%). Remaining: 1 observability + 5 dashboard UI items.
 
 ---
+
+## Iteration 14 — 2026-04-22
+
+### Tasks Completed
+
+1. **[dashboard] Implement real WebSocket push in server**
+   - Added `subscribe(listener)` method to `SubagentRegistry` with unsubscribe return function
+   - Listeners notified with full `AgentRecord[]` snapshot on every `register()` and `unregister()`
+   - Rewrote `dashboard.ts` WebSocket handler: persistent connections tracked in `Set<ServerWebSocket>`
+   - On connect: send `{ type: "connected", agents }` with current agent list
+   - On registry change: broadcast `{ type: "agents_update", agents }` to all clients
+   - On AbortSignal: unsubscribe from registry, close all clients, clear set
+   - Added close/error handlers to clean up disconnected clients
+
+2. **[dashboard] WebSocket real-time agent list**
+   - Created `useAgents` hook: opens WebSocket, parses connected/agents_update messages
+   - Auto-reconnect on close (3-second delay), tracks connection status
+   - Created `AgentList` component: responsive table with 7 columns
+   - Color-coded status badges (green=running, gray=completed, red=failed)
+   - Displays agent ID, issue, PID, status, retry count, start time, running duration
+   - Empty state placeholder when no agents running
+   - Updated `App.tsx` with header (connection indicator + agent count) and agent table
+
+3. **[dashboard] Configure rspack + Tailwind build**
+   - Created `src/index.css` with Tailwind v4 `@import "tailwindcss"` directive
+   - Added CSS import to `index.tsx` entry point
+   - Added `@tailwindcss/postcss` dev dependency to package.json
+   - Enabled `experiments.css: true` in rspack config for CSS module support
+   - Added dev server proxy for `/api`, `/ws`, `/health` → `http://localhost:3000`
+   - Verified: `rspack build` succeeds — 194KB JS + 19KB CSS output
+
+### Key Design Decisions
+
+- **Registry subscription pattern**: Simple callback array with unsubscribe function return. No EventEmitter needed — registry mutations are infrequent (process spawn/exit) so a synchronous broadcast is fine. The snapshot is computed once per mutation, not per listener.
+- **WebSocket client tracking via Set**: `Bun.serve` WebSocket handlers receive `ServerWebSocket` objects. Using a `Set` for O(1) add/delete. The `unknown` type cast is necessary because Bun's WebSocket type is generic and dashboard.ts doesn't declare its data type.
+- **Auto-reconnect in useAgents**: 3-second reconnect delay with `disposed` guard prevents reconnect attempts after component unmount. No exponential backoff since the dashboard is a local tool.
+- **Tailwind v4 setup**: Uses `@import "tailwindcss"` (v4 syntax) instead of `@tailwind base/components/utilities` (v3 syntax). The `@tailwindcss/postcss` plugin handles the transform.
+
+### Test Results
+
+- 256 tests passed, 70 skipped, 0 failures
+- 40 sidecar tests pass (including registry tests with new subscribe method)
+- Dashboard build verified: `rspack build` succeeds cleanly
+- Biome lint clean on all 8 modified files
+- Lefthook pre-commit hooks passed
+
+### Files Modified
+
+- `packages/sidecar/src/registry.ts` — subscribe(), notifyListeners(), listeners array
+- `apps/server/src/dashboard.ts` — real WebSocket push, client tracking, registry subscription
+- `apps/dashboard/src/App.tsx` — full layout with useAgents hook
+- `apps/dashboard/src/index.tsx` — CSS import
+- `apps/dashboard/src/index.css` — NEW: Tailwind v4 entry
+- `apps/dashboard/src/hooks/useAgents.ts` — NEW: WebSocket agent list hook
+- `apps/dashboard/src/components/AgentList.tsx` — NEW: agent table component
+- `apps/dashboard/package.json` — @tailwindcss/postcss dependency
+- `apps/dashboard/rspack.config.ts` — experiments.css, dev proxy
+- `bun.lock` — updated lockfile
+
+**Progress:** 31 of 34 ISSUES.md items now complete (91%). Remaining: 1 observability + 2 dashboard (Stream-JSON viewer, Lark OAuth).
+
+---
