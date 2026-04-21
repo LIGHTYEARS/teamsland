@@ -64,6 +64,20 @@ export class NullMemoryStore implements AbstractMemoryStore {
   }
 
   /**
+   * 批量递增 access_count（空操作）
+   *
+   * 实现与 TeamMemoryStore 相同的接口，以便 retriever.ts 无需区分两种实现。
+   *
+   * @example
+   * ```typescript
+   * store.incrementAccessCount(["e1", "e2"]);
+   * ```
+   */
+  incrementAccessCount(_entryIds: string[]): void {
+    // 空操作 — 无持久化存储
+  }
+
+  /**
    * FTS5 全文搜索（始终返回空结果）
    *
    * 实现与 TeamMemoryStore 相同的接口，以便 retriever.ts 无需区分两种实现。

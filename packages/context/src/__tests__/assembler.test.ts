@@ -31,6 +31,10 @@ class FakeMemoryStore implements AbstractMemoryStore {
   ftsSearch(_query: string, _limit?: number): MemoryEntry[] {
     return this.entries;
   }
+
+  incrementAccessCount(_entryIds: string[]): void {
+    // no-op for testing
+  }
 }
 
 class FakeEmbedder implements Embedder {

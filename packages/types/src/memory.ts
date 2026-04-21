@@ -88,4 +88,6 @@ export interface AbstractMemoryStore {
   exists(teamId: string, hash: string): Promise<boolean>;
   /** 列出团队下所有记忆的摘要 */
   listAbstracts(teamId: string): Promise<MemoryEntry[]>;
+  /** 批量递增检索命中条目的 access_count */
+  incrementAccessCount(entryIds: string[]): void;
 }
