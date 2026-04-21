@@ -180,7 +180,11 @@ function buildLlmStack(llmConfig: LlmConfig | undefined, logger: ReturnType<type
     const worktreeManager = new WorktreeManager(new GitBunCommandRunner());
 
     // ── 18.5. ConfirmationWatcher ──
-    const confirmationWatcher = new ConfirmationWatcher({ notifier, config: config.confirmation });
+    const confirmationWatcher = new ConfirmationWatcher({
+      notifier,
+      config: config.confirmation,
+      meego: { apiBaseUrl: config.meego.apiBaseUrl, pluginAccessToken: config.meego.pluginAccessToken },
+    });
 
     // ── 19. MeegoEventBus ──
     const eventBus = new MeegoEventBus(eventDb);

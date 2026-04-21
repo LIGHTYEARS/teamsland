@@ -300,8 +300,9 @@ export class MeegoConnector {
   /**
    * 启动长连接模式（私有）
    *
-   * 实现 EventSource-like 长连接，支持指数退避重连。
+   * 使用 fetch-based SSE 流读取 Meego 实时事件推送。
    * 连接断开时按 `reconnectIntervalSeconds * 2^retryCount`（最大 300s）等待后重连。
+   * 支持 `Last-Event-ID` 头实现断点续传。
    * signal 触发时终止重连循环。
    *
    * @param signal - AbortSignal，触发时终止重连循环
@@ -314,9 +315,19 @@ export class MeegoConnector {
    */
   private startLongConnection(signal?: AbortSignal): void {
     const { reconnectIntervalSeconds } = this.config.longConnection;
+    const { apiBaseUrl, pluginAccessToken } = this.config;
+    const eventBus = this.eventBus;
+
+    if (!pluginAccessToken) {
+      logger.warn("pluginAccessToken 未配置，长连接模式将跳过");
+      return;
+    }
+
+    const sseUrl = `${apiBaseUrl}/events/stream`;
 
     const connect = async (): Promise<void> => {
       let retryCount = 0;
+      let lastEventId = "";
 
       while (true) {
         if (signal?.aborted) {
@@ -324,12 +335,13 @@ export class MeegoConnector {
           return;
         }
 
-        logger.debug({ retryCount }, "long-connection attempt");
+        logger.debug({ retryCount, lastEventId }, "long-connection attempt");
 
         try {
-          // 占位实现：真实 EventSource/SSE endpoint 接入时替换此处
-          await new Promise<void>((resolve) => setTimeout(resolve, 1000));
-          retryCount = 0; // 成功连接后重置重试计数
+          await consumeSseStream(sseUrl, pluginAccessToken, lastEventId, eventBus, signal, (id) => {
+            lastEventId = id;
+          });
+          retryCount = 0;
         } catch (err) {
           logger.warn({ error: err, retryCount }, "long-connection error, will retry");
         }
@@ -348,6 +360,113 @@ export class MeegoConnector {
       logger.error({ error: err }, "long-connection fatal");
     });
 
-    logger.info({ reconnectIntervalSeconds }, "long-connection started");
+    logger.info({ reconnectIntervalSeconds, sseUrl }, "long-connection started");
+  }
+}
+
+/** SSE 行解析上下文 */
+interface SseParseContext {
+  dataLines: string[];
+  onId: (id: string) => void;
+  onEvent: (raw: string) => Promise<void>;
+}
+
+/** 处理单条 SSE 行 */
+async function processSseLine(line: string, ctx: SseParseContext): Promise<void> {
+  if (line.startsWith("id:")) {
+    ctx.onId(line.slice(3).trim());
+  } else if (line.startsWith("data:")) {
+    ctx.dataLines.push(line.slice(5).trim());
+  } else if (line === "" && ctx.dataLines.length > 0) {
+    const raw = ctx.dataLines.join("\n");
+    ctx.dataLines.length = 0;
+    await ctx.onEvent(raw);
+  }
+}
+
+/** 尝试解析并分发一条 SSE JSON 事件 */
+async function dispatchSseEvent(raw: string, eventBus: MeegoEventBus): Promise<void> {
+  try {
+    const event = JSON.parse(raw) as MeegoEvent;
+    await eventBus.handle(event);
+  } catch (parseErr: unknown) {
+    logger.warn({ raw: raw.slice(0, 200), err: parseErr }, "SSE 事件解析失败");
+  }
+}
+
+/**
+ * 消费 SSE 流：打开 fetch 连接，逐行解析 `text/event-stream` 协议
+ *
+ * SSE 协议格式：
+ * - `id: <value>`     → 更新 lastEventId（用于断点续传）
+ * - `event: <value>`  → 可选的事件类型（此处不使用）
+ * - `data: <value>`   → JSON 数据行，可多行拼接
+ * - 空行              → 分发已积累的 data 作为一条完整事件
+ *
+ * 连接关闭（流结束 / 非 200 响应）时正常返回，让外层重连循环处理。
+ *
+ * @param url - SSE 端点地址
+ * @param token - 插件访问令牌
+ * @param lastEventId - 上次接收到的事件 ID（空串表示从头开始）
+ * @param eventBus - 事件分发总线
+ * @param signal - 取消信号
+ * @param onId - 每收到 `id:` 行时的回调，用于更新外层 lastEventId
+ */
+async function consumeSseStream(
+  url: string,
+  token: string,
+  lastEventId: string,
+  eventBus: MeegoEventBus,
+  signal: AbortSignal | undefined,
+  onId: (id: string) => void,
+): Promise<void> {
+  const headers: Record<string, string> = {
+    "X-Plugin-Token": token,
+    Accept: "text/event-stream",
+    "Cache-Control": "no-cache",
+  };
+  if (lastEventId) {
+    headers["Last-Event-ID"] = lastEventId;
+  }
+
+  const resp = await fetch(url, { method: "GET", headers, signal });
+
+  if (!resp.ok) {
+    throw new Error(`SSE connect failed: ${resp.status}`);
+  }
+
+  if (!resp.body) {
+    throw new Error("SSE response has no body");
+  }
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  const ctx: SseParseContext = {
+    dataLines: [],
+    onId,
+    onEvent: (raw) => dispatchSseEvent(raw, eventBus),
+  };
+
+  try {
+    while (true) {
+      if (signal?.aborted) return;
+
+      const { done, value } = await reader.read();
+      if (done) {
+        logger.debug("SSE stream ended");
+        return;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        await processSseLine(line, ctx);
+      }
+    }
+  } finally {
+    reader.releaseLock();
   }
 }

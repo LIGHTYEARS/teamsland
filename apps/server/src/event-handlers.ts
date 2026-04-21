@@ -453,7 +453,7 @@ function createStatusChangedHandler(deps: EventHandlerDeps): EventHandler {
         logger.info({ issueId: event.issueId, assigneeId }, "启动人工确认监控");
 
         deps.confirmationWatcher
-          .watch(event.issueId, assigneeId)
+          .watch(event.issueId, assigneeId, event.projectKey)
           .then(async (result) => {
             logger.info({ issueId: event.issueId, result }, "确认监控完成");
             if (result === "timeout") {
