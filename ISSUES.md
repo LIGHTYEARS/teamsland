@@ -32,13 +32,13 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 - [x] **[server] Wire ObservableMessageBus** — `ObservableMessageBus` is defined but never wired. Instantiate it, subscribe `SidecarDataPlane`, and pass it to Swarm workers so all inter-agent messages carry a `traceId`.
 
-- [ ] **[swarm] Wire runSwarm into event-handlers for complex tasks** — `runSwarm()` and `TaskPlanner` exist but are never called from the server. Add logic to detect complex tasks and dispatch to `runSwarm()` instead of single-agent spawn.
+- [x] **[swarm] Wire runSwarm into event-handlers for complex tasks** — `runSwarm()` and `TaskPlanner` exist but are never called from the server. Add logic to detect complex tasks and dispatch to `runSwarm()` instead of single-agent spawn.
 
 - [ ] **[meego] Wire ConfirmationWatcher into issue.status_changed handler** — The handler is a placeholder logger. When status transitions require human confirmation, call `ConfirmationWatcher.watch()` and only allow the transition after `"approved"`.
 
 - [x] **[ingestion] Wire DocumentParser output into IntentClassifier** — `DocumentParser.parseMarkdown()` extracts entities but they are never passed to `IntentClassifier`. Pass `entities` as context for richer LLM classification results.
 
-- [ ] **[lark] Wire contact/group resolution in issue.created handler** — `LarkCli.contactSearch()` and `groupSearch()` are implemented but never called. After intent classification, resolve `entities.owners` to Lark user IDs and send group notification.
+- [x] **[lark] Wire contact/group resolution in issue.created handler** — `LarkCli.contactSearch()` and `groupSearch()` are implemented but never called. After intent classification, resolve `entities.owners` to Lark user IDs and send group notification.
 
 ---
 
@@ -50,7 +50,7 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 - [x] **[memory] Implement access_count increment on retrieval** — `vectorSearch()` and `ftsSearch()` never increment `access_count`, so `hotnessScore` ranking is recency-only. Add `UPDATE SET access_count = access_count + 1` on retrieval.
 
-- [ ] **[sidecar] Implement orphan-recovery on restoreOnStartup** — `restoreOnStartup()` loads alive PIDs but doesn't re-attach stream processing. Surviving orphans are unmonitored. Add re-attach or re-spawn logic.
+- [x] **[sidecar] Implement orphan-recovery on restoreOnStartup** — `restoreOnStartup()` loads alive PIDs but doesn't re-attach stream processing. Surviving orphans are unmonitored. Add re-attach or re-spawn logic.
 
 - [x] **[config] Add skillRouting to config schema and config.json** — `DynamicContextAssembler.buildSectionC()` reads `config.skillRouting[task.triggerType]` but no `skillRouting` field exists. Add to both TypeScript type and config.json.
 

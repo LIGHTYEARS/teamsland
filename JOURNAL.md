@@ -1263,3 +1263,50 @@ Four test cases exercising `SubagentRegistry.restoreOnStartup()` with real temp 
 
 ---
 
+## Iteration 11 — 2026-04-22
+
+### Tasks Completed
+
+1. **[swarm] Wire runSwarm into event-handlers for complex tasks**
+   - Added `taskPlanner: TaskPlanner | null` to `EventHandlerDeps`
+   - Added `shouldUseSwarm()` heuristic — triggers when `taskPlanner` is available AND parsed entities >= 3 (SWARM_ENTITY_THRESHOLD)
+   - Added `dispatchSwarm()` helper — builds `ComplexTask`, calls `runSwarm()`, notifies assignee on quorum failure
+   - Swarm branch inserted after memory ingestion, before single-agent prompt assembly
+   - `main.ts` passes `taskPlanner: null` (stub LLM disables swarm)
+   - Commits: `077d41d`
+
+2. **[sidecar] Implement orphan-recovery on restoreOnStartup**
+   - `restoreOnStartup()` return type changed from `void` to `ReturnType<typeof setInterval> | null`
+   - Surviving orphan PIDs trigger `startOrphanMonitor()` — 30-second liveness sweeps
+   - Dead orphans get `status: "failed"` and removed from registry
+   - Timer auto-stops when all orphans clear; caller must `clearInterval()` on shutdown
+   - Updated 3 test files (registry.test.ts, crash-recovery.test.ts) for new return type
+   - Commits: `2894335`
+
+3. **[lark] Wire contact/group resolution in issue.created handler**
+   - Added `larkCli: LarkCli` to `EventHandlerDeps`
+   - Added `resolveAndNotifyOwners()` fire-and-forget helper — resolves `intentResult.entities.owners` via `LarkCli.contactSearch()`, sends DM to each resolved userId
+   - Wired after intent classification (step 1.5), before repo path resolution
+   - `main.ts` injects the existing `larkCli` instance
+   - Commits: `077d41d` (same commit as swarm — both touch event-handlers)
+
+### Test Results
+
+- All 256 tests pass, 49 skipped (sqlite-vec dependent)
+- 31 test files passed / 6 skipped
+- Zero TypeScript errors across all packages
+- Zero biome lint/format errors
+
+### Files Modified
+
+- `apps/server/src/event-handlers.ts` — swarm dispatch, lark contact resolution, new deps
+- `apps/server/src/main.ts` — inject taskPlanner, larkCli, orphanTimer cleanup
+- `apps/server/src/__tests__/event-pipeline.test.ts` — updated deps for new fields
+- `packages/sidecar/src/registry.ts` — orphan-recovery monitor, new return type
+- `packages/sidecar/src/__tests__/crash-recovery.test.ts` — timer cleanup in tests
+- `packages/sidecar/src/__tests__/registry.test.ts` — updated for null return
+
+**Progress:** 23 of 30 ISSUES.md items now complete (77%).
+
+---
+
