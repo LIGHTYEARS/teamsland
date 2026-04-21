@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { DynamicContextAssembler } from "@teamsland/context";
 import type { WorktreeManager } from "@teamsland/git";
-import type { IntentClassifier } from "@teamsland/ingestion";
+import type { DocumentParser, IntentClassifier } from "@teamsland/ingestion";
 import type { LarkNotifier } from "@teamsland/lark";
 import type { MeegoEventBus } from "@teamsland/meego";
+import type { ExtractLoop, MemoryUpdater, TeamMemoryStore } from "@teamsland/memory";
+import { ingestDocument } from "@teamsland/memory";
 import { createLogger } from "@teamsland/observability";
 import type { ProcessController, SidecarDataPlane, SubagentRegistry } from "@teamsland/sidecar";
 import { CapacityError } from "@teamsland/sidecar";
@@ -33,6 +35,10 @@ const CONFIDENCE_THRESHOLD = 0.5;
  *   notifier: larkNotifier,
  *   config: appConfig,
  *   teamId: "team-001",
+ *   documentParser: parser,
+ *   memoryStore: teamMemoryStore,
+ *   extractLoop: loop,
+ *   memoryUpdater: updater,
  * };
  * ```
  */
@@ -55,6 +61,14 @@ export interface EventHandlerDeps {
   config: AppConfig;
   /** 团队 ID */
   teamId: string;
+  /** 文档解析器 */
+  documentParser: DocumentParser;
+  /** 团队记忆存储（仅 TeamMemoryStore 时可用于 ingest） */
+  memoryStore: TeamMemoryStore | null;
+  /** 记忆提取循环（LLM 未配置时为 null） */
+  extractLoop: ExtractLoop | null;
+  /** 记忆更新器（NullMemoryStore 时为 null） */
+  memoryUpdater: MemoryUpdater | null;
 }
 
 /**
@@ -119,9 +133,78 @@ export function registerEventHandlers(bus: MeegoEventBus, deps: EventHandlerDeps
 }
 
 /**
+ * 解析并异步注入文档到团队记忆（fire-and-forget）
+ *
+ * 若 memoryStore、extractLoop、memoryUpdater 任一为 null 则跳过。
+ * 失败时记录警告日志，不影响调用方流程。
+ */
+function scheduleMemoryIngestion(deps: EventHandlerDeps, event: MeegoEvent, agentId: string): void {
+  const { memoryStore, extractLoop, memoryUpdater } = deps;
+  if (!memoryStore || !extractLoop || !memoryUpdater) {
+    return;
+  }
+  const rawDescription = extractDescription(event);
+  if (!rawDescription) {
+    return;
+  }
+  const parsed = deps.documentParser.parseMarkdown(rawDescription);
+  const docText = parsed.sections.map((s) => `${s.heading}\n${s.content}`).join("\n\n") || rawDescription;
+  ingestDocument(docText, deps.teamId, agentId, memoryStore, extractLoop, memoryUpdater).catch((ingestErr: unknown) => {
+    logger.warn({ issueId: event.issueId, err: ingestErr }, "文档记忆注入失败（不影响 Agent 启动）");
+  });
+}
+
+/**
+ * 将已启动的 Agent 注册到注册表并启动数据平面流
+ *
+ * 容量不足时向指派人发送 DM 通知并返回 false；成功返回 true。
+ */
+async function registerAgent(
+  deps: EventHandlerDeps,
+  params: {
+    agentId: string;
+    pid: number;
+    sessionId: string;
+    issueId: string;
+    worktreePath: string;
+    assigneeId: string;
+    stdout: ReadableStream;
+  },
+): Promise<boolean> {
+  try {
+    deps.registry.register({
+      agentId: params.agentId,
+      pid: params.pid,
+      sessionId: params.sessionId,
+      issueId: params.issueId,
+      worktreePath: params.worktreePath,
+      status: "running",
+      retryCount: 0,
+      createdAt: Date.now(),
+    });
+    logger.info({ agentId: params.agentId, issueId: params.issueId }, "Agent 注册完成");
+
+    deps.dataPlane.processStream(params.agentId, params.stdout).catch((streamErr: unknown) => {
+      logger.error({ agentId: params.agentId, issueId: params.issueId, err: streamErr }, "数据平面流处理异常");
+    });
+    return true;
+  } catch (err: unknown) {
+    if (err instanceof CapacityError) {
+      logger.warn({ current: err.current, max: err.max, issueId: params.issueId }, "Agent 注册表容量已满");
+      await deps.notifier.sendDm(
+        params.assigneeId || "unknown",
+        `任务 ${params.issueId} 无法启动 Agent：当前并发数已满（${err.current}/${err.max}），请稍后重试。`,
+      );
+      return false;
+    }
+    throw err;
+  }
+}
+
+/**
  * 创建 issue.created 事件处理器
  *
- * 完整流水线：意图分类 → worktree 创建 → 提示词组装 → Agent 进程启动 → 注册表写入。
+ * 完整流水线：意图分类 → worktree 创建 → 文档记忆注入 → 提示词组装 → Agent 进程启动 → 注册表写入。
  * 置信度低于阈值时跳过处理；注册表容量不足时通过飞书 DM 通知。
  */
 function createIssueCreatedHandler(deps: EventHandlerDeps): EventHandler {
@@ -173,6 +256,12 @@ function createIssueCreatedHandler(deps: EventHandlerDeps): EventHandler {
           assigneeId,
         };
 
+        // agentId 提前计算，供步骤 4.5 和步骤 7 共用
+        const agentId = `agent-${event.issueId}-${randomUUID().slice(0, 8)}`;
+
+        // 4.5. 文档解析 + 记忆注入（fire-and-forget, 不阻塞 Agent 启动）
+        scheduleMemoryIngestion(deps, event, agentId);
+
         // 5. 组装初始提示词
         const prompt = await deps.assembler.buildInitialPrompt(taskConfig, deps.teamId);
         logger.info({ issueId: event.issueId, promptLength: prompt.length }, "初始提示词组装完成");
@@ -188,36 +277,16 @@ function createIssueCreatedHandler(deps: EventHandlerDeps): EventHandler {
           "Agent 子进程已启动",
         );
 
-        // 7. 注册到注册表
-        const agentId = `agent-${event.issueId}-${randomUUID().slice(0, 8)}`;
-        try {
-          deps.registry.register({
-            agentId,
-            pid: spawnResult.pid,
-            sessionId: spawnResult.sessionId,
-            issueId: event.issueId,
-            worktreePath,
-            status: "running",
-            retryCount: 0,
-            createdAt: Date.now(),
-          });
-          logger.info({ agentId, issueId: event.issueId }, "Agent 注册完成");
-
-          // 8. 启动数据平面流处理（fire-and-forget）
-          deps.dataPlane.processStream(agentId, spawnResult.stdout).catch((streamErr: unknown) => {
-            logger.error({ agentId, issueId: event.issueId, err: streamErr }, "数据平面流处理异常");
-          });
-        } catch (err: unknown) {
-          if (err instanceof CapacityError) {
-            logger.warn({ current: err.current, max: err.max, issueId: event.issueId }, "Agent 注册表容量已满");
-            await deps.notifier.sendDm(
-              assigneeId || "unknown",
-              `任务 ${event.issueId} 无法启动 Agent：当前并发数已满（${err.current}/${err.max}），请稍后重试。`,
-            );
-            return;
-          }
-          throw err;
-        }
+        // 7. 注册到注册表 + 启动数据平面流
+        await registerAgent(deps, {
+          agentId,
+          pid: spawnResult.pid,
+          sessionId: spawnResult.sessionId,
+          issueId: event.issueId,
+          worktreePath,
+          assigneeId,
+          stdout: spawnResult.stdout,
+        });
       } catch (err: unknown) {
         logger.error({ eventId: event.eventId, issueId: event.issueId, error: err }, "issue.created 处理失败");
       }

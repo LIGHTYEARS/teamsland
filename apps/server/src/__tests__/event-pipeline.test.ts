@@ -130,6 +130,10 @@ describe("事件管线端到端", () => {
       notifier: notifier as never,
       config: testConfig,
       teamId: "default",
+      documentParser: { parseMarkdown: vi.fn().mockReturnValue({ title: "", sections: [], entities: [] }) } as never,
+      memoryStore: null,
+      extractLoop: null,
+      memoryUpdater: null,
     });
 
     // 启动 webhook
