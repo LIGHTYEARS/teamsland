@@ -99,24 +99,36 @@ export class LocalEmbedder implements Embedder {
   }
 
   /**
-   * 批量生成 embedding 向量
+   * 批量生成 embedding 向量（并发执行）
    *
-   * 内部串行调用 embed()（node-llama-cpp 不支持批量 embedding context）。
+   * node-llama-cpp 不支持批量 embedding context，因此使用多个并发 worker
+   * 并行调用 embed()。默认并发度为 4，结果与输入 texts 索引一一对应。
    *
    * @param texts - 待编码文本列表
    * @returns 与 texts 索引一一对应的向量列表
    *
    * @example
    * ```typescript
-   * const vectors = await embedder.embedBatch(["文本1", "文本2"]);
-   * console.log(vectors.length); // 2
+   * const vectors = await embedder.embedBatch(["文本1", "文本2", "文本3"]);
+   * console.log(vectors.length); // 3
    * ```
    */
   async embedBatch(texts: string[]): Promise<number[][]> {
-    const results: number[][] = [];
-    for (const text of texts) {
-      results.push(await this.embed(text));
+    if (texts.length === 0) return [];
+    const concurrency = 4;
+    const results = new Array<number[]>(texts.length);
+    let cursor = 0;
+
+    async function worker(self: LocalEmbedder): Promise<void> {
+      while (true) {
+        const idx = cursor++;
+        if (idx >= texts.length) break;
+        results[idx] = await self.embed(texts[idx]);
+      }
     }
+
+    const workers = Array.from({ length: Math.min(concurrency, texts.length) }, () => worker(this));
+    await Promise.all(workers);
     return results;
   }
 }
