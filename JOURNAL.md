@@ -973,3 +973,24 @@ All templates follow the existing `frontend_dev.md` format: `# 角色标题 Agen
 
 ---
 
+## Evolution Loop — Iteration 5 — 2026-04-21
+
+**Issue:** `[memory] Implement access_count increment on retrieval` (ISSUES.md §3 Feature Completions)
+
+**Problem:** `vectorSearch()` and `ftsSearch()` never incremented `access_count`, so `hotnessScore` ranking was effectively recency-only. The formula `accessCount / (1 + exp(k * age))` always had `accessCount = 0`, making the score identically 0 for all entries.
+
+**Changes:**
+
+| File | Change |
+|------|--------|
+| `packages/memory/src/team-memory-store.ts` | Add `incrementAccessCount(entryIds: string[])` method — batch `UPDATE memory_entries SET access_count = access_count + 1 WHERE entry_id IN (...)`. Does **not** update `updated_at` to avoid resetting the age decay clock. |
+| `packages/memory/src/retriever.ts` | Call `store.incrementAccessCount(hitIds)` after entityMerge dedup, before hotnessScore ranking — all retrieved candidates get counted. |
+| `.gitignore` | Fix `memory/` → `/memory/` so it only ignores root-level auto-evolve state, not `packages/memory/`. This also fixes biome skipping the entire packages/memory directory. |
+
+**Verification:**
+- `bunx biome check packages/memory/src/` — 2 files, no issues
+- `bunx --bun vitest run packages/memory/src/__tests__/lifecycle.test.ts` — 8 tests passed
+- Memory store/retriever tests are guarded by `vec0` availability (skipped in this env)
+
+---
+

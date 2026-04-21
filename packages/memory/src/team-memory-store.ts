@@ -380,6 +380,27 @@ export class TeamMemoryStore implements AbstractMemoryStore {
   }
 
   /**
+   * 批量递增检索命中条目的 access_count
+   *
+   * 仅递增计数器，不更新 `updated_at`，以避免检索操作重置年龄衰减时钟。
+   *
+   * @param entryIds - 需要递增的条目 ID 列表
+   *
+   * @example
+   * ```typescript
+   * store.incrementAccessCount(["e1", "e2", "e3"]);
+   * ```
+   */
+  incrementAccessCount(entryIds: string[]): void {
+    if (entryIds.length === 0) return;
+    const placeholders = entryIds.map(() => "?").join(", ");
+    this.db.run(
+      `UPDATE memory_entries SET access_count = access_count + 1 WHERE entry_id IN (${placeholders})`,
+      ...entryIds,
+    );
+  }
+
+  /**
    * 按 ID 获取单条记忆
    *
    * @param entryId - 记忆条目 ID

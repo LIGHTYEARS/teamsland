@@ -48,7 +48,7 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 - [ ] **[session] Implement SessionDB.compact()** — Schema and types exist but no compaction method. Implement `compact(sessionId)` that summarises old messages via LLM when token count exceeds threshold and trims history.
 
-- [ ] **[memory] Implement access_count increment on retrieval** — `vectorSearch()` and `ftsSearch()` never increment `access_count`, so `hotnessScore` ranking is recency-only. Add `UPDATE SET access_count = access_count + 1` on retrieval.
+- [x] **[memory] Implement access_count increment on retrieval** — `vectorSearch()` and `ftsSearch()` never increment `access_count`, so `hotnessScore` ranking is recency-only. Add `UPDATE SET access_count = access_count + 1` on retrieval.
 
 - [ ] **[sidecar] Implement orphan-recovery on restoreOnStartup** — `restoreOnStartup()` loads alive PIDs but doesn't re-attach stream processing. Surviving orphans are unmonitored. Add re-attach or re-spawn logic.
 

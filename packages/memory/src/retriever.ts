@@ -81,6 +81,10 @@ export async function retrieve(
 
   const deduped = entityMerge(candidates, embeddings, mergeThreshold);
 
+  // 4.5. 递增检索命中条目的 access_count
+  const hitIds = deduped.map((e) => e.id);
+  store.incrementAccessCount(hitIds);
+
   // 5. hotnessScore 重排
   const ranked = deduped.sort(
     (a, b) => hotnessScore(b.accessCount, b.updatedAt) - hotnessScore(a.accessCount, a.updatedAt),
