@@ -927,3 +927,27 @@ After 5 iterations of split-doc polish (iterations 8-12):
 
 ---
 
+## Evolution Loop — Iteration 3 — 2026-04-21
+
+**Issue:** `[context] Create agent role templates under config/templates/` (ISSUES.md §1 Critical Gaps)
+
+**Problem:** `DynamicContextAssembler.buildSectionE()` calls `loadTemplate(agentRole)` which reads `config/templates/{agentRole}.md`, but only `frontend_dev.md` existed. Any non-frontend intent would throw at runtime.
+
+**Changes:**
+
+| File | Change |
+|------|--------|
+| `config/templates/tech_spec.md` | **New** — 技术方案评审 Agent 指令 |
+| `config/templates/design.md` | **New** — 设计评审 Agent 指令 |
+| `config/templates/query.md` | **New** — 信息查询 Agent 指令 |
+| `config/templates/status_sync.md` | **New** — 状态同步 Agent 指令 |
+| `config/templates/confirm.md` | **New** — 人工确认 Agent 指令 |
+
+All templates follow the existing `frontend_dev.md` format: `# 角色标题 Agent 指令` → `## 职责范围` → `## 工作流程`. File names match `IntentType` values (underscore convention) since `event-handlers.ts` sets `agentRole: intentResult.type`.
+
+**Verification:**
+- `bunx --bun vitest run packages/context/` — 4 template-loader tests passed
+- All 6 IntentType values now have corresponding template files
+
+---
+

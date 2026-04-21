@@ -12,7 +12,7 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 - [ ] **[server] Wire real LLM client instead of stub** — `main.ts` creates a `stubLlmClient` that always throws. Implement a real `LlmClient` backed by the Anthropic SDK, reading API key/model from `config.json`, and inject it into `IntentClassifier` and `TaskPlanner`.
 
-- [ ] **[context] Create agent role templates under config/templates/** — `DynamicContextAssembler.buildSectionE()` calls `loadTemplate(agentRole)` which reads `config/templates/{agentRole}.md`. No templates directory exists. Create `config/templates/` with `frontend_dev.md`, `tech_spec.md`, `design.md`, `query.md`, `status_sync.md`, and `confirm.md`.
+- [x] **[context] Create agent role templates under config/templates/** — `DynamicContextAssembler.buildSectionE()` calls `loadTemplate(agentRole)` which reads `config/templates/{agentRole}.md`. No templates directory exists. Create `config/templates/` with `frontend_dev.md`, `tech_spec.md`, `design.md`, `query.md`, `status_sync.md`, and `confirm.md`.
 
 - [ ] **[meego] Implement real Meego REST poll** — `MeegoConnector.startPoll()` is a pure stub. Implement the actual Meego API call using `config.meego.spaces`, the `plugin_access_token` header, and `lookbackMinutes` to fetch recent issue events and push them to `eventBus.handle()`.
 
