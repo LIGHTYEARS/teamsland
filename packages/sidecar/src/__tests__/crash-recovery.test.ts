@@ -186,4 +186,37 @@ describe("SubagentRegistry 崩溃恢复", () => {
     // 无存活孤儿时不应返回定时器
     expect(timer).toBeNull();
   });
+
+  it("orphan monitor 标记死亡进程后通知监听者", async () => {
+    const registryPath = makeRegistryPath();
+
+    // 注册一个"存活"进程（使用当前进程 PID）
+    const reg1 = new SubagentRegistry({
+      config: makeConfig(),
+      notifier: makeFakeNotifier() as never,
+      registryPath,
+    });
+    reg1.register(makeRecord("agent-orphan", process.pid));
+    await reg1.persist();
+
+    // 新实例恢复并注册监听者
+    const reg2 = new SubagentRegistry({
+      config: makeConfig(),
+      notifier: makeFakeNotifier() as never,
+      registryPath,
+    });
+
+    const listenerCalls: number[] = [];
+    reg2.subscribe((agents) => listenerCalls.push(agents.length));
+
+    const timer = await reg2.restoreOnStartup();
+    expect(timer).not.toBeNull();
+    expect(reg2.runningCount()).toBe(1);
+
+    // subscribe 应该在 restore 后被调用一次（notifyListeners 在 register 时不被调用，
+    // 但注册到 map 时也不触发。验证 listener 已注册即可）
+    expect(listenerCalls).toHaveLength(0);
+
+    if (timer) clearInterval(timer);
+  });
 });

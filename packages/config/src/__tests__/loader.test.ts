@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../loader.js";
+import { AppConfigSchema } from "../schema.js";
 
 const FIXTURES_DIR = resolve(import.meta.dirname, "fixtures");
 
@@ -70,5 +71,73 @@ describe("loadConfig", () => {
     await expect(loadConfig(resolve(FIXTURES_DIR, "valid-config.json"))).rejects.toThrow(
       "环境变量未定义: TEST_LARK_ID",
     );
+  });
+});
+
+describe("AppConfigSchema llm block", () => {
+  const baseConfig = {
+    meego: {
+      spaces: [{ spaceId: "s1", name: "test" }],
+      eventMode: "webhook",
+      webhook: { host: "127.0.0.1", port: 8080, path: "/hook" },
+      poll: { intervalSeconds: 60, lookbackMinutes: 5 },
+      longConnection: { enabled: false, reconnectIntervalSeconds: 10 },
+    },
+    lark: {
+      appId: "test-id",
+      appSecret: "test-secret",
+      bot: { historyContextCount: 20 },
+      notification: { teamChannelId: "" },
+    },
+    session: { compactionTokenThreshold: 80000, sqliteJitterRangeMs: [20, 150], busyTimeoutMs: 5000 },
+    sidecar: {
+      maxConcurrentSessions: 20,
+      maxRetryCount: 3,
+      maxDelegateDepth: 2,
+      workerTimeoutSeconds: 300,
+      healthCheckTimeoutMs: 30000,
+      minSwarmSuccessRatio: 0.5,
+    },
+    memory: { decayHalfLifeDays: 30, extractLoopMaxIterations: 3 },
+    storage: {
+      sqliteVec: { dbPath: "./data/test.sqlite", busyTimeoutMs: 5000, vectorDimensions: 512 },
+      embedding: { model: "test-model", contextSize: 2048 },
+      entityMerge: { cosineThreshold: 0.95 },
+      fts5: { optimizeIntervalHours: 24 },
+    },
+    confirmation: { reminderIntervalMin: 30, maxReminders: 3, pollIntervalMs: 60000 },
+    dashboard: { port: 3000, auth: { provider: "none", sessionTtlHours: 8, allowedDepartments: [] } },
+    repoMapping: [],
+  };
+
+  it("accepts config without llm block (optional)", () => {
+    const result = AppConfigSchema.parse(baseConfig);
+    expect(result.llm).toBeUndefined();
+  });
+
+  it("accepts config with valid llm block", () => {
+    const result = AppConfigSchema.parse({
+      ...baseConfig,
+      llm: { provider: "anthropic", apiKey: "sk-test", model: "claude-sonnet-4-20250514", maxTokens: 4096 },
+    });
+    expect(result.llm?.provider).toBe("anthropic");
+    expect(result.llm?.model).toBe("claude-sonnet-4-20250514");
+  });
+
+  it("rejects llm block with empty apiKey", () => {
+    expect(() =>
+      AppConfigSchema.parse({
+        ...baseConfig,
+        llm: { provider: "anthropic", apiKey: "", model: "test", maxTokens: 4096 },
+      }),
+    ).toThrow();
+  });
+
+  it("defaults maxTokens to 4096 when omitted", () => {
+    const result = AppConfigSchema.parse({
+      ...baseConfig,
+      llm: { provider: "anthropic", apiKey: "sk-test", model: "test" },
+    });
+    expect(result.llm?.maxTokens).toBe(4096);
   });
 });
