@@ -35,6 +35,6 @@ export default defineConfig({
   devServer: {
     port: 5173,
     hot: true,
-    proxy: [{ context: ["/api", "/ws", "/health"], target: "http://localhost:3000", ws: true }],
+    proxy: [{ context: ["/api", "/ws", "/health", "/auth"], target: "http://localhost:3000", ws: true }],
   },
 });
