@@ -5,7 +5,8 @@
     "webhook": {
       "host": "127.0.0.1",
       "port": 8080,
-      "path": "/meego/webhook"
+      "path": "/meego/webhook",
+      "secret": "${MEEGO_WEBHOOK_SECRET}"
     },
     "poll": {
       "intervalSeconds": 60,
@@ -16,7 +17,7 @@
       "reconnectIntervalSeconds": 10
     },
     "apiBaseUrl": "https://project.feishu.cn/open_api",
-    "pluginAccessToken": ""
+    "pluginAccessToken": "${MEEGO_PLUGIN_ACCESS_TOKEN}"
   },
   "lark": {
     "appId": "${LARK_APP_ID}",
@@ -25,7 +26,7 @@
       "historyContextCount": 20
     },
     "notification": {
-      "teamChannelId": ""
+      "teamChannelId": "${LARK_TEAM_CHANNEL_ID}"
     }
   },
   "session": {
@@ -97,8 +98,20 @@
   ],
   "skillRouting": {
     "frontend_dev": ["figma-reader", "lark-docs", "git-tools", "architect-template"],
+    "tech_spec": ["lark-docs", "git-tools", "architect-template"],
+    "design": ["figma-reader", "lark-docs", "architect-template"],
     "code_review": ["git-diff", "lark-comment"],
-    "bot_query": ["lark-docs", "lark-base"]
+    "bot_query": ["lark-docs", "lark-base"],
+    "confirm": ["lark-docs"],
+    "status_sync": ["lark-docs", "lark-base"],
+    "query": ["lark-docs", "lark-base"]
   },
-  "templateBasePath": "config/templates"
+  "templateBasePath": "config/templates",
+  "llm": {
+    "provider": "anthropic",
+    "apiKey": "${ANTHROPIC_AUTH_TOKEN}",
+    "model": "${ANTHROPIC_MODEL}",
+    "baseUrl": "${ANTHROPIC_BASE_URL}",
+    "maxTokens": 4096
+  }
 }
