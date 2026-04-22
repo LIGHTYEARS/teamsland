@@ -4,7 +4,7 @@
     "eventMode": "webhook",
     "webhook": {
       "host": "127.0.0.1",
-      "port": 8080,
+      "port": 8090,
       "path": "/meego/webhook",
       "secret": "${MEEGO_WEBHOOK_SECRET}"
     },
@@ -27,6 +27,13 @@
     },
     "notification": {
       "teamChannelId": "${LARK_TEAM_CHANNEL_ID}"
+    },
+    "connector": {
+      "enabled": true,
+      "eventTypes": ["im.message.receive_v1"],
+      "chatProjectMapping": {
+        "oc_3e8c9a4f5921e271c530644b6946fc34": "project_xxx"
+      }
     }
   },
   "session": {
@@ -47,17 +54,25 @@
     "extractLoopMaxIterations": 3,
     "exemptTypes": ["decisions", "identity"],
     "perTypeTtl": {
+      "profile": 365,
+      "preferences": 180,
+      "entities": 180,
       "events": 90,
       "cases": 365,
       "patterns": 365,
-      "preferences": 180
+      "tools": 365,
+      "skills": 365,
+      "decisions": 365,
+      "project_context": 180,
+      "soul": 365,
+      "identity": 365
     }
   },
   "storage": {
     "sqliteVec": {
       "dbPath": "./data/memory.sqlite",
       "busyTimeoutMs": 5000,
-      "vectorDimensions": 512
+      "vectorDimensions": 1024
     },
     "embedding": {
       "model": "hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf",
@@ -76,9 +91,9 @@
     "pollIntervalMs": 60000
   },
   "dashboard": {
-    "port": 3000,
+    "port": 3001,
     "auth": {
-      "provider": "lark_oauth",
+      "provider": "none",
       "sessionTtlHours": 8,
       "allowedDepartments": []
     }
@@ -86,14 +101,7 @@
   "repoMapping": [
     {
       "meegoProjectId": "project_xxx",
-      "repos": [
-        { "path": "/home/user/repos/frontend-main", "name": "前端主仓库" },
-        { "path": "/home/user/repos/frontend-components", "name": "组件库" }
-      ]
-    },
-    {
-      "meegoProjectId": "project_yyy",
-      "repos": [{ "path": "/home/user/repos/admin-portal", "name": "管理后台" }]
+      "repos": [{ "path": "/Users/bytedance/workspace/teamsland", "name": "teamsland 主仓库" }]
     }
   ],
   "skillRouting": {

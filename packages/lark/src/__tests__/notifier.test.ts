@@ -25,20 +25,19 @@ describe("LarkNotifier", () => {
     await notifier.sendCard("部署完成", "v1.2.0 已发布");
 
     const expectedJson = JSON.stringify({ title: "部署完成", content: "v1.2.0 已发布", level: "info" });
-    expect(runner.run).toHaveBeenCalledWith(
-      [
-        "lark-cli",
-        "im",
-        "send-message",
-        "--chat-id",
-        "oc_team_channel_001",
-        "--msg-type",
-        "interactive",
-        "--content",
-        expectedJson,
-      ],
-      { env: { LARK_APP_ID: "cli_test_app_id", LARK_APP_SECRET: "test_secret_value" } },
-    );
+    expect(runner.run).toHaveBeenCalledWith([
+      "lark-cli",
+      "im",
+      "+messages-send",
+      "--as",
+      "bot",
+      "--chat-id",
+      "oc_team_channel_001",
+      "--msg-type",
+      "interactive",
+      "--content",
+      expectedJson,
+    ]);
   });
 
   it("sendCard 使用指定 level", async () => {
@@ -49,20 +48,19 @@ describe("LarkNotifier", () => {
     await notifier.sendCard("错误告警", "数据库连接失败", "error");
 
     const expectedJson = JSON.stringify({ title: "错误告警", content: "数据库连接失败", level: "error" });
-    expect(runner.run).toHaveBeenCalledWith(
-      [
-        "lark-cli",
-        "im",
-        "send-message",
-        "--chat-id",
-        "oc_team_channel_001",
-        "--msg-type",
-        "interactive",
-        "--content",
-        expectedJson,
-      ],
-      { env: { LARK_APP_ID: "cli_test_app_id", LARK_APP_SECRET: "test_secret_value" } },
-    );
+    expect(runner.run).toHaveBeenCalledWith([
+      "lark-cli",
+      "im",
+      "+messages-send",
+      "--as",
+      "bot",
+      "--chat-id",
+      "oc_team_channel_001",
+      "--msg-type",
+      "interactive",
+      "--content",
+      expectedJson,
+    ]);
   });
 
   it("sendCard 使用 warning level", async () => {
@@ -73,19 +71,18 @@ describe("LarkNotifier", () => {
     await notifier.sendCard("性能警告", "P99 延迟超过 500ms", "warning");
 
     const expectedJson = JSON.stringify({ title: "性能警告", content: "P99 延迟超过 500ms", level: "warning" });
-    expect(runner.run).toHaveBeenCalledWith(
-      [
-        "lark-cli",
-        "im",
-        "send-message",
-        "--chat-id",
-        "oc_team_channel_001",
-        "--msg-type",
-        "interactive",
-        "--content",
-        expectedJson,
-      ],
-      { env: { LARK_APP_ID: "cli_test_app_id", LARK_APP_SECRET: "test_secret_value" } },
-    );
+    expect(runner.run).toHaveBeenCalledWith([
+      "lark-cli",
+      "im",
+      "+messages-send",
+      "--as",
+      "bot",
+      "--chat-id",
+      "oc_team_channel_001",
+      "--msg-type",
+      "interactive",
+      "--content",
+      expectedJson,
+    ]);
   });
 });

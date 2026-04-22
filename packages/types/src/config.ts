@@ -175,6 +175,34 @@ export interface LarkConfig {
   bot: LarkBotConfig;
   /** 通知配置 */
   notification: LarkNotificationConfig;
+  /** 飞书事件连接器配置（可选，启用后通过 lark-cli 订阅实时事件） */
+  connector?: LarkConnectorConfig;
+}
+
+/**
+ * 飞书事件连接器配置
+ *
+ * 通过 `lark-cli event +subscribe` 订阅飞书实时事件（WebSocket），
+ * 将群聊中 @机器人 的消息桥接到现有事件管线触发 Agent。
+ *
+ * @example
+ * ```typescript
+ * import type { LarkConnectorConfig } from "@teamsland/types";
+ *
+ * const cfg: LarkConnectorConfig = {
+ *   enabled: true,
+ *   eventTypes: ["im.message.receive_v1"],
+ *   chatProjectMapping: { "oc_xxx": "project_xxx" },
+ * };
+ * ```
+ */
+export interface LarkConnectorConfig {
+  /** 是否启用飞书事件连接器 */
+  enabled: boolean;
+  /** 订阅的飞书事件类型列表 */
+  eventTypes: string[];
+  /** 群聊 ID → Meego 项目 ID 映射 */
+  chatProjectMapping: Record<string, string>;
 }
 
 // ─── session.yaml ───

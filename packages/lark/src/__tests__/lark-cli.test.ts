@@ -23,10 +23,17 @@ describe("LarkCli", () => {
 
       await cli.sendDm("ou_user001", "你好");
 
-      expect(runner.run).toHaveBeenCalledWith(
-        ["lark-cli", "im", "send-message", "--chat-type", "p2p", "--receiver-id", "ou_user001", "--content", "你好"],
-        { env: { LARK_APP_ID: "cli_test_app_id", LARK_APP_SECRET: "test_secret_value" } },
-      );
+      expect(runner.run).toHaveBeenCalledWith([
+        "lark-cli",
+        "im",
+        "+messages-send",
+        "--as",
+        "bot",
+        "--user-id",
+        "ou_user001",
+        "--text",
+        "你好",
+      ]);
     });
   });
 
@@ -37,32 +44,36 @@ describe("LarkCli", () => {
 
       await cli.sendGroupMessage("oc_chat001", "测试消息");
 
-      expect(runner.run).toHaveBeenCalledWith(
-        ["lark-cli", "im", "send-message", "--chat-id", "oc_chat001", "--content", "测试消息"],
-        { env: { LARK_APP_ID: "cli_test_app_id", LARK_APP_SECRET: "test_secret_value" } },
-      );
+      expect(runner.run).toHaveBeenCalledWith([
+        "lark-cli",
+        "im",
+        "+messages-send",
+        "--as",
+        "bot",
+        "--chat-id",
+        "oc_chat001",
+        "--text",
+        "测试消息",
+      ]);
     });
 
-    it("带 replyToMessageId 时附加 --reply-to 参数", async () => {
+    it("带 replyToMessageId 时使用 +messages-reply 命令", async () => {
       const runner = createMockRunner({ exitCode: 0, stdout: "", stderr: "" });
       const cli = new LarkCli(testConfig, runner);
 
       await cli.sendGroupMessage("oc_chat001", "回复内容", { replyToMessageId: "om_msg123" });
 
-      expect(runner.run).toHaveBeenCalledWith(
-        [
-          "lark-cli",
-          "im",
-          "send-message",
-          "--chat-id",
-          "oc_chat001",
-          "--content",
-          "回复内容",
-          "--reply-to",
-          "om_msg123",
-        ],
-        { env: { LARK_APP_ID: "cli_test_app_id", LARK_APP_SECRET: "test_secret_value" } },
-      );
+      expect(runner.run).toHaveBeenCalledWith([
+        "lark-cli",
+        "im",
+        "+messages-reply",
+        "--as",
+        "bot",
+        "--message-id",
+        "om_msg123",
+        "--text",
+        "回复内容",
+      ]);
     });
   });
 
@@ -74,20 +85,19 @@ describe("LarkCli", () => {
       await cli.sendInteractiveCard("oc_chat001", { title: "标题", content: "内容", level: "warning" });
 
       const expectedJson = JSON.stringify({ title: "标题", content: "内容", level: "warning" });
-      expect(runner.run).toHaveBeenCalledWith(
-        [
-          "lark-cli",
-          "im",
-          "send-message",
-          "--chat-id",
-          "oc_chat001",
-          "--msg-type",
-          "interactive",
-          "--content",
-          expectedJson,
-        ],
-        { env: { LARK_APP_ID: "cli_test_app_id", LARK_APP_SECRET: "test_secret_value" } },
-      );
+      expect(runner.run).toHaveBeenCalledWith([
+        "lark-cli",
+        "im",
+        "+messages-send",
+        "--as",
+        "bot",
+        "--chat-id",
+        "oc_chat001",
+        "--msg-type",
+        "interactive",
+        "--content",
+        expectedJson,
+      ]);
     });
   });
 
@@ -103,10 +113,19 @@ describe("LarkCli", () => {
       const result = await cli.imHistory("oc_chat001");
 
       expect(result).toEqual(messages);
-      expect(runner.run).toHaveBeenCalledWith(
-        ["lark-cli", "im", "history", "--chat-id", "oc_chat001", "--count", "10"],
-        { env: { LARK_APP_ID: "cli_test_app_id", LARK_APP_SECRET: "test_secret_value" } },
-      );
+      expect(runner.run).toHaveBeenCalledWith([
+        "lark-cli",
+        "im",
+        "+chat-messages-list",
+        "--as",
+        "bot",
+        "--chat-id",
+        "oc_chat001",
+        "--page-size",
+        "10",
+        "--format",
+        "json",
+      ]);
     });
 
     it("使用自定义 count 覆盖默认值", async () => {
@@ -115,10 +134,19 @@ describe("LarkCli", () => {
 
       await cli.imHistory("oc_chat001", 5);
 
-      expect(runner.run).toHaveBeenCalledWith(
-        ["lark-cli", "im", "history", "--chat-id", "oc_chat001", "--count", "5"],
-        { env: { LARK_APP_ID: "cli_test_app_id", LARK_APP_SECRET: "test_secret_value" } },
-      );
+      expect(runner.run).toHaveBeenCalledWith([
+        "lark-cli",
+        "im",
+        "+chat-messages-list",
+        "--as",
+        "bot",
+        "--chat-id",
+        "oc_chat001",
+        "--page-size",
+        "5",
+        "--format",
+        "json",
+      ]);
     });
   });
 
@@ -130,9 +158,15 @@ describe("LarkCli", () => {
       const content = await cli.docRead("https://docs.feishu.cn/wiki/abc123");
 
       expect(content).toBe("# 文档标题\n\n正文内容");
-      expect(runner.run).toHaveBeenCalledWith(["lark-cli", "doc", "read", "https://docs.feishu.cn/wiki/abc123"], {
-        env: { LARK_APP_ID: "cli_test_app_id", LARK_APP_SECRET: "test_secret_value" },
-      });
+      expect(runner.run).toHaveBeenCalledWith([
+        "lark-cli",
+        "docs",
+        "+fetch",
+        "--doc",
+        "https://docs.feishu.cn/wiki/abc123",
+        "--format",
+        "json",
+      ]);
     });
   });
 
@@ -148,10 +182,15 @@ describe("LarkCli", () => {
       const url = await cli.docCreate("新文档", "文档内容");
 
       expect(url).toBe("https://docs.feishu.cn/wiki/new_doc_123");
-      expect(runner.run).toHaveBeenCalledWith(
-        ["lark-cli", "doc", "create", "--title", "新文档", "--content", "文档内容"],
-        { env: { LARK_APP_ID: "cli_test_app_id", LARK_APP_SECRET: "test_secret_value" } },
-      );
+      expect(runner.run).toHaveBeenCalledWith([
+        "lark-cli",
+        "docs",
+        "+create",
+        "--title",
+        "新文档",
+        "--markdown",
+        "文档内容",
+      ]);
     });
   });
 
@@ -164,9 +203,17 @@ describe("LarkCli", () => {
       const result = await cli.contactSearch("张三", 5);
 
       expect(result).toEqual(contacts);
-      expect(runner.run).toHaveBeenCalledWith(["lark-cli", "contact", "search", "--query", "张三", "--limit", "5"], {
-        env: { LARK_APP_ID: "cli_test_app_id", LARK_APP_SECRET: "test_secret_value" },
-      });
+      expect(runner.run).toHaveBeenCalledWith([
+        "lark-cli",
+        "contact",
+        "+search-user",
+        "--query",
+        "张三",
+        "--format",
+        "json",
+        "--page-size",
+        "5",
+      ]);
     });
   });
 
@@ -179,15 +226,22 @@ describe("LarkCli", () => {
       const result = await cli.groupSearch("前端", 10);
 
       expect(result).toEqual(groups);
-      expect(runner.run).toHaveBeenCalledWith(
-        ["lark-cli", "im", "group", "search", "--query", "前端", "--limit", "10"],
-        { env: { LARK_APP_ID: "cli_test_app_id", LARK_APP_SECRET: "test_secret_value" } },
-      );
+      expect(runner.run).toHaveBeenCalledWith([
+        "lark-cli",
+        "im",
+        "+chat-search",
+        "--query",
+        "前端",
+        "--format",
+        "json",
+        "--page-size",
+        "10",
+      ]);
     });
   });
 
   describe("groupListJoined", () => {
-    it("无 filter 时不附加 --filter 参数", async () => {
+    it("无 filter 时使用 im chats list", async () => {
       const groups = [{ chatId: "oc_g1", name: "团队群", description: "主群" }];
       const runner = createMockRunner({ exitCode: 0, stdout: JSON.stringify(groups), stderr: "" });
       const cli = new LarkCli(testConfig, runner);
@@ -195,20 +249,24 @@ describe("LarkCli", () => {
       const result = await cli.groupListJoined();
 
       expect(result).toEqual(groups);
-      expect(runner.run).toHaveBeenCalledWith(["lark-cli", "im", "group", "list-joined"], {
-        env: { LARK_APP_ID: "cli_test_app_id", LARK_APP_SECRET: "test_secret_value" },
-      });
+      expect(runner.run).toHaveBeenCalledWith(["lark-cli", "im", "chats", "list", "--format", "json"]);
     });
 
-    it("有 filter 时附加 --filter 参数", async () => {
+    it("有 filter 时使用 im +chat-search", async () => {
       const runner = createMockRunner({ exitCode: 0, stdout: "[]", stderr: "" });
       const cli = new LarkCli(testConfig, runner);
 
       await cli.groupListJoined("前端");
 
-      expect(runner.run).toHaveBeenCalledWith(["lark-cli", "im", "group", "list-joined", "--filter", "前端"], {
-        env: { LARK_APP_ID: "cli_test_app_id", LARK_APP_SECRET: "test_secret_value" },
-      });
+      expect(runner.run).toHaveBeenCalledWith([
+        "lark-cli",
+        "im",
+        "+chat-search",
+        "--query",
+        "前端",
+        "--format",
+        "json",
+      ]);
     });
   });
 

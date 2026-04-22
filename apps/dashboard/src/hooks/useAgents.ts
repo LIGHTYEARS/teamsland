@@ -10,7 +10,7 @@ type ConnectionStatus = "connecting" | "connected" | "disconnected";
  * 通过 WebSocket 连接到 Dashboard 服务端，接收 agent 列表实时更新。
  * 连接断开后 3 秒自动重连。
  *
- * @param wsUrl - WebSocket 地址，默认使用当前页面 host 的 /ws 路径
+ * @param wsUrl - WebSocket 地址，默认使用当前页面 host 的 /api/ws 路径
  * @returns agents 列表和连接状态
  */
 export function useAgents(wsUrl?: string): { agents: AgentRecord[]; status: ConnectionStatus } {
@@ -19,7 +19,7 @@ export function useAgents(wsUrl?: string): { agents: AgentRecord[]; status: Conn
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const url = wsUrl ?? `ws://${window.location.host}/ws`;
+    const url = wsUrl ?? `ws://${window.location.host}/api/ws`;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let disposed = false;
 

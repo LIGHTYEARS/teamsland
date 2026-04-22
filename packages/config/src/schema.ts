@@ -68,11 +68,18 @@ const LarkNotificationSchema = z.object({
   teamChannelId: z.string(),
 });
 
+const LarkConnectorSchema = z.object({
+  enabled: z.boolean().default(false),
+  eventTypes: z.array(z.string()).default(["im.message.receive_v1"]),
+  chatProjectMapping: z.record(z.string(), z.string()).default({}),
+});
+
 const LarkConfigSchema = z.object({
   appId: z.string().min(1),
   appSecret: z.string().min(1),
   bot: LarkBotSchema,
   notification: LarkNotificationSchema,
+  connector: LarkConnectorSchema.optional(),
 });
 
 const SessionConfigSchema = z.object({

@@ -2,6 +2,28 @@ import type { LarkConfig } from "@teamsland/types";
 import type { CommandRunner } from "./command-runner.js";
 import type { LarkCard, LarkContact, LarkGroup, LarkMessage } from "./types.js";
 
+/** lark-cli JSON 响应通用外壳 */
+interface LarkCliResponse<T> {
+  ok: boolean;
+  identity?: string;
+  data?: T;
+}
+
+/** lark-cli im +chat-messages-list 的 data 结构 */
+interface LarkChatMessagesData {
+  messages?: Array<{
+    message_id?: string;
+    content?: string;
+    msg_type?: string;
+    create_time?: string;
+    sender?: { id?: string; name?: string; sender_type?: string };
+    mentions?: Array<{ key?: string; id?: string; name?: string }>;
+  }>;
+  has_more?: boolean;
+  page_token?: string;
+  total?: number;
+}
+
 /**
  * lark-cli 命令执行错误
  *
@@ -33,10 +55,11 @@ export class LarkCliError extends Error {
 }
 
 /**
- * 飞书 lark-cli 命令行工具封装
+ * 飞书官方 CLI (@larksuite/cli) 命令行工具封装
  *
  * 通过注入 CommandRunner 调用外部 lark-cli 二进制文件，
- * 提供消息发送、文档操作、联系人和群组查询等功能
+ * 提供消息发送、文档操作、联系人和群组查询等功能。
+ * 认证由 CLI 内部管理（OS 钥匙串），无需传递 appId/appSecret 环境变量。
  *
  * @example
  * ```typescript
@@ -54,24 +77,19 @@ export class LarkCliError extends Error {
  * ```
  */
 export class LarkCli {
-  private readonly env: Record<string, string>;
   private readonly historyContextCount: number;
 
   constructor(
     config: LarkConfig,
     private readonly runner: CommandRunner,
   ) {
-    this.env = {
-      LARK_APP_ID: config.appId,
-      LARK_APP_SECRET: config.appSecret,
-    };
     this.historyContextCount = config.bot.historyContextCount;
   }
 
   /**
    * 发送私聊消息
    *
-   * @param userId - 接收人的用户 ID
+   * @param userId - 接收人的 open_id
    * @param text - 消息文本内容
    *
    * @example
@@ -80,7 +98,7 @@ export class LarkCli {
    * ```
    */
   async sendDm(userId: string, text: string): Promise<void> {
-    const cmd = ["lark-cli", "im", "send-message", "--chat-type", "p2p", "--receiver-id", userId, "--content", text];
+    const cmd = ["lark-cli", "im", "+messages-send", "--as", "bot", "--user-id", userId, "--text", text];
     await this.exec(cmd);
   }
 
@@ -98,11 +116,23 @@ export class LarkCli {
    * ```
    */
   async sendGroupMessage(chatId: string, content: string, opts?: { replyToMessageId?: string }): Promise<void> {
-    const cmd = ["lark-cli", "im", "send-message", "--chat-id", chatId, "--content", content];
     if (opts?.replyToMessageId) {
-      cmd.push("--reply-to", opts.replyToMessageId);
+      const cmd = [
+        "lark-cli",
+        "im",
+        "+messages-reply",
+        "--as",
+        "bot",
+        "--message-id",
+        opts.replyToMessageId,
+        "--text",
+        content,
+      ];
+      await this.exec(cmd);
+    } else {
+      const cmd = ["lark-cli", "im", "+messages-send", "--as", "bot", "--chat-id", chatId, "--text", content];
+      await this.exec(cmd);
     }
-    await this.exec(cmd);
   }
 
   /**
@@ -124,7 +154,9 @@ export class LarkCli {
     const cmd = [
       "lark-cli",
       "im",
-      "send-message",
+      "+messages-send",
+      "--as",
+      "bot",
       "--chat-id",
       chatId,
       "--msg-type",
@@ -152,15 +184,34 @@ export class LarkCli {
    */
   async imHistory(chatId: string, count?: number): Promise<LarkMessage[]> {
     const effectiveCount = count ?? this.historyContextCount;
-    const cmd = ["lark-cli", "im", "history", "--chat-id", chatId, "--count", String(effectiveCount)];
+    const cmd = [
+      "lark-cli",
+      "im",
+      "+chat-messages-list",
+      "--as",
+      "bot",
+      "--chat-id",
+      chatId,
+      "--page-size",
+      String(effectiveCount),
+      "--format",
+      "json",
+    ];
     const result = await this.exec(cmd);
-    return this.parseJson<LarkMessage[]>(result.stdout, cmd);
+    const raw = this.parseJson<LarkCliResponse<LarkChatMessagesData>>(result.stdout, cmd);
+    const messages = raw.data?.messages ?? [];
+    return messages.map((m) => ({
+      messageId: m.message_id ?? "",
+      sender: m.sender?.name ?? m.sender?.id ?? "",
+      content: m.content ?? "",
+      timestamp: m.create_time ? new Date(m.create_time).getTime() : 0,
+    }));
   }
 
   /**
    * 读取飞书文档内容
    *
-   * @param url - 文档 URL
+   * @param url - 文档 URL 或 token
    * @returns 文档内容字符串
    *
    * @example
@@ -170,7 +221,7 @@ export class LarkCli {
    * ```
    */
   async docRead(url: string): Promise<string> {
-    const cmd = ["lark-cli", "doc", "read", url];
+    const cmd = ["lark-cli", "docs", "+fetch", "--doc", url, "--format", "json"];
     const result = await this.exec(cmd);
     return result.stdout;
   }
@@ -179,7 +230,7 @@ export class LarkCli {
    * 创建飞书文档
    *
    * @param title - 文档标题
-   * @param content - 文档内容
+   * @param content - 文档 Markdown 内容
    * @returns 新文档的 URL
    *
    * @example
@@ -189,7 +240,7 @@ export class LarkCli {
    * ```
    */
   async docCreate(title: string, content: string): Promise<string> {
-    const cmd = ["lark-cli", "doc", "create", "--title", title, "--content", content];
+    const cmd = ["lark-cli", "docs", "+create", "--title", title, "--markdown", content];
     const result = await this.exec(cmd);
     return result.stdout.trim();
   }
@@ -210,9 +261,9 @@ export class LarkCli {
    * ```
    */
   async contactSearch(query: string, limit?: number): Promise<LarkContact[]> {
-    const cmd = ["lark-cli", "contact", "search", "--query", query];
+    const cmd = ["lark-cli", "contact", "+search-user", "--query", query, "--format", "json"];
     if (limit !== undefined) {
-      cmd.push("--limit", String(limit));
+      cmd.push("--page-size", String(limit));
     }
     const result = await this.exec(cmd);
     return this.parseJson<LarkContact[]>(result.stdout, cmd);
@@ -234,9 +285,9 @@ export class LarkCli {
    * ```
    */
   async groupSearch(query: string, limit?: number): Promise<LarkGroup[]> {
-    const cmd = ["lark-cli", "im", "group", "search", "--query", query];
+    const cmd = ["lark-cli", "im", "+chat-search", "--query", query, "--format", "json"];
     if (limit !== undefined) {
-      cmd.push("--limit", String(limit));
+      cmd.push("--page-size", String(limit));
     }
     const result = await this.exec(cmd);
     return this.parseJson<LarkGroup[]>(result.stdout, cmd);
@@ -245,7 +296,7 @@ export class LarkCli {
   /**
    * 列出已加入的群组
    *
-   * @param filter - 可选的过滤关键词
+   * @param filter - 可选的过滤关键词（有值时使用搜索，无值时列出全部）
    * @returns 群组数组
    *
    * @example
@@ -255,20 +306,22 @@ export class LarkCli {
    * ```
    */
   async groupListJoined(filter?: string): Promise<LarkGroup[]> {
-    const cmd = ["lark-cli", "im", "group", "list-joined"];
+    let cmd: string[];
     if (filter !== undefined) {
-      cmd.push("--filter", filter);
+      cmd = ["lark-cli", "im", "+chat-search", "--query", filter, "--format", "json"];
+    } else {
+      cmd = ["lark-cli", "im", "chats", "list", "--format", "json"];
     }
     const result = await this.exec(cmd);
     return this.parseJson<LarkGroup[]>(result.stdout, cmd);
   }
 
   private async exec(cmd: string[]): Promise<{ stdout: string; stderr: string }> {
-    const result = await this.runner.run(cmd, { env: this.env });
+    const result = await this.runner.run(cmd);
 
     if (result.exitCode === 127) {
       throw new LarkCliError(
-        "lark-cli is not installed. Please install it first: https://github.com/nicognaW/lark-cli",
+        "lark-cli is not installed. Please install it first: npm install -g @larksuite/cli",
         cmd,
         result.exitCode,
         result.stderr,

@@ -3,11 +3,12 @@
 
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
+import { resolve } from "node:path";
 import { loadConfig, RepoMapping } from "@teamsland/config";
 import { DynamicContextAssembler } from "@teamsland/context";
 import { BunCommandRunner as GitBunCommandRunner, WorktreeManager } from "@teamsland/git";
 import { DocumentParser, IntentClassifier } from "@teamsland/ingestion";
-import { BunCommandRunner as LarkBunCommandRunner, LarkCli, LarkNotifier } from "@teamsland/lark";
+import { BunCommandRunner as LarkBunCommandRunner, LarkCli, LarkConnector, LarkNotifier } from "@teamsland/lark";
 import { ConfirmationWatcher, MeegoConnector, MeegoEventBus } from "@teamsland/meego";
 import type { Embedder } from "@teamsland/memory";
 import {
@@ -62,6 +63,8 @@ function buildLlmStack(llmConfig: LlmConfig | undefined, logger: ReturnType<type
 (async () => {
   try {
     // ── 0. 确保数据目录存在 ──
+    const root = resolve(import.meta.dir, "../../..");
+    process.chdir(root);
     mkdirSync("data", { recursive: true });
 
     // ── 1. 配置 ──
@@ -87,7 +90,7 @@ function buildLlmStack(llmConfig: LlmConfig | undefined, logger: ReturnType<type
     try {
       const realEmbedder = new LocalEmbedder(config.storage.embedding);
       const initTimeout = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error("LocalEmbedder 初始化超时（5秒）— 模型可能尚未下载")), 5_000);
+        setTimeout(() => reject(new Error("LocalEmbedder 初始化超时（5分钟）— 模型可能尚未下载")), 300_000);
       });
       await Promise.race([realEmbedder.init(), initTimeout]);
       embedder = realEmbedder;
@@ -215,6 +218,18 @@ function buildLlmStack(llmConfig: LlmConfig | undefined, logger: ReturnType<type
     const connector = new MeegoConnector({ config: config.meego, eventBus });
     await connector.start(controller.signal);
     logger.info("MeegoConnector 已启动");
+
+    // ── 21b. LarkConnector（飞书群聊 @机器人 → 事件管线） ──
+    if (config.lark.connector?.enabled) {
+      const larkConnector = new LarkConnector({
+        config: config.lark.connector,
+        larkCli,
+        eventBus,
+        historyContextCount: config.lark.bot.historyContextCount,
+      });
+      await larkConnector.start(controller.signal);
+      logger.info("LarkConnector 已启动");
+    }
 
     // ── 22. Dashboard ──
     const authManager =

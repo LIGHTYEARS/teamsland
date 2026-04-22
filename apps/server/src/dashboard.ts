@@ -193,7 +193,7 @@ function handleApiRoutes(req: Request, url: URL, registry: SubagentRegistry, ses
  * - `POST /auth/logout` — 登出
  * - `GET /api/agents` — agent 列表 (需认证)
  * - `GET /api/sessions/:id/messages` — 会话消息 NDJSON (需认证)
- * - `GET /ws` — WebSocket 升级
+ * - `GET /api/ws` — WebSocket 升级
  *
  * @param deps - Dashboard 依赖
  * @param signal - 可选的 AbortSignal，用于优雅关闭
@@ -222,7 +222,7 @@ export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): Retur
     fetch(req, server) {
       const url = new URL(req.url);
 
-      if (url.pathname === "/ws") {
+      if (url.pathname === "/api/ws") {
         const upgraded = server.upgrade(req);
         if (upgraded) return undefined as unknown as Response;
         return jsonResponse({ error: "WebSocket upgrade failed" }, 400);

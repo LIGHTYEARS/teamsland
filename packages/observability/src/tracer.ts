@@ -1,6 +1,6 @@
 import { type AttributeValue, context, type Span, SpanStatusCode, trace } from "@opentelemetry/api";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
-import { Resource } from "@opentelemetry/resources";
+import { resourceFromAttributes } from "@opentelemetry/resources";
 import {
   BasicTracerProvider,
   BatchSpanProcessor,
@@ -40,7 +40,7 @@ export type SpanAttributes = Record<string, AttributeValue>;
 export function initTracing(serviceName: string, serviceVersion = "0.0.0"): void {
   if (provider) return;
 
-  const resource = new Resource({
+  const resource = resourceFromAttributes({
     [ATTR_SERVICE_NAME]: serviceName,
     [ATTR_SERVICE_VERSION]: serviceVersion,
   });

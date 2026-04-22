@@ -1,9 +1,58 @@
 import { Database } from "bun:sqlite";
+import { platform } from "node:process";
 import { createLogger, withSpan } from "@teamsland/observability";
 import type { AbstractMemoryStore, MemoryEntry, MemoryType, StorageConfig } from "@teamsland/types";
+import { getLoadablePath as getVec0Path } from "sqlite-vec";
 import type { Embedder } from "./embedder.js";
 
 const logger = createLogger("memory:store");
+
+/**
+ * macOS 平台替换 Apple 内置 SQLite 为 Homebrew 版本
+ *
+ * Apple 的 SQLite 构建禁用了 SQLITE_LOAD_EXTENSION 以获取性能提升，
+ * 导致 `db.loadExtension()` 无法使用。通过 `Database.setCustomSQLite()`
+ * 指向 Homebrew 安装的标准 SQLite 即可解决。
+ *
+ * 此调用必须在创建任何 Database 实例之前执行，且只能调用一次。
+ *
+ * @example
+ * ```typescript
+ * // 在 macOS 上自动加载 Homebrew SQLite
+ * import "@teamsland/memory"; // 副作用: ensureExtensionLoading()
+ * ```
+ */
+function ensureExtensionLoading(): void {
+  if (platform !== "darwin") return;
+  try {
+    const brewSqlitePath = "/opt/homebrew/lib/libsqlite3.dylib";
+    const cellarGlob = new Bun.Glob("sqlite/*/lib/libsqlite3.dylib");
+    const cellarBase = "/opt/homebrew/Cellar";
+    let sqlitePath: string | undefined;
+
+    // 优先尝试 homebrew link 路径
+    if (Bun.file(brewSqlitePath).size > 0) {
+      sqlitePath = brewSqlitePath;
+    } else {
+      // 回退到 Cellar 路径（keg-only 未 link 时）
+      for (const match of cellarGlob.scanSync(cellarBase)) {
+        sqlitePath = `${cellarBase}/${match}`;
+        break;
+      }
+    }
+
+    if (sqlitePath) {
+      Database.setCustomSQLite(sqlitePath);
+      logger.debug({ sqlitePath }, "已替换 macOS 内置 SQLite 为 Homebrew 版本");
+    } else {
+      logger.warn("未找到 Homebrew SQLite — macOS 上 sqlite-vec 扩展可能无法加载。安装方法: brew install sqlite");
+    }
+  } catch (err: unknown) {
+    logger.warn({ err }, "setCustomSQLite 失败 — 将继续使用系统 SQLite");
+  }
+}
+
+ensureExtensionLoading();
 
 /** L0 抽象类型列表 — profile, preferences, entities, soul, identity */
 const L0_TYPES: readonly MemoryType[] = ["profile", "preferences", "entities", "soul", "identity"] as const;
@@ -61,7 +110,7 @@ interface RawEntryRow {
 export function checkVec0Available(): { ok: true } | { ok: false; error: string } {
   const testDb = new Database(":memory:");
   try {
-    testDb.loadExtension("vec0");
+    testDb.loadExtension(getVec0Path());
     return { ok: true };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
@@ -120,7 +169,7 @@ export class TeamMemoryStore implements AbstractMemoryStore {
     this.db = new Database(config.sqliteVec.dbPath, { create: true });
     this.db.run("PRAGMA journal_mode = WAL");
     this.db.run(`PRAGMA busy_timeout = ${config.sqliteVec.busyTimeoutMs}`);
-    this.db.loadExtension("vec0");
+    this.db.loadExtension(getVec0Path());
 
     this.createTables();
     logger.info({ teamId, dbPath: config.sqliteVec.dbPath }, "TeamMemoryStore 初始化完成");

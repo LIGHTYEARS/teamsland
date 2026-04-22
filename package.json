@@ -23,5 +23,9 @@
     "lefthook": "^1.11",
     "typescript": "^5.8",
     "vitest": "^3.2"
+  },
+  "dependencies": {
+    "sqlite-vec": "^0.1.9",
+    "sqlite-vec-darwin-arm64": "^0.1.9"
   }
 }
