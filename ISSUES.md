@@ -50,7 +50,7 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 - [x] **[memory] Implement access_count increment on retrieval** — `vectorSearch()` and `ftsSearch()` never increment `access_count`, so `hotnessScore` ranking is recency-only. Add `UPDATE SET access_count = access_count + 1` on retrieval.
 
-- [x] **[sidecar] Implement orphan-recovery on restoreOnStartup** — `restoreOnStartup()` loads alive PIDs but doesn't re-attach stream processing. Surviving orphans are unmonitored. Add re-attach or re-spawn logic.
+- [ ] **[sidecar] Implement orphan-recovery on restoreOnStartup** — `restoreOnStartup()` loads alive PIDs but doesn't re-attach stream processing. Surviving orphans are unmonitored. Add re-attach or re-spawn logic. **Note: Orphans are now monitored for death via 30s polling; stream re-attach is impossible (pipe FD lost on restart) — only re-spawn is feasible.**
 
 - [x] **[config] Add skillRouting to config schema and config.json** — `DynamicContextAssembler.buildSectionC()` reads `config.skillRouting[task.triggerType]` but no `skillRouting` field exists. Add to both TypeScript type and config.json.
 
@@ -64,15 +64,15 @@ The evolution loop picks unchecked items and marks them `[x]` on completion.
 
 ## 4. Quality Improvements (tests, error handling)
 
-- [x] **[test] Integration test: Meego event -> Agent spawn pipeline** — No test exercises the full `issue.created` -> classify -> worktree -> prompt -> spawn path. Write an integration test using in-memory SQLite, FakeEmbedder, FakeLlmClient, and mock ProcessController.
+- [ ] **[test] Integration test: Meego event -> Agent spawn pipeline** — No test exercises the full `issue.created` -> classify -> worktree -> prompt -> spawn path. Write an integration test using in-memory SQLite, FakeEmbedder, FakeLlmClient, and mock ProcessController.
 
-- [x] **[test] Memory retrieval precision regression test** — Create `test/fixtures/corpus/` with representative docs and `test/fixtures/queries/` with labelled queries. Assert P@10 >= 0.8 on 20 queries against 50 documents.
+- [ ] **[test] Memory retrieval precision regression test** — Create `test/fixtures/corpus/` with representative docs and `test/fixtures/queries/` with labelled queries. Assert P@10 >= 0.8 on 20 queries against 50 documents.
 
 - [x] **[test] Sidecar crash-recovery integration test** — Spawn a fake process, register it, kill it, call `restoreOnStartup()`, assert dead-PID record is cleaned up while alive-PID is restored.
 
 - [x] **[test] Concurrent SQLite WAL write test** — Fire 10 concurrent `SessionDB.appendMessage()` calls, assert all succeed without SQLITE_BUSY errors within `busyTimeoutMs` window.
 
-- [x] **[server] Structured error handling for missing repoMapping** — `resolveRepoPath()` returns `undefined` and the handler silently returns. Send a Lark DM to the assignee or team channel when no repo mapping is found.
+- [ ] **[server] Structured error handling for missing repoMapping** — `resolveRepoPath()` returns `undefined` and the handler silently returns. Send a Lark DM to the assignee or team channel when no repo mapping is found.
 
 - [x] **[session] Expose FTS5 searchMessages method** — FTS5 index is scaffolded but no `searchMessages()` method is exported. Implement and export for agents and dashboard to query past sessions by keyword.
 
