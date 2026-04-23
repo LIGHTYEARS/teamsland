@@ -7,7 +7,15 @@ import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { WorktreeManager } from "@teamsland/git";
 import { createLogger } from "@teamsland/observability";
-import type { ClaudeMdInjector, ProcessController, SidecarDataPlane, SkillInjector } from "@teamsland/sidecar";
+import type {
+  ClaudeMdInjector,
+  InterruptController,
+  ObserverController,
+  ProcessController,
+  ResumeController,
+  SidecarDataPlane,
+  SkillInjector,
+} from "@teamsland/sidecar";
 import { CapacityError, type SubagentRegistry } from "@teamsland/sidecar";
 import type { AgentOrigin } from "@teamsland/types";
 
@@ -49,6 +57,12 @@ export interface WorkerRouteDeps {
   meegoApiBase?: string;
   /** Meego 插件认证 Token（用于 CLAUDE.md 注入） */
   meegoPluginToken?: string;
+  /** 中断控制器（可选） */
+  interruptController?: InterruptController | null;
+  /** 恢复控制器（可选） */
+  resumeController?: ResumeController | null;
+  /** 观察者控制器（可选） */
+  observerController?: ObserverController | null;
 }
 
 /**
@@ -545,27 +559,134 @@ function handleGetProgress(id: string, deps: WorkerRouteDeps): Response {
 /** 子路由处理结果类型 */
 type RouteResult = Response | Promise<Response> | null;
 
+/** 分发 GET /api/workers/:id 下的子路由 */
+function dispatchGetSubRoute(id: string, sub: string | undefined, deps: WorkerRouteDeps): RouteResult {
+  if (!sub) return handleGetWorker(id, deps);
+  if (sub === "transcript") return handleGetTranscript(id, deps);
+  if (sub === "progress") return handleGetProgress(id, deps);
+  return null;
+}
+
+/** 分发 POST /api/workers/:id 下的子路由 */
+function dispatchPostSubRoute(req: Request, id: string, sub: string | undefined, deps: WorkerRouteDeps): RouteResult {
+  if (sub === "cancel") return handleCancelWorker(req, id, deps);
+  if (sub === "progress") return handleReportProgress(req, id, deps);
+  if (sub === "result") return handleReportResult(req, id, deps);
+  if (sub === "interrupt") return handleInterruptWorker(req, id, deps);
+  if (sub === "resume") return handleResumeWorker(req, id, deps);
+  if (sub === "observe") return handleObserveWorker(req, id, deps);
+  return null;
+}
+
 /** 分发 /api/workers/:id 下的子路由 */
 function dispatchSubRoute(req: Request, id: string, sub: string | undefined, deps: WorkerRouteDeps): RouteResult {
-  if (req.method === "GET" && !sub) {
-    return handleGetWorker(id, deps);
-  }
-  if (req.method === "GET" && sub === "transcript") {
-    return handleGetTranscript(id, deps);
-  }
-  if (req.method === "GET" && sub === "progress") {
-    return handleGetProgress(id, deps);
-  }
-  if (req.method === "POST" && sub === "cancel") {
-    return handleCancelWorker(req, id, deps);
-  }
-  if (req.method === "POST" && sub === "progress") {
-    return handleReportProgress(req, id, deps);
-  }
-  if (req.method === "POST" && sub === "result") {
-    return handleReportResult(req, id, deps);
-  }
+  if (req.method === "GET") return dispatchGetSubRoute(id, sub, deps);
+  if (req.method === "POST") return dispatchPostSubRoute(req, id, sub, deps);
   return null;
+}
+
+/**
+ * 中断指定 Worker
+ *
+ * @example
+ * ```
+ * POST /api/workers/:id/interrupt
+ * Body: { "reason": "手动中断" }
+ * ```
+ */
+async function handleInterruptWorker(req: Request, agentId: string, deps: WorkerRouteDeps): Promise<Response> {
+  if (!deps.interruptController) {
+    return jsonResponse({ error: "InterruptController 未配置" }, 503);
+  }
+
+  let reason = "手动中断";
+  try {
+    const body = (await req.json()) as { reason?: string };
+    if (typeof body.reason === "string") reason = body.reason;
+  } catch {
+    // 使用默认 reason
+  }
+
+  try {
+    const result = await deps.interruptController.interrupt({ agentId, reason });
+    return jsonResponse(result);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return jsonResponse({ error: msg }, 400);
+  }
+}
+
+/**
+ * 恢复指定 Worker（relay 模式）
+ *
+ * @example
+ * ```
+ * POST /api/workers/:id/resume
+ * Body: { "correctionInstructions": "避免修改 package.json" }
+ * ```
+ */
+async function handleResumeWorker(req: Request, agentId: string, deps: WorkerRouteDeps): Promise<Response> {
+  if (!deps.resumeController) {
+    return jsonResponse({ error: "ResumeController 未配置" }, 503);
+  }
+
+  let correctionInstructions = "";
+  try {
+    const body = (await req.json()) as { correctionInstructions?: string };
+    if (typeof body.correctionInstructions === "string") {
+      correctionInstructions = body.correctionInstructions;
+    }
+  } catch {
+    // 使用空指令
+  }
+
+  try {
+    const result = await deps.resumeController.resume({
+      predecessorId: agentId,
+      correctionInstructions,
+    });
+    return jsonResponse(result, 201);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return jsonResponse({ error: msg }, 400);
+  }
+}
+
+/**
+ * 为指定 Worker 启动观察者
+ *
+ * @example
+ * ```
+ * POST /api/workers/:id/observe
+ * Body: { "mode": "diagnosis" }
+ * ```
+ */
+async function handleObserveWorker(req: Request, agentId: string, deps: WorkerRouteDeps): Promise<Response> {
+  if (!deps.observerController) {
+    return jsonResponse({ error: "ObserverController 未配置" }, 503);
+  }
+
+  let mode: "progress" | "quality" | "diagnosis" = "diagnosis";
+  try {
+    const body = (await req.json()) as { mode?: string };
+    if (body.mode === "progress" || body.mode === "quality" || body.mode === "diagnosis") {
+      mode = body.mode;
+    }
+  } catch {
+    // 使用默认 mode
+  }
+
+  try {
+    const result = await deps.observerController.observe({
+      targetAgentId: agentId,
+      anomalyType: "manual",
+      mode,
+    });
+    return jsonResponse(result, 201);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return jsonResponse({ error: msg }, 400);
+  }
 }
 
 /**
