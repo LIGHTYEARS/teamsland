@@ -1,5 +1,6 @@
 {
   "name": "@teamsland/swarm",
+  "description": "[DEPRECATED] 任务拆解与并行 Worker 编排 — 将在 Coordinator 架构下被替代",
   "version": "0.0.0",
   "private": true,
   "type": "module",

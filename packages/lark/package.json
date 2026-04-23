@@ -7,7 +7,6 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@teamsland/meego": "workspace:*",
     "@teamsland/observability": "workspace:*",
     "@teamsland/types": "workspace:*"
   },

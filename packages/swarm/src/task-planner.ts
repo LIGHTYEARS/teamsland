@@ -5,6 +5,9 @@ import type { LlmClient } from "./types.js";
 const logger = createLogger("swarm:planner");
 
 /**
+ * @deprecated 将在 Coordinator 架构下被 teamsland CLI 的多 worker spawn 替代。
+ * 参见 PRODUCT.md "大脑 + 手脚" 章节。
+ *
  * 任务拆解器
  *
  * 将 ComplexTask 委托给 LLM，输出 SubTask[]（有向无环图节点列表）。

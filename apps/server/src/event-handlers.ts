@@ -1,25 +1,18 @@
 import { randomUUID } from "node:crypto";
 import type { DynamicContextAssembler } from "@teamsland/context";
 import type { WorktreeManager } from "@teamsland/git";
-import type { DocumentParser, IntentClassifier } from "@teamsland/ingestion";
+import type { DocumentParser } from "@teamsland/ingestion";
 import type { LarkCli, LarkNotifier } from "@teamsland/lark";
 import type { ConfirmationWatcher, MeegoEventBus } from "@teamsland/meego";
 import type { ExtractLoop, MemoryUpdater, TeamMemoryStore } from "@teamsland/memory";
 import { ingestDocument } from "@teamsland/memory";
 import { createLogger } from "@teamsland/observability";
+import type { LarkMentionPayload, MeegoEventPayload, PersistentQueue, QueueMessage } from "@teamsland/queue";
 import type { ProcessController, SidecarDataPlane, SubagentRegistry } from "@teamsland/sidecar";
 import { CapacityError } from "@teamsland/sidecar";
-import type { TaskPlanner } from "@teamsland/swarm";
-import { runSwarm } from "@teamsland/swarm";
-import type { AppConfig, ComplexTask, EventHandler, MeegoEvent, TaskConfig } from "@teamsland/types";
+import type { AppConfig, EventHandler, MeegoEvent, TaskConfig } from "@teamsland/types";
 
 const logger = createLogger("server:events");
-
-/** 意图分类的最低置信度阈值，低于此值将跳过处理 */
-const CONFIDENCE_THRESHOLD = 0.5;
-
-/** 描述或实体数量超过此阈值时视为复杂任务，使用 Swarm 模式 */
-const SWARM_ENTITY_THRESHOLD = 3;
 
 /**
  * 事件处理器依赖项
@@ -31,7 +24,6 @@ const SWARM_ENTITY_THRESHOLD = 3;
  * import type { EventHandlerDeps } from "./event-handlers.js";
  *
  * const deps: EventHandlerDeps = {
- *   intentClassifier: classifier,
  *   processController: controller,
  *   dataPlane: sidecarDataPlane,
  *   assembler: contextAssembler,
@@ -45,14 +37,11 @@ const SWARM_ENTITY_THRESHOLD = 3;
  *   memoryStore: teamMemoryStore,
  *   extractLoop: loop,
  *   memoryUpdater: updater,
- *   taskPlanner: planner,
  *   confirmationWatcher: watcher,
  * };
  * ```
  */
 export interface EventHandlerDeps {
-  /** 意图分类器 */
-  intentClassifier: IntentClassifier;
   /** Claude Code 子进程控制器 */
   processController: ProcessController;
   /** Sidecar 数据平面 — 消费 Agent 子进程的 NDJSON 流 */
@@ -79,8 +68,6 @@ export interface EventHandlerDeps {
   extractLoop: ExtractLoop | null;
   /** 记忆更新器（NullMemoryStore 时为 null） */
   memoryUpdater: MemoryUpdater | null;
-  /** 任务拆解器（LLM 未配置时为 null，不启用 Swarm） */
-  taskPlanner: TaskPlanner | null;
   /** 人工确认监视器 */
   confirmationWatcher: ConfirmationWatcher;
 }
@@ -117,6 +104,17 @@ function extractDescription(event: MeegoEvent): string {
 }
 
 /**
+ * 判断事件是否来自飞书群聊 @mention
+ *
+ * LarkConnector 桥接的事件在 payload 中标记 `source: "lark_mention"`。
+ */
+function isLarkMention(event: MeegoEvent): boolean {
+  return event.payload.source === "lark_mention";
+}
+
+/**
+ * @deprecated 使用 `registerQueueConsumer` 替代。此函数在双写过渡期保留。
+ *
  * 在 MeegoEventBus 上注册所有事件处理器
  *
  * 为 `issue.created`、`issue.status_changed`、`issue.assigned`、`sprint.started`
@@ -143,7 +141,111 @@ export function registerEventHandlers(bus: MeegoEventBus, deps: EventHandlerDeps
   bus.on("issue.assigned", createAssignedHandler(deps));
   bus.on("sprint.started", createSprintStartedHandler());
 
-  logger.info("所有事件处理器注册完成");
+  logger.info("所有事件处理器注册完成（EventBus 路径，已标记 deprecated）");
+}
+
+/**
+ * 注册 PersistentQueue 消费者
+ *
+ * 将 PersistentQueue 的消费回调注册为事件处理管线。
+ * 根据 `msg.type` 分发到对应的处理逻辑，复用现有 handler 实现。
+ *
+ * @param queue - PersistentQueue 实例
+ * @param deps - 事件处理器依赖项
+ *
+ * @example
+ * ```typescript
+ * import { registerQueueConsumer } from "./event-handlers.js";
+ * import { PersistentQueue } from "@teamsland/queue";
+ *
+ * declare const queue: PersistentQueue;
+ * declare const deps: EventHandlerDeps;
+ *
+ * registerQueueConsumer(queue, deps);
+ * ```
+ */
+export function registerQueueConsumer(queue: PersistentQueue, deps: EventHandlerDeps): void {
+  const issueCreatedHandler = createIssueCreatedHandler(deps);
+  const statusChangedHandler = createStatusChangedHandler(deps);
+  const assignedHandler = createAssignedHandler(deps);
+  const sprintStartedHandler = createSprintStartedHandler();
+
+  queue.consume(async (msg: QueueMessage) => {
+    switch (msg.type) {
+      case "lark_mention":
+        await handleLarkMentionMessage(msg, issueCreatedHandler, deps);
+        break;
+      case "meego_issue_created":
+        await handleMeegoEventMessage(msg, issueCreatedHandler);
+        break;
+      case "meego_issue_status_changed":
+        await handleMeegoEventMessage(msg, statusChangedHandler);
+        break;
+      case "meego_issue_assigned":
+        await handleMeegoEventMessage(msg, assignedHandler);
+        break;
+      case "meego_sprint_started":
+        await handleMeegoEventMessage(msg, sprintStartedHandler);
+        break;
+      case "worker_completed":
+        logger.info({ msgId: msg.id, type: msg.type }, "worker_completed 消息已接收（占位处理器）");
+        break;
+      case "worker_anomaly":
+        logger.info({ msgId: msg.id, type: msg.type }, "worker_anomaly 消息已接收（占位处理器）");
+        break;
+      case "diagnosis_ready":
+        logger.info({ msgId: msg.id, type: msg.type }, "diagnosis_ready 消息已接收（占位处理器）");
+        break;
+      default:
+        logger.warn({ msgId: msg.id, type: msg.type }, "未知的队列消息类型");
+    }
+  });
+
+  logger.info("PersistentQueue 消费者注册完成");
+}
+
+/**
+ * 处理 lark_mention 类型的队列消息
+ *
+ * 从 LarkMentionPayload 中提取 MeegoEvent，补充 chatId / senderId / messageId
+ * 到 event.payload，然后委托给 issue.created handler。
+ *
+ * @example
+ * ```typescript
+ * await handleLarkMentionMessage(msg, issueCreatedHandler, deps);
+ * ```
+ */
+async function handleLarkMentionMessage(
+  msg: QueueMessage,
+  handler: EventHandler,
+  _deps: EventHandlerDeps,
+): Promise<void> {
+  const payload = msg.payload as LarkMentionPayload;
+  const event = payload.event;
+  // 确保 Lark @mention 的聊天上下文信息在 event.payload 中可用
+  event.payload.chatId = payload.chatId;
+  event.payload.senderId = payload.senderId;
+  event.payload.messageId = payload.messageId;
+  event.payload.source = "lark_mention";
+  logger.info({ msgId: msg.id, eventId: event.eventId }, "队列消费：lark_mention");
+  await handler.process(event);
+}
+
+/**
+ * 处理 Meego 事件类型的队列消息
+ *
+ * 从 MeegoEventPayload 中提取 MeegoEvent，委托给对应的 handler。
+ *
+ * @example
+ * ```typescript
+ * await handleMeegoEventMessage(msg, issueCreatedHandler);
+ * ```
+ */
+async function handleMeegoEventMessage(msg: QueueMessage, handler: EventHandler): Promise<void> {
+  const payload = msg.payload as MeegoEventPayload;
+  const event = payload.event;
+  logger.info({ msgId: msg.id, eventId: event.eventId, type: msg.type }, "队列消费：meego 事件");
+  await handler.process(event);
 }
 
 /**
@@ -180,43 +282,6 @@ function scheduleMemoryIngestion(
   const docText = parsedDocument.sections.map((s) => `${s.heading}\n${s.content}`).join("\n\n") || rawDescription;
   ingestDocument(docText, deps.teamId, agentId, memoryStore, extractLoop, memoryUpdater).catch((ingestErr: unknown) => {
     logger.warn({ issueId: event.issueId, err: ingestErr }, "文档记忆注入失败（不影响 Agent 启动）");
-  });
-}
-
-/**
- * 解析实体中的 owner 名称并通过飞书通知相关人员（fire-and-forget）
- *
- * 对每个 owner 名调用 `LarkCli.contactSearch`，找到对应的 Lark userId 后
- * 发送 DM 通知。同时向团队群发送任务创建通知卡片。
- * 搜索或发送失败时仅记录警告日志，不影响调用方流程。
- *
- * @param deps - 事件处理器依赖项
- * @param event - 原始 Meego 事件
- * @param owners - 从 IntentClassifier 提取的负责人名列表
- *
- * @example
- * ```typescript
- * resolveAndNotifyOwners(deps, event, ["张三", "李四"]);
- * ```
- */
-function resolveAndNotifyOwners(deps: EventHandlerDeps, event: MeegoEvent, owners: string[]): void {
-  if (owners.length === 0) return;
-
-  const doResolve = async () => {
-    for (const owner of owners) {
-      const contacts = await deps.larkCli.contactSearch(owner, 1);
-      if (contacts.length === 0) {
-        logger.debug({ owner, issueId: event.issueId }, "未找到匹配联系人");
-        continue;
-      }
-      const userId = contacts[0].userId;
-      await deps.notifier.sendDm(userId, `任务 ${event.issueId}（项目 ${event.projectKey}）与您相关，请关注。`);
-      logger.info({ owner, userId, issueId: event.issueId }, "已向相关人员发送 DM");
-    }
-  };
-
-  doResolve().catch((err: unknown) => {
-    logger.warn({ owners, issueId: event.issueId, err }, "联系人解析/通知失败（不影响 Agent 启动）");
   });
 }
 
@@ -268,179 +333,62 @@ async function registerAgent(
 }
 
 /**
- * 判断任务是否应使用 Swarm 模式（多 Agent 协作）
+ * 统一的 Agent 启动流程
  *
- * 条件：TaskPlanner 可用 且 解析出的实体数量 >= SWARM_ENTITY_THRESHOLD。
+ * Lark @mention 和 Meego 工单共用的核心启动路径：
+ * 解析仓库 → 创建 worktree → 文档解析 + 记忆注入 → 组装提示词 → spawn Agent → 注册。
+ * 移除了对 IntentClassifier 的依赖，所有事件源使用相同的直接 spawn 路径。
  *
- * @example
- * ```typescript
- * const useSwarm = shouldUseSwarm(deps, ["UserService", "AuthController", "LoginPage"]);
- * // useSwarm === true (3 个实体 >= 阈值)
- * ```
- */
-function shouldUseSwarm(deps: EventHandlerDeps, entities: string[]): boolean {
-  return deps.taskPlanner !== null && entities.length >= SWARM_ENTITY_THRESHOLD;
-}
-
-/**
- * 以 Swarm 模式执行复杂任务
- *
- * 将 TaskConfig 转换为 ComplexTask，调用 runSwarm 进行多 Agent 协作。
- * 失败时记录错误日志并通过飞书 DM 通知指派人。
+ * @param deps - 事件处理器依赖项
+ * @param event - 触发 Agent 启动的 MeegoEvent
+ * @returns Agent 注册结果（成功/失败）及元数据；仓库路径未找到时返回 null
  *
  * @example
  * ```typescript
- * await dispatchSwarm(deps, taskConfig);
+ * const result = await spawnAgent(deps, event);
+ * if (result) {
+ *   logger.info({ agentId: result.agentId }, "Agent 启动成功");
+ * }
  * ```
  */
-async function dispatchSwarm(deps: EventHandlerDeps, taskConfig: TaskConfig): Promise<void> {
-  if (!deps.taskPlanner) return;
-  const complexTask: ComplexTask = { ...taskConfig, subtasks: [] };
-  const result = await runSwarm(complexTask, {
-    planner: deps.taskPlanner,
-    registry: deps.registry,
-    assembler: deps.assembler,
-    processController: deps.processController,
-    config: deps.config.sidecar,
-    teamId: deps.teamId,
-  });
-  if (!result.success) {
-    logger.warn({ issueId: taskConfig.issueId, failedTaskIds: result.failedTaskIds }, "Swarm 未通过法定人数");
-    if (taskConfig.assigneeId) {
-      await deps.notifier.sendDm(
-        taskConfig.assigneeId,
-        `任务 ${taskConfig.issueId} 的 Swarm 协作未完全成功（失败子任务: ${result.failedTaskIds.join(", ")}）`,
-      );
-    }
-  } else {
-    logger.info({ issueId: taskConfig.issueId }, "Swarm 任务执行成功");
-  }
-}
-
-/**
- * 判断事件是否来自飞书群聊 @mention
- *
- * LarkConnector 桥接的事件在 payload 中标记 `source: "lark_mention"`。
- */
-function isLarkMention(event: MeegoEvent): boolean {
-  return event.payload.source === "lark_mention";
-}
-
-/**
- * 创建 issue.created 事件处理器
- *
- * 两条路径：
- * - **Lark @mention**：用户在群聊中 @机器人，消息即指令 — 跳过意图分类，直接 spawn Agent
- * - **Meego 工单**：走完整流水线 — 意图分类 → worktree → 记忆注入 → 提示词组装 → Agent spawn
- *
- * 置信度低于阈值时跳过处理；注册表容量不足时通过飞书 DM 通知。
- */
-function createIssueCreatedHandler(deps: EventHandlerDeps): EventHandler {
-  return {
-    async process(event: MeegoEvent): Promise<void> {
-      try {
-        logger.info(
-          { eventId: event.eventId, issueId: event.issueId, source: event.payload.source },
-          "处理 issue.created 事件",
-        );
-
-        // ── Lark @mention 快速路径 ──
-        // 群聊 @机器人 本身就是明确指令，不需要意图分类
-        if (isLarkMention(event)) {
-          await handleLarkMention(deps, event);
-          return;
-        }
-
-        // ── Meego 工单路径 ──
-        await processMeegoTicket(deps, event);
-      } catch (err: unknown) {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        logger.error(
-          { eventId: event.eventId, issueId: event.issueId, error: err, errorMessage: errMsg },
-          "issue.created 处理失败",
-        );
-      }
-    },
-  };
-}
-
-/**
- * 处理 Meego 工单路径的完整流程
- *
- * 从意图分类到 Agent 启动的全部步骤，包括：文档解析、意图分类、仓库映射、
- * worktree 创建、记忆注入、Swarm 检测、提示词组装、Agent 子进程启动与注册。
- *
- * @example
- * ```typescript
- * await processMeegoTicket(deps, event);
- * ```
- */
-async function processMeegoTicket(deps: EventHandlerDeps, event: MeegoEvent): Promise<void> {
-  // 1. 文档解析 + 意图分类（解析结果复用于步骤 4.5 记忆注入）
-  const rawDescription = extractDescription(event);
-  const parsedDocument = rawDescription ? deps.documentParser.parseMarkdown(rawDescription) : null;
-  const intentResult = await deps.intentClassifier.classify(event, {
-    entities: parsedDocument?.entities,
-  });
-  logger.info(
-    { issueId: event.issueId, intentType: intentResult.type, confidence: intentResult.confidence },
-    "意图分类完成",
-  );
-
-  if (intentResult.confidence < CONFIDENCE_THRESHOLD) {
-    logger.info({ issueId: event.issueId, confidence: intentResult.confidence }, "置信度低于阈值，跳过处理");
-    return;
-  }
-
-  // 1.5. 联系人解析 + 通知（fire-and-forget, 不阻塞后续流程）
-  resolveAndNotifyOwners(deps, event, intentResult.entities.owners);
-
-  // 2. 解析仓库路径
+async function spawnAgent(
+  deps: EventHandlerDeps,
+  event: MeegoEvent,
+): Promise<{ agentId: string; registered: boolean; description: string } | null> {
+  // 1. 解析仓库路径
   const repoPath = resolveRepoPath(deps.config, event.projectKey);
   if (!repoPath) {
     logger.warn({ projectKey: event.projectKey, issueId: event.issueId }, "未找到项目对应的仓库映射");
-    const assignee = extractAssigneeId(event);
-    if (assignee) {
-      await deps.notifier.sendDm(
-        assignee,
-        `任务 ${event.issueId} 无法启动 Agent：项目 ${event.projectKey} 未配置仓库映射，请检查 config.json 的 repoMapping 字段。`,
-      );
-    }
-    return;
+    return null;
   }
 
-  // 3. 创建 worktree
+  // 2. 创建 worktree
   const worktreePath = await deps.worktreeManager.create(repoPath, event.issueId);
   logger.info({ issueId: event.issueId, worktreePath }, "Git worktree 创建完成");
 
-  // 4. 构建 TaskConfig
+  // 3. 构建 TaskConfig（不再依赖 IntentClassifier）
+  const description = extractDescription(event);
   const assigneeId = extractAssigneeId(event);
+  const triggerType = isLarkMention(event) ? "lark_mention" : "meego_issue";
   const taskConfig: TaskConfig = {
     issueId: event.issueId,
     meegoEvent: event,
     meegoProjectId: event.projectKey,
-    description: extractDescription(event),
-    triggerType: intentResult.type,
-    agentRole: intentResult.type,
+    description,
+    triggerType,
+    agentRole: "general",
     worktreePath,
     assigneeId,
   };
 
-  // agentId 提前计算，供步骤 4.5 和步骤 7 共用
   const agentId = `agent-${event.issueId}-${randomUUID().slice(0, 8)}`;
 
-  // 4.5. 文档解析 + 记忆注入（fire-and-forget, 不阻塞 Agent 启动）
+  // 4. 文档解析 + 记忆注入（fire-and-forget, 不阻塞 Agent 启动）
+  const rawDescription = extractDescription(event);
+  const parsedDocument = rawDescription ? deps.documentParser.parseMarkdown(rawDescription) : null;
   scheduleMemoryIngestion(deps, event, agentId, parsedDocument);
 
-  // 4.6. 复杂任务检测 → Swarm 分支
-  const entities = parsedDocument?.entities ?? [];
-  if (shouldUseSwarm(deps, entities)) {
-    logger.info({ issueId: event.issueId, entityCount: entities.length }, "检测到复杂任务，使用 Swarm 模式");
-    await dispatchSwarm(deps, taskConfig);
-    return;
-  }
-
-  // 5. 组装初始提示词（单 Agent 路径）
+  // 5. 组装初始提示词
   const prompt = await deps.assembler.buildInitialPrompt(taskConfig, deps.teamId);
   logger.info({ issueId: event.issueId, promptLength: prompt.length }, "初始提示词组装完成");
 
@@ -453,7 +401,7 @@ async function processMeegoTicket(deps: EventHandlerDeps, event: MeegoEvent): Pr
   logger.info({ issueId: event.issueId, pid: spawnResult.pid, sessionId: spawnResult.sessionId }, "Agent 子进程已启动");
 
   // 7. 注册到注册表 + 启动数据平面流
-  await registerAgent(deps, {
+  const registered = await registerAgent(deps, {
     agentId,
     pid: spawnResult.pid,
     sessionId: spawnResult.sessionId,
@@ -462,102 +410,112 @@ async function processMeegoTicket(deps: EventHandlerDeps, event: MeegoEvent): Pr
     assigneeId,
     stdout: spawnResult.stdout,
   });
+
+  return { agentId, registered, description };
 }
 
 /**
- * 处理飞书群聊 @mention 事件
+ * 仓库映射缺失时发送错误通知
  *
- * 用户在群聊中 @机器人 发送的消息直接作为 Agent 指令执行。
- * 不经过意图分类 — @mention 本身就是明确的执行意图。
- * 消息文本作为 task description，聊天历史（如有）作为补充上下文。
+ * 根据事件来源类型选择通知方式：
+ * - Lark @mention → 在群聊中回复错误消息
+ * - Meego 工单 → 向 assignee 发送飞书 DM
  *
  * @example
  * ```typescript
- * // 群聊消息: "@teamsland机器人 帮我查一下最近的 API 性能数据"
- * // → 直接 spawn Agent，prompt 包含原始消息 + 聊天上下文
+ * await notifyRepoMappingMissing(deps, event);
  * ```
  */
-async function handleLarkMention(deps: EventHandlerDeps, event: MeegoEvent): Promise<void> {
-  const chatId = typeof event.payload.chatId === "string" ? event.payload.chatId : "";
-  const messageId = typeof event.payload.messageId === "string" ? event.payload.messageId : "";
-  const senderId = typeof event.payload.senderId === "string" ? event.payload.senderId : "";
-
-  logger.info(
-    { eventId: event.eventId, issueId: event.issueId, chatId, messageId, senderId },
-    "Lark @mention 快速路径 — 跳过意图分类",
-  );
-
-  // 1. 解析仓库路径
-  const repoPath = resolveRepoPath(deps.config, event.projectKey);
-  if (!repoPath) {
-    logger.warn({ projectKey: event.projectKey, chatId }, "Lark @mention: 群聊未映射到有效仓库");
+async function notifyRepoMappingMissing(deps: EventHandlerDeps, event: MeegoEvent): Promise<void> {
+  if (isLarkMention(event)) {
+    const chatId = typeof event.payload.chatId === "string" ? event.payload.chatId : "";
+    const messageId = typeof event.payload.messageId === "string" ? event.payload.messageId : "";
     if (chatId) {
       await deps.larkCli.sendGroupMessage(
         chatId,
-        `无法处理：群聊未配置项目映射，请检查 config.json 的 lark.connector.chatProjectMapping。`,
+        "无法处理：群聊未配置项目映射，请检查 config.json 的 lark.connector.chatProjectMapping。",
         messageId ? { replyToMessageId: messageId } : undefined,
       );
     }
     return;
   }
 
-  // 2. 创建 worktree
-  const worktreePath = await deps.worktreeManager.create(repoPath, event.issueId);
-  logger.info({ issueId: event.issueId, worktreePath }, "Git worktree 创建完成");
-
-  // 3. 构建 TaskConfig — 消息文本即任务描述，不做意图分类
-  const description = extractDescription(event);
-  const taskConfig: TaskConfig = {
-    issueId: event.issueId,
-    meegoEvent: event,
-    meegoProjectId: event.projectKey,
-    description,
-    triggerType: "lark_mention",
-    agentRole: "general",
-    worktreePath,
-    assigneeId: senderId,
-  };
-
-  const agentId = `agent-${event.issueId}-${randomUUID().slice(0, 8)}`;
-
-  // 4. 组装提示词
-  const prompt = await deps.assembler.buildInitialPrompt(taskConfig, deps.teamId);
-  logger.info({ issueId: event.issueId, promptLength: prompt.length }, "Lark @mention 提示词组装完成");
-
-  // 5. 启动 Agent 子进程
-  const spawnResult = await deps.processController.spawn({
-    issueId: event.issueId,
-    worktreePath,
-    initialPrompt: prompt,
-  });
-  logger.info(
-    { issueId: event.issueId, pid: spawnResult.pid, sessionId: spawnResult.sessionId },
-    "Lark @mention Agent 子进程已启动",
-  );
-
-  // 6. 注册到注册表
-  const registered = await registerAgent(deps, {
-    agentId,
-    pid: spawnResult.pid,
-    sessionId: spawnResult.sessionId,
-    issueId: event.issueId,
-    worktreePath,
-    assigneeId: senderId,
-    stdout: spawnResult.stdout,
-  });
-
-  // 7. 在群聊中回复确认
-  if (registered && chatId) {
-    await deps.larkCli
-      .sendGroupMessage(
-        chatId,
-        `收到，正在处理：${description}`,
-        messageId ? { replyToMessageId: messageId } : undefined,
-      )
-      .catch((replyErr: unknown) => {
-        logger.warn({ chatId, messageId, err: replyErr }, "群聊回复失败（不影响 Agent 执行）");
-      });
+  const assignee = extractAssigneeId(event);
+  if (assignee) {
+    await deps.notifier.sendDm(
+      assignee,
+      `任务 ${event.issueId} 无法启动 Agent：项目 ${event.projectKey} 未配置仓库映射，请检查 config.json 的 repoMapping 字段。`,
+    );
   }
+}
+
+/**
+ * 向飞书群聊发送 Agent 启动确认回复
+ *
+ * 仅对 Lark @mention 事件生效。失败时仅记录警告日志，不影响 Agent 执行。
+ *
+ * @example
+ * ```typescript
+ * await replyLarkMentionConfirmation(deps, event, "帮我查一下 API 性能数据");
+ * ```
+ */
+async function replyLarkMentionConfirmation(
+  deps: EventHandlerDeps,
+  event: MeegoEvent,
+  description: string,
+): Promise<void> {
+  const chatId = typeof event.payload.chatId === "string" ? event.payload.chatId : "";
+  const messageId = typeof event.payload.messageId === "string" ? event.payload.messageId : "";
+  if (!chatId) return;
+
+  await deps.larkCli
+    .sendGroupMessage(chatId, `收到，正在处理：${description}`, messageId ? { replyToMessageId: messageId } : undefined)
+    .catch((replyErr: unknown) => {
+      logger.warn({ chatId, messageId, err: replyErr }, "群聊回复失败（不影响 Agent 执行）");
+    });
+}
+
+/**
+ * 创建 issue.created 事件处理器
+ *
+ * 所有事件源（Lark @mention / Meego 工单）走统一的直接 spawn 路径，
+ * 不再经过 IntentClassifier，不再区分 Lark/Meego 双路径分支。
+ * Lark @mention 事件在 spawn 后额外回复群聊确认消息。
+ *
+ * @example
+ * ```typescript
+ * const handler = createIssueCreatedHandler(deps);
+ * await handler.process(event);
+ * ```
+ */
+function createIssueCreatedHandler(deps: EventHandlerDeps): EventHandler {
+  return {
+    async process(event: MeegoEvent): Promise<void> {
+      try {
+        logger.info(
+          { eventId: event.eventId, issueId: event.issueId, source: event.payload.source },
+          "处理 issue.created 事件",
+        );
+
+        const result = await spawnAgent(deps, event);
+
+        if (!result) {
+          await notifyRepoMappingMissing(deps, event);
+          return;
+        }
+
+        if (isLarkMention(event) && result.registered) {
+          await replyLarkMentionConfirmation(deps, event, result.description);
+        }
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        logger.error(
+          { eventId: event.eventId, issueId: event.issueId, error: err, errorMessage: errMsg },
+          "issue.created 处理失败",
+        );
+      }
+    },
+  };
 }
 
 /**

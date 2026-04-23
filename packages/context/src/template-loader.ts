@@ -9,6 +9,9 @@ const logger = createLogger("context:template-loader");
  * 模板路径约定：`{basePath}/{agentRole}.md`
  * 文件不存在时立即抛出，不返回空字符串（fail-fast）。
  *
+ * @deprecated 将在 Coordinator 架构下被移除。DynamicContextAssembler 已不再调用此函数（§E 角色指令段已移除）。
+ * 保留供外部可能的引用，后续版本清理。
+ *
  * @param agentRole - Agent 角色标识符（如 "frontend-dev"、"tech-spec"）
  * @param basePath - 模板目录路径，默认为 "config/templates"
  * @returns 模板文件内容字符串

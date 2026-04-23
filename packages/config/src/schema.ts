@@ -174,6 +174,25 @@ const RepoMappingEntrySchema = z.object({
  * const config = AppConfigSchema.parse(raw); // throws ZodError on invalid
  * ```
  */
+/**
+ * Hook 引擎配置 Zod Schema
+ *
+ * 校验 hooks 相关配置字段：目录路径、超时时间和多匹配模式。
+ *
+ * @example
+ * ```typescript
+ * import { hooksConfigSchema } from "./schema.js";
+ *
+ * const raw: unknown = { hooksDir: "./hooks", defaultTimeoutMs: 30000, multiMatch: false };
+ * const config = hooksConfigSchema.parse(raw);
+ * ```
+ */
+const hooksConfigSchema = z.object({
+  hooksDir: z.string().min(1),
+  defaultTimeoutMs: z.number().int().positive().default(30000),
+  multiMatch: z.boolean().default(false),
+});
+
 export const AppConfigSchema = z.object({
   meego: MeegoConfigSchema,
   lark: LarkConfigSchema,
@@ -185,7 +204,6 @@ export const AppConfigSchema = z.object({
   dashboard: DashboardConfigSchema,
   repoMapping: z.array(RepoMappingEntrySchema),
   skillRouting: z.record(z.string(), z.array(z.string())).default({}),
-  templateBasePath: z.string().optional().default("config/templates"),
   llm: z
     .object({
       provider: z.literal("anthropic"),
@@ -193,6 +211,28 @@ export const AppConfigSchema = z.object({
       model: z.string().min(1),
       baseUrl: z.string().url().optional(),
       maxTokens: z.number().int().positive().default(4096),
+    })
+    .optional(),
+  queue: z
+    .object({
+      dbPath: z.string().min(1).default("data/queue.sqlite"),
+      busyTimeoutMs: z.number().int().positive().default(5000),
+      visibilityTimeoutMs: z.number().int().positive().default(60_000),
+      maxRetries: z.number().int().nonnegative().default(3),
+      deadLetterEnabled: z.boolean().default(true),
+      pollIntervalMs: z.number().int().positive().default(100),
+    })
+    .optional(),
+  hooks: hooksConfigSchema.optional(),
+  coordinator: z
+    .object({
+      workspacePath: z.string().default("~/.teamsland/coordinator"),
+      sessionIdleTimeoutMs: z.number().default(300_000),
+      sessionMaxLifetimeMs: z.number().default(1_800_000),
+      sessionReuseWindowMs: z.number().default(300_000),
+      maxRecoveryRetries: z.number().default(3),
+      inferenceTimeoutMs: z.number().default(60_000),
+      enabled: z.boolean().default(false),
     })
     .optional(),
 });

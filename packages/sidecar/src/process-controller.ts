@@ -23,6 +23,8 @@ export interface SpawnParams {
   worktreePath: string;
   /** 初始任务提示词 */
   initialPrompt: string;
+  /** 额外传递给子进程的环境变量（可选，会与 process.env 合并） */
+  env?: Record<string, string>;
 }
 
 /**
@@ -124,7 +126,13 @@ export class ProcessController {
           "--permission-mode",
           "bypassPermissions",
         ],
-        { cwd: params.worktreePath, stdin: "pipe", stdout: "pipe", stderr: "pipe" },
+        {
+          cwd: params.worktreePath,
+          stdin: "pipe",
+          stdout: "pipe",
+          stderr: "pipe",
+          env: params.env ? { ...process.env, ...params.env } : undefined,
+        },
       );
 
       const envelope = JSON.stringify({ prompt: params.initialPrompt });

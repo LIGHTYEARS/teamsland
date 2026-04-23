@@ -1,5 +1,9 @@
-// @teamsland/swarm — TaskPlanner, runSwarm, runWorker
-// 任务拆解与并行 Worker 编排：LLM 分解复杂任务为 SubTask DAG，按依赖层级并行执行
+/**
+ * @deprecated 将在 Coordinator 架构下被 teamsland CLI 的多 worker spawn 替代。
+ * 参见 PRODUCT.md "大脑 + 手脚" 章节。
+ *
+ * @module @teamsland/swarm
+ */
 
 export { runSwarm } from "./swarm.js";
 export { TaskPlanner } from "./task-planner.js";

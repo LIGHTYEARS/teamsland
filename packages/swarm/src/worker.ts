@@ -24,6 +24,9 @@ function buildTaskConfig(subtask: SubTask, parent: ComplexTask): TaskConfig {
 }
 
 /**
+ * @deprecated 将在 Coordinator 架构下被 teamsland CLI 的多 worker spawn 替代。
+ * 参见 PRODUCT.md "大脑 + 手脚" 章节。
+ *
  * 执行单个 Swarm Worker
  *
  * 通过 DynamicContextAssembler 构建子任务的 Prompt，

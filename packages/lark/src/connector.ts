@@ -1,6 +1,5 @@
-import type { MeegoEventBus } from "@teamsland/meego";
 import { createLogger } from "@teamsland/observability";
-import type { LarkConnectorConfig, MeegoEvent } from "@teamsland/types";
+import type { EnqueueFn, LarkConnectorConfig, MeegoEvent } from "@teamsland/types";
 import type { LarkCli } from "./lark-cli.js";
 
 const logger = createLogger("lark:connector");
@@ -46,12 +45,14 @@ interface LarkRawEvent {
  *
  * @example
  * ```typescript
+ * import type { EnqueueFn } from "@teamsland/types";
  * import { LarkConnector } from "@teamsland/lark";
  *
+ * declare const enqueue: EnqueueFn;
  * const connector = new LarkConnector({
  *   config: { enabled: true, eventTypes: ["im.message.receive_v1"], chatProjectMapping: {} },
  *   larkCli,
- *   eventBus,
+ *   enqueue,
  *   historyContextCount: 20,
  * });
  * ```
@@ -59,7 +60,8 @@ interface LarkRawEvent {
 export interface LarkConnectorOpts {
   config: LarkConnectorConfig;
   larkCli: LarkCli;
-  eventBus: MeegoEventBus;
+  /** 消息入队函数，将事件写入 PersistentQueue */
+  enqueue: EnqueueFn;
   historyContextCount: number;
 }
 
@@ -67,28 +69,30 @@ export interface LarkConnectorOpts {
  * 飞书实时事件连接器
  *
  * 通过 `lark-cli event +subscribe` 订阅飞书事件（WebSocket + NDJSON 输出），
- * 将群聊中 @机器人 的消息桥接为 MeegoEvent 注入到现有事件管线。
+ * 将群聊中 @机器人 的消息通过 `enqueue` 入队到 PersistentQueue。
  *
  * 进程退出后自动指数退避重连。`AbortSignal` 控制优雅关闭。
  *
  * @example
  * ```typescript
+ * import type { EnqueueFn } from "@teamsland/types";
  * import { LarkConnector } from "@teamsland/lark";
  *
- * const connector = new LarkConnector({ config, larkCli, eventBus, historyContextCount: 20 });
+ * declare const enqueue: EnqueueFn;
+ * const connector = new LarkConnector({ config, larkCli, enqueue, historyContextCount: 20 });
  * await connector.start(controller.signal);
  * ```
  */
 export class LarkConnector {
   private readonly config: LarkConnectorConfig;
   private readonly larkCli: LarkCli;
-  private readonly eventBus: MeegoEventBus;
+  private readonly enqueue: EnqueueFn;
   private readonly historyContextCount: number;
 
   constructor(opts: LarkConnectorOpts) {
     this.config = opts.config;
     this.larkCli = opts.larkCli;
-    this.eventBus = opts.eventBus;
+    this.enqueue = opts.enqueue;
     this.historyContextCount = opts.historyContextCount;
   }
 
@@ -139,7 +143,7 @@ export class LarkConnector {
   }
 
   private async consumeProcess(eventTypes: string, signal?: AbortSignal): Promise<void> {
-    const cmd = ["lark-cli", "event", "+subscribe", "--as", "bot", "--event-types", eventTypes, "--quiet", "--force"];
+    const cmd = ["lark-cli", "event", "+subscribe", "--as", "bot", "--event-types", eventTypes, "--quiet"];
 
     const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
     logger.info({ pid: proc.pid, eventTypes }, "lark-cli event +subscribe 已启动");
@@ -210,10 +214,20 @@ export class LarkConnector {
     if (!event) return;
 
     try {
-      await this.eventBus.handle(event);
-      logger.info({ eventId: event.eventId, issueId: event.issueId }, "Lark 消息已桥接到事件管线");
+      this.enqueue({
+        type: "lark_mention",
+        payload: {
+          event,
+          chatId: mention.chatId,
+          senderId: mention.senderId,
+          messageId: mention.messageId,
+        },
+        priority: "high",
+        traceId: event.eventId,
+      });
+      logger.info({ eventId: event.eventId, issueId: event.issueId }, "Lark 消息已入队到 PersistentQueue");
     } catch (err: unknown) {
-      logger.error({ err, eventId: event.eventId }, "事件管线处理失败");
+      logger.error({ err, eventId: event.eventId }, "消息入队失败");
     }
   }
 

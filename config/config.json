@@ -112,14 +112,39 @@
     "bot_query": ["lark-docs", "lark-base"],
     "confirm": ["lark-docs"],
     "status_sync": ["lark-docs", "lark-base"],
-    "query": ["lark-docs", "lark-base"]
+    "query": ["lark-docs", "lark-base"],
+    "coding": ["lark-reply", "meego-update", "teamsland-report"],
+    "research": ["lark-reply", "teamsland-report"],
+    "review": ["lark-reply", "meego-update", "teamsland-report"],
+    "observer": ["teamsland-report"]
   },
-  "templateBasePath": "config/templates",
   "llm": {
     "provider": "anthropic",
     "apiKey": "${ANTHROPIC_AUTH_TOKEN}",
     "model": "${ANTHROPIC_MODEL}",
     "baseUrl": "${ANTHROPIC_BASE_URL}",
     "maxTokens": 4096
+  },
+  "queue": {
+    "dbPath": "data/queue.sqlite",
+    "busyTimeoutMs": 5000,
+    "visibilityTimeoutMs": 60000,
+    "maxRetries": 3,
+    "deadLetterEnabled": true,
+    "pollIntervalMs": 100
+  },
+  "coordinator": {
+    "workspacePath": "~/.teamsland/coordinator",
+    "sessionIdleTimeoutMs": 300000,
+    "sessionMaxLifetimeMs": 1800000,
+    "sessionReuseWindowMs": 300000,
+    "maxRecoveryRetries": 3,
+    "inferenceTimeoutMs": 60000,
+    "enabled": false
+  },
+  "hooks": {
+    "hooksDir": "~/.teamsland/coordinator/hooks",
+    "defaultTimeoutMs": 30000,
+    "multiMatch": false
   }
 }

@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createLogger } from "@teamsland/observability";
-import type { MeegoConfig, MeegoEvent } from "@teamsland/types";
+import type { EnqueueFn, MeegoConfig, MeegoEvent, MeegoEventType } from "@teamsland/types";
 import type { MeegoEventBus } from "./event-bus.js";
 
 const logger = createLogger("meego:connector");
@@ -75,7 +75,11 @@ async function fetchMeegoEvents(
 }
 
 /** 处理 webhook POST 请求：验签 → JSON 解析 → 事件分发 */
-async function handleWebhookPost(req: Request, secret: string | undefined, eventBus: MeegoEventBus): Promise<Response> {
+async function handleWebhookPost(
+  req: Request,
+  secret: string | undefined,
+  dispatch: (event: MeegoEvent) => Promise<void>,
+): Promise<Response> {
   let rawBody: string;
   try {
     rawBody = await req.text();
@@ -98,7 +102,7 @@ async function handleWebhookPost(req: Request, secret: string | undefined, event
     return new Response("Bad Request", { status: 400 });
   }
 
-  await eventBus.handle(event);
+  await dispatch(event);
   return new Response("OK", { status: 200 });
 }
 function verifySignature(rawBody: string, signature: string, secret: string): boolean {
@@ -106,6 +110,43 @@ function verifySignature(rawBody: string, signature: string, secret: string): bo
   const sigBuffer = Buffer.from(signature, "hex");
   const expectedBuffer = Buffer.from(expected, "hex");
   return sigBuffer.length === expectedBuffer.length && timingSafeEqual(sigBuffer, expectedBuffer);
+}
+
+/**
+ * 将 MeegoEventType 映射为队列消息类型字符串
+ *
+ * @example
+ * ```typescript
+ * mapEventTypeToQueueType("issue.created"); // => "meego_issue_created"
+ * ```
+ */
+function mapEventTypeToQueueType(eventType: MeegoEventType): string {
+  const mapping: Record<string, string> = {
+    "issue.created": "meego_issue_created",
+    "issue.status_changed": "meego_issue_status_changed",
+    "issue.assigned": "meego_issue_assigned",
+    "sprint.started": "meego_sprint_started",
+  };
+  return mapping[eventType] ?? "meego_issue_created";
+}
+
+/**
+ * MeegoConnector 构造参数
+ *
+ * @example
+ * ```typescript
+ * import type { MeegoConnectorOpts } from "@teamsland/meego";
+ *
+ * const opts: MeegoConnectorOpts = { config, eventBus: bus };
+ * ```
+ */
+export interface MeegoConnectorOpts {
+  /** Meego 完整配置 */
+  config: MeegoConfig;
+  /** @deprecated 旧事件总线，双写过渡期保留 */
+  eventBus: MeegoEventBus;
+  /** 消息入队函数，新的队列路径（可选，双写过渡期） */
+  enqueue?: EnqueueFn;
 }
 
 /**
@@ -118,23 +159,29 @@ function verifySignature(rawBody: string, signature: string, secret: string): bo
  *
  * 长连接（`longConnection.enabled: true`）始终独立于 eventMode 运行。
  *
+ * 支持双写模式：若提供 `enqueue`，事件同时入队到 PersistentQueue；
+ * 同时始终经过 `eventBus.handle()` 保持向后兼容。
+ *
  * @example
  * ```typescript
  * import { Database } from "bun:sqlite";
  * import { MeegoEventBus, MeegoConnector } from "@teamsland/meego";
- * import type { MeegoConfig } from "@teamsland/types";
+ * import type { MeegoConfig, EnqueueFn } from "@teamsland/types";
  *
  * const db = new Database(":memory:");
  * const bus = new MeegoEventBus(db);
+ * const enqueue: EnqueueFn = (opts) => "msg-id";
  * const config: MeegoConfig = {
  *   spaces: [{ spaceId: "xxx", name: "开放平台前端" }],
  *   eventMode: "webhook",
  *   webhook: { host: "0.0.0.0", port: 8080, path: "/meego/webhook" },
  *   poll: { intervalSeconds: 60, lookbackMinutes: 5 },
  *   longConnection: { enabled: false, reconnectIntervalSeconds: 10 },
+ *   apiBaseUrl: "https://project.feishu.cn/open_api",
+ *   pluginAccessToken: "",
  * };
  *
- * const connector = new MeegoConnector({ config, eventBus: bus });
+ * const connector = new MeegoConnector({ config, eventBus: bus, enqueue });
  * const controller = new AbortController();
  * await connector.start(controller.signal);
  *
@@ -145,19 +192,48 @@ function verifySignature(rawBody: string, signature: string, secret: string): bo
 export class MeegoConnector {
   private readonly config: MeegoConfig;
   private readonly eventBus: MeegoEventBus;
+  private readonly enqueue: EnqueueFn | undefined;
 
   /**
-   * @param opts.config - Meego 完整配置
-   * @param opts.eventBus - 已构建的 MeegoEventBus 实例
+   * @param opts - 连接器配置，包含 eventBus（必需）和 enqueue（可选，双写路径）
    *
    * @example
    * ```typescript
-   * const connector = new MeegoConnector({ config, eventBus: bus });
+   * const connector = new MeegoConnector({ config, eventBus: bus, enqueue });
    * ```
    */
-  constructor(opts: { config: MeegoConfig; eventBus: MeegoEventBus }) {
+  constructor(opts: MeegoConnectorOpts) {
     this.config = opts.config;
     this.eventBus = opts.eventBus;
+    this.enqueue = opts.enqueue;
+  }
+
+  /**
+   * 统一事件分发
+   *
+   * 若 `enqueue` 已设置，将事件入队到 PersistentQueue；
+   * 同时始终经过 `eventBus.handle()` 保持向后兼容（双写过渡期）。
+   *
+   * @param event - 待分发的 MeegoEvent
+   *
+   * @example
+   * ```typescript
+   * await connector['dispatchEvent'](event);
+   * ```
+   */
+  private async dispatchEvent(event: MeegoEvent): Promise<void> {
+    if (this.enqueue) {
+      try {
+        this.enqueue({
+          type: mapEventTypeToQueueType(event.type),
+          payload: { event },
+          traceId: event.eventId,
+        });
+      } catch (err: unknown) {
+        logger.error({ err, eventId: event.eventId }, "队列入队失败，回退到 EventBus");
+      }
+    }
+    await this.eventBus.handle(event);
   }
 
   /**
@@ -206,7 +282,7 @@ export class MeegoConnector {
    */
   private startWebhook(signal?: AbortSignal): void {
     const { host, port, path, secret } = this.config.webhook;
-    const eventBus = this.eventBus;
+    const dispatch = (event: MeegoEvent) => this.dispatchEvent(event);
 
     if (!secret) {
       logger.warn("webhook.secret 未配置，跳过签名验证 — 生产环境请务必设置");
@@ -234,7 +310,7 @@ export class MeegoConnector {
           return new Response("Not Found", { status: 404 });
         }
 
-        return handleWebhookPost(req, secret, eventBus);
+        return handleWebhookPost(req, secret, dispatch);
       },
     });
 
@@ -264,7 +340,6 @@ export class MeegoConnector {
   private startPoll(signal?: AbortSignal): void {
     const { intervalSeconds, lookbackMinutes } = this.config.poll;
     const { spaces, apiBaseUrl, pluginAccessToken } = this.config;
-    const eventBus = this.eventBus;
 
     if (!pluginAccessToken) {
       logger.warn("pluginAccessToken 未配置，轮询模式将跳过 API 调用");
@@ -278,7 +353,7 @@ export class MeegoConnector {
       for (const space of spaces) {
         const events = await fetchMeegoEvents(apiBaseUrl, pluginAccessToken, space.spaceId, since);
         for (const event of events) {
-          await eventBus.handle(event);
+          await this.dispatchEvent(event);
         }
       }
     };
@@ -316,7 +391,7 @@ export class MeegoConnector {
   private startLongConnection(signal?: AbortSignal): void {
     const { reconnectIntervalSeconds } = this.config.longConnection;
     const { apiBaseUrl, pluginAccessToken } = this.config;
-    const eventBus = this.eventBus;
+    const dispatch = (event: MeegoEvent) => this.dispatchEvent(event);
 
     if (!pluginAccessToken) {
       logger.warn("pluginAccessToken 未配置，长连接模式将跳过");
@@ -338,7 +413,7 @@ export class MeegoConnector {
         logger.debug({ retryCount, lastEventId }, "long-connection attempt");
 
         try {
-          await consumeSseStream(sseUrl, pluginAccessToken, lastEventId, eventBus, signal, (id) => {
+          await consumeSseStream(sseUrl, pluginAccessToken, lastEventId, dispatch, signal, (id) => {
             lastEventId = id;
           });
           retryCount = 0;
@@ -385,10 +460,10 @@ async function processSseLine(line: string, ctx: SseParseContext): Promise<void>
 }
 
 /** 尝试解析并分发一条 SSE JSON 事件 */
-async function dispatchSseEvent(raw: string, eventBus: MeegoEventBus): Promise<void> {
+async function dispatchSseEvent(raw: string, dispatch: (event: MeegoEvent) => Promise<void>): Promise<void> {
   try {
     const event = JSON.parse(raw) as MeegoEvent;
-    await eventBus.handle(event);
+    await dispatch(event);
   } catch (parseErr: unknown) {
     logger.warn({ raw: raw.slice(0, 200), err: parseErr }, "SSE 事件解析失败");
   }
@@ -408,7 +483,7 @@ async function dispatchSseEvent(raw: string, eventBus: MeegoEventBus): Promise<v
  * @param url - SSE 端点地址
  * @param token - 插件访问令牌
  * @param lastEventId - 上次接收到的事件 ID（空串表示从头开始）
- * @param eventBus - 事件分发总线
+ * @param dispatch - 事件分发函数
  * @param signal - 取消信号
  * @param onId - 每收到 `id:` 行时的回调，用于更新外层 lastEventId
  */
@@ -416,7 +491,7 @@ async function consumeSseStream(
   url: string,
   token: string,
   lastEventId: string,
-  eventBus: MeegoEventBus,
+  dispatch: (event: MeegoEvent) => Promise<void>,
   signal: AbortSignal | undefined,
   onId: (id: string) => void,
 ): Promise<void> {
@@ -445,7 +520,7 @@ async function consumeSseStream(
   const ctx: SseParseContext = {
     dataLines: [],
     onId,
-    onEvent: (raw) => dispatchSseEvent(raw, eventBus),
+    onEvent: (raw) => dispatchSseEvent(raw, dispatch),
   };
 
   try {

@@ -4,6 +4,9 @@ import type { SidecarConfig } from "@teamsland/types";
 import type { TaskPlanner } from "./task-planner.js";
 
 /**
+ * @deprecated 将在 Coordinator 架构下被 teamsland CLI 的多 worker spawn 替代。
+ * 参见 PRODUCT.md "大脑 + 手脚" 章节。
+ *
  * LLM 调用结果
  *
  * @example
@@ -21,6 +24,9 @@ export interface LlmResponse {
 }
 
 /**
+ * @deprecated 将在 Coordinator 架构下被 teamsland CLI 的多 worker spawn 替代。
+ * 参见 PRODUCT.md "大脑 + 手脚" 章节。
+ *
  * Swarm 模块内部 LLM 客户端接口
  *
  * 仅需 chat() 方法（无工具调用），简化可注入接口。
@@ -46,6 +52,9 @@ export interface LlmClient {
 }
 
 /**
+ * @deprecated 将在 Coordinator 架构下被 teamsland CLI 的多 worker spawn 替代。
+ * 参见 PRODUCT.md "大脑 + 手脚" 章节。
+ *
  * runSwarm 选项
  *
  * 所有外部依赖均通过此对象注入，便于测试时替换 Mock。

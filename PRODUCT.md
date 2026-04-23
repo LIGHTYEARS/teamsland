@@ -430,4 +430,299 @@ worker 运行中
 
 ---
 
+## 多事件源与三层处理架构
+
+### 统一事件入口
+
+大管家不只关注群聊消息。团队工作信号来自多个源：
+- **飞书群聊** —— @机器人 消息
+- **Meego** —— 工单创建、指派、状态变更、冲刺开始
+- **未来可扩展** —— GitHub PR、CI/CD 通知、报警系统等
+
+大脑的消息队列是**统一的事件入口**，不管事件来自哪里。大脑还能关联不同源的信息 —— 张三在群里聊的需求和他在 Meego 上创建的工单，大脑能识别出是同一件事。
+
+### 问题：事件量远超大脑处理能力
+
+如果每个事件都要大脑做一次 LLM 推理，成本和延迟都不可接受。但实际上，大部分事件的处理方式是确定性的，不需要 LLM"思考"。
+
+### 三层处理架构
+
+```
+事件到达
+  → Hooks 层（server 侧，零 LLM 开销，毫秒级）
+    ├→ 匹配到 hook → 直接执行（发通知、spawn worker、调 API）
+    └→ 无匹配 hook
+        → Skills/Subagents 层（大脑侧，轻量 LLM，秒级）
+          ├→ 匹配到 skill/subagent → 按固化模式处理
+          └→ 无匹配
+              → 大脑深度推理（完整 LLM 推理，数秒）
+```
+
+**Hooks** —— 最轻量的自动化，纯代码执行，零 token 开销：
+- `issue.assigned` → 直接发飞书通知
+- `issue.created` + 匹配特定项目 → 直接 spawn worker
+- CI 失败 → 直接通知群聊
+
+**Skills/Subagents** —— 固化的 LLM 处理模式，轻量推理：
+- 复杂工单分析 → 专门的 subagent 处理
+- 冲刺整理 → 固化的 skill 处理
+
+**大脑深度推理** —— 真正需要理解的事件，完整 LLM 推理：
+- 自然语言的群聊消息
+- 从未见过的事件模式
+- 需要关联多个信息源的决策
+
+### Hooks：大脑直接编辑的文件
+
+Hooks 不通过 CLI 管理 —— 它们是大脑工作目录下的代码/配置文件，teamsland server watch 目录并热重载。大脑想固化一个处理模式，直接 Write 文件；想调整，直接 Edit；想废弃，直接删。
+
+```
+~/.teamsland/coordinator/
+├── CLAUDE.md
+├── .claude/
+│   ├── skills/
+│   │   ├── teamsland-spawn/SKILL.md
+│   │   ├── lark-message/SKILL.md
+│   │   ├── handle-assignment/SKILL.md      # 大脑自己创建
+│   │   └── sprint-kickoff/SKILL.md         # 大脑自己创建
+│   └── agents/
+│       └── ci-failure-triage.md            # 大脑自己创建
+└── hooks/
+    ├── meego/
+    │   ├── issue-assigned.ts               # 工单指派 → 发通知
+    │   ├── issue-created.ts                # 工单创建 → spawn worker
+    │   └── sprint-started.ts               # 冲刺开始 → 整理通知
+    ├── lark/
+    │   └── keyword-reply.ts                # 关键词自动回复
+    └── ci/
+        └── build-failed.ts                 # CI 失败 → 通知群聊
+```
+
+### 大脑的自我进化路径
+
+大脑在运行过程中不断把"思考"变成"反射"：
+
+1. **新类型事件** → 大脑 LLM 深度推理，理解并处理
+2. **模式初步固化** → 大脑写一个 skill/subagent（`.claude/skills/` 或 `.claude/agents/`），用轻量 LLM 处理
+3. **模式完全确定** → 大脑写一个 hook 文件（`hooks/`），server 热加载，零 LLM 开销
+
+全程都是大脑读写自己工作目录里的文件。Claude Code 的文件操作能力就是管理界面。
+
+处理同类事件的成本随时间递减，响应速度递增。大脑越工作越高效。
+
+---
+
+## 记忆层：OpenViking
+
+> 参考项目源码：`/Users/bytedance/workspace/OpenViking`（[github.com/volcengine/OpenViking](https://github.com/volcengine/OpenViking)）
+
+### 为什么需要专门的记忆层
+
+前面在"记忆外化 + 无状态 session"中定义了三层记忆需求（团队知识、任务状态、对话上下文），但没有明确**用什么存储和检索**。CLAUDE.md 解决了团队知识的注入，但对话上下文的"向量检索召回"和任务状态的结构化查询需要一个真正的语义存储引擎。
+
+OpenViking 是字节跳动/火山引擎开源的 **AI Agent 上下文数据库**，定位是"The Context Database for AI Agents"。它不是简单的向量数据库，而是一个面向 agent 记忆管理的完整系统。
+
+### OpenViking 的核心设计
+
+**虚拟文件系统范式** —— 所有数据以 `viking://` URI 组织成目录树，不是扁平的 embedding 记录：
+
+```
+viking://
+├── resources/          # 知识文档：仓库、wiki、飞书文档
+│   ├── teamsland/
+│   │   ├── .abstract.md    # L0: ~100 token 超短摘要（自动生成）
+│   │   ├── .overview.md    # L1: ~2k token 结构化概览（自动生成）
+│   │   └── src/...         # L2: 完整原始文件
+│   └── frontend-repo/
+├── user/
+│   └── {user_id}/memories/
+│       ├── profile.md          # 成员画像
+│       ├── preferences/        # 偏好
+│       └── events/             # 决策记录
+└── agent/
+    └── {agent_id}/
+        ├── memories/
+        │   ├── cases/          # 问题+方案记录
+        │   ├── patterns/       # 可复用模式
+        │   └── tools/          # 工具使用经验
+        └── skills/             # 习得的能力
+```
+
+**三级内容分层（L0/L1/L2）** —— 每个目录自动生成 `.abstract.md`（L0，~100 token）和 `.overview.md`（L1，~2k token），原始文件是 L2。agent 检索时先扫 L0 定位方向，读 L1 做规划，只在真正需要时加载 L2。这极大减少了 token 消耗。
+
+**层级递归检索** —— 查询先经过意图分析（LLM 将查询分解为 0-5 个类型化子查询），然后向量搜索定位最相关的目录，递归下钻到子目录，最终 rerank 返回结果。检索轨迹完整可追溯。
+
+**Session 与记忆提取** —— 对话以 session 追踪。session commit 时系统自动：压缩对话、归档旧轮次（生成 L0/L1 摘要）、异步提取长期记忆（分为 6 类：用户画像、偏好、实体、事件 + agent 案例、模式）。agent 在使用中越来越懂团队。
+
+### 与 teamsland 记忆分层的映射
+
+| teamsland 记忆层 | OpenViking 映射 | 说明 |
+|-----------------|----------------|------|
+| **团队知识**（几乎不变）| `viking://resources/` | 用 `add_resource()` 导入仓库、wiki。L0/L1 自动生成结构摘要 |
+| **任务状态**（天级变化）| `viking://resources/tasks/` | 结构化 markdown 文件，用 `write()` / `read()` 更新。URI 路径即任务分类 |
+| **对话上下文**（分钟级变化）| `viking://session/{id}/` | session 存储完整消息历史。`get_session_context()` 按 token 预算组装上下文 |
+| **长期记忆** | `viking://agent/memories/` | commit 时 LLM 自动提取。8 类记忆自动去重/合并 |
+| **跨 session 记忆** | 全量持久化到磁盘 | 所有写入立即落盘，Brain/Worker 重启后完整恢复 |
+
+### 完全本地运行
+
+OpenViking 支持**零外部依赖的本地部署**，完全符合 teamsland 单机架构：
+
+- **存储后端** —— 内置向量索引（C++ 核心），本地文件系统存储，不需要外部数据库
+- **Embedding 模型** —— 支持 Ollama 本地模型（推荐 `nomic-embed-text`），或直接使用内置的 GGUF 模型（`bge-small-zh-v1.5`，零网络依赖）
+- **VLM** —— L0/L1 摘要生成可用 Ollama 本地模型，也可用云 API（OpenAI/火山引擎）提升质量
+- **部署方式** —— 单进程 HTTP server，默认端口 1933。`openviking-server init` 向导自动配置 Ollama
+
+### teamsland 的集成方式
+
+OpenViking 暴露完整的 REST API（FastAPI），teamsland 通过 HTTP 调用。虽然没有官方 TypeScript SDK，但项目自带了 **Claude Code memory plugin 示例**（`examples/claude-code-memory-plugin/src/memory-server.ts`），是一个现成的 TypeScript HTTP 客户端参考实现，覆盖 find/read/session/write 全部接口。
+
+**teamsland 需要封装的 `@teamsland/memory` 包：**
+
+```typescript
+// 语义检索
+const results = await memory.find("前端 dashboard 的编码规范", {
+  targetUri: "viking://resources/teamsland/",
+  limit: 10
+});
+
+// 渐进式读取（L0 → L1 → L2）
+const overview = await memory.overview("viking://resources/teamsland/src/");
+const detail = await memory.read("viking://resources/teamsland/src/brain.ts");
+
+// 任务状态读写
+await memory.write("viking://resources/tasks/task-abc.md", taskStateMarkdown);
+const task = await memory.read("viking://resources/tasks/task-abc.md");
+
+// Session 记忆提取
+const sessionId = await memory.createSession();
+await memory.addMessage(sessionId, "user", "我们决定用 Redis 做任务队列");
+await memory.addMessage(sessionId, "assistant", "好的，我来更新架构文档");
+await memory.commitSession(sessionId); // 后台 LLM 自动提取长期记忆
+```
+
+### 大脑使用 OpenViking 的流程
+
+```
+新消息到达
+  → 从 OpenViking 加载：
+    - find("相关任务") → 任务状态（viking://resources/tasks/）
+    - find("相关记忆") → 长期记忆（viking://agent/memories/）
+    - get_session_context() → 最近对话上下文
+  → 组装成 context，启动一次 Claude 推理
+  → Claude 输出决策
+  → 把新状态写回 OpenViking（write 任务状态 + add_message 对话记录）
+  → session 结束
+```
+
+### Worker 使用 OpenViking 的流程
+
+Worker 通过 HTTP API（或 teamsland CLI 封装）访问 OpenViking：
+- 启动前：检索任务相关的代码知识和历史案例
+- 工作中：查询团队编码规范和架构文档
+- 完成后：写回案例记忆（"这个问题是这样解决的"），供未来 worker 参考
+
+### 文档解析能力
+
+OpenViking 内置强大的文档解析管道，支持：
+- 代码仓库（tree-sitter：Python, JS/TS, Java, C++, Go, Rust 等 10 种语言）
+- Markdown, PDF, HTML, Word/Excel/PowerPoint
+- 飞书文档
+- 图片/视频/音频（VLM 视觉理解）
+
+这意味着 `add_resource("./teamsland")` 可以直接导入整个仓库，OpenViking 自动解析代码结构并生成 L0/L1 摘要。团队的飞书文档也可以直接导入。
+
+### 需要注意的限制
+
+1. **LLM 依赖** —— L0/L1 生成和记忆提取依赖 VLM/embedding 模型。本地 Ollama 可用但较慢，云 API 质量更好但有网络依赖
+2. **Embedding 模型固定** —— 同一 collection 不能混用不同 embedding 模型，换模型需重新索引
+3. **无内置任务状态机** —— 任务状态管理需要通过 URI 路径约定 + 结构化 markdown 自己实现
+4. **AGPLv3 许可证** —— 主体代码 AGPL，示例代码 Apache 2.0
+
+---
+
+## 部署架构：单机
+
+teamsland 是**单机架构** —— 部署在开发者自己的工作电脑上。所有 Claude Code session（大脑和 worker）都运行在本地，session transcript 文件在本地 `~/.claude/projects/`，worktree 在本地文件系统。OpenViking server 也运行在本地（默认端口 1933）。
+
+这个约束大幅简化了设计：
+- 不需要分布式 session 存储
+- 不需要远程 PTY 协议
+- 不需要多租户隔离
+- 文件系统就是数据层
+- OpenViking 本地向量索引，无外部数据库依赖
+
+---
+
+## Dashboard：整合 claudecodeui
+
+> 参考项目源码：`/Users/bytedance/workspace/claudecodeui`（[github.com/siteboon/claudecodeui](https://github.com/siteboon/claudecodeui)）
+
+### 为什么需要完整 Web UI
+
+用户需要：
+- 看到所有 session（大脑 + 所有 worker）的实时输出流
+- 观察 worker 的工具调用、代码变更、diff 视图
+- **随时接管任何 session** —— worker 干完一轮或干到一半，用户直接在浏览器里跟它对话
+
+这不是一个简单的状态面板，而是一个**完整的 Claude Code Web 工作台**。
+
+### claudecodeui 提供了什么
+
+claudecodeui 是一个成熟的 Claude Code Web UI，核心能力完全匹配 teamsland 的需求：
+
+| 能力 | 说明 |
+|------|------|
+| Session 列表 | 自动发现 `~/.claude/projects/` 下的所有 session，chokidar 监听变化实时刷新 |
+| 实时输出流 | 通过 `@anthropic-ai/claude-agent-sdk` 的 async generator 获取事件，WebSocket 推送到前端 |
+| 工具调用可视化 | 配置驱动的 ToolRenderer：Edit/Write → diff 视图，Bash → 可折叠输出，Grep/Glob → 文件列表 |
+| Session 接管 | 支持 `resume` 已有 session，用户在浏览器里直接对话 |
+| 终端 | xterm.js + node-pty，完整的交互式终端 |
+| 文件浏览器 | 递归文件树 + CodeMirror 编辑器 |
+| Git 面板 | Stage/commit/diff/分支管理 |
+| JSONL 解析 | 完整的 transcript 解析，NormalizedMessage schema，tool_use/tool_result 关联 |
+
+### 整合策略：直接搬运模块
+
+因为 teamsland 是单机部署，claudecodeui 的所有本地文件系统假设都成立。**直接从 claudecodeui 搬运需要的模块和组件到 teamsland Dashboard**，不做二次抽象：
+
+**需要搬运的后端模块：**
+- `server/projects.js` — session 发现和 JSONL 解析引擎
+- `server/claude-sdk.js` — Claude Agent SDK 集成（替代当前的 `Bun.spawn("claude")`）
+- `server/modules/providers/list/claude/` — Claude session 数据 provider 和消息归一化
+- `server/routes/messages.js` — 统一消息 API
+- chokidar 文件监听逻辑 — session 变化实时推送
+
+**需要搬运的前端组件：**
+- `src/components/chat/` — 完整的聊天界面 + 实时流处理
+- `src/components/chat/tools/` — ToolRenderer 及所有工具可视化组件（diff 视图、Bash 输出、文件列表等）
+- `src/components/sidebar/` — Session 列表侧边栏
+- `src/components/shell/` — xterm.js 终端组件
+- `src/components/file-tree/` — 文件浏览器
+- `src/components/code-editor/` — CodeMirror 编辑器
+- `src/components/git-panel/` — Git 操作面板
+- `src/stores/useSessionStore.ts` — Session 消息缓存和实时/历史合并逻辑
+- `src/contexts/WebSocketContext.tsx` — WebSocket 状态管理
+
+**需要搬运的数据模型：**
+- `NormalizedMessage` schema — 消息归一化格式
+- Session/Project 类型定义
+- 工具调用状态推导逻辑（running / completed / error / denied）
+
+### 在搬运基础上扩展
+
+搬运后需要为 teamsland 场景增加的功能：
+- **Session 类型标注** —— 区分大脑 session、任务 worker、观察者 worker
+- **任务关联视图** —— 展示 worker 对应的群聊消息、发起人、Meego 工单
+- **worker 拓扑视图** —— 大脑 → worker → 观察者的层级关系可视化
+- **飞书集成面板** —— 显示关联的群聊对话上下文
+
+### 替换现有 Dashboard
+
+当前 teamsland 的 Dashboard（rspack + React + shadcn/ui）功能单薄，只展示 agent 状态列表。整合 claudecodeui 后**完全替换**现有 Dashboard，升级为完整的 Claude Code Web 工作台。
+
+技术栈适配：claudecodeui 使用 Vite + TailwindCSS，teamsland 当前使用 rspack + shadcn/ui。搬运时统一为 claudecodeui 的技术栈（Vite + TailwindCSS），因为其组件生态更完整。
+
+---
+
 *本文档记录产品理解的演进过程，随讨论深入持续更新。*

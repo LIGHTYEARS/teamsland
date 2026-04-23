@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import type { AppConfig, MeegoConfig, MeegoEvent } from "@teamsland/types";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ─── mock @teamsland/observability（静默日志） ───
 vi.mock("@teamsland/observability", () => ({
@@ -13,10 +13,10 @@ vi.mock("@teamsland/observability", () => ({
   }),
 }));
 
-import { IntentClassifier } from "@teamsland/ingestion";
 import { MeegoConnector, MeegoEventBus } from "@teamsland/meego";
+import { PersistentQueue } from "@teamsland/queue";
 import { SubagentRegistry } from "@teamsland/sidecar";
-import { registerEventHandlers } from "../event-handlers.js";
+import { registerEventHandlers, registerQueueConsumer } from "../event-handlers.js";
 
 // ─── 常量 ───
 
@@ -92,14 +92,6 @@ describe("事件管线端到端", () => {
     const db = new Database(":memory:");
     eventBus = new MeegoEventBus(db);
 
-    // 真实 IntentClassifier（规则路径，stub LLM 不会被调用）
-    const stubLlm = {
-      async chat(): Promise<{ content: string }> {
-        throw new Error("LLM 不应被调用");
-      },
-    };
-    const intentClassifier = new IntentClassifier({ llm: stubLlm });
-
     // Mock ProcessController
     spawnFn = createMockSpawn();
     const processController = { spawn: spawnFn, interrupt: vi.fn(), isAlive: vi.fn().mockReturnValue(true) };
@@ -126,7 +118,6 @@ describe("事件管线端到端", () => {
 
     // 注册事件处理器
     registerEventHandlers(eventBus, {
-      intentClassifier,
       processController: processController as never,
       dataPlane: { processStream: vi.fn().mockResolvedValue(undefined) } as never,
       assembler: assembler as never,
@@ -140,7 +131,6 @@ describe("事件管线端到端", () => {
       memoryStore: null,
       extractLoop: null,
       memoryUpdater: null,
-      taskPlanner: null,
       confirmationWatcher: { watch: vi.fn().mockResolvedValue("approved") } as never,
     });
 
@@ -190,7 +180,7 @@ describe("事件管线端到端", () => {
     expect(agents[0]?.status).toBe("running");
   });
 
-  it("低置信度事件被跳过（无关键词匹配）", async () => {
+  it("所有 Meego 工单事件均走直接 spawn 路径（不再经过意图分类）", async () => {
     spawnFn.mockClear();
 
     const event: MeegoEvent = {
@@ -212,11 +202,14 @@ describe("事件管线端到端", () => {
 
     await new Promise((r) => setTimeout(r, 100));
 
-    // spawn 不应被调用
-    expect(spawnFn).not.toHaveBeenCalled();
+    // 移除 IntentClassifier 后，所有事件均直接 spawn Agent
+    expect(spawnFn).toHaveBeenCalledOnce();
+    expect(spawnFn).toHaveBeenCalledWith(
+      expect.objectContaining({ issueId: "I-002", worktreePath: "/tmp/test-repo/.worktrees/req-test" }),
+    );
 
-    // registry 仍然只有上一个测试的 1 条记录
-    expect(registry.runningCount()).toBe(1);
+    // registry 应新增 1 条记录（之前 1 条 + 本次 1 条 = 2 条）
+    expect(registry.runningCount()).toBe(2);
   });
 
   it("webhook /health 端点返回 200", async () => {
@@ -257,7 +250,7 @@ describe("事件管线端到端", () => {
   it("注册表容量满时跳过 Agent 注册并发送 DM", async () => {
     spawnFn.mockClear();
 
-    // 填充注册表到上限（当前 1 条 + 填充 19 条 = 20 = maxConcurrentSessions）
+    // 填充注册表到上限（当前 2 条 + 填充到 20 = maxConcurrentSessions）
     const padCount = testConfig.sidecar.maxConcurrentSessions - registry.runningCount();
     for (let i = 0; i < padCount; i++) {
       registry.register({
@@ -301,5 +294,158 @@ describe("事件管线端到端", () => {
     for (let i = 0; i < padCount; i++) {
       registry.unregister(`pad-agent-${i}`);
     }
+  });
+});
+
+// ─── Queue Consumer 测试套件 ───
+
+describe("PersistentQueue 消费者端到端", () => {
+  let queue: PersistentQueue;
+  let spawnFn: ReturnType<typeof createMockSpawn>;
+  let worktreeCreateFn: ReturnType<typeof createMockWorktreeCreate>;
+  let registry: SubagentRegistry;
+  let notifierSendDm: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    // 每个测试使用独立的 queue（内存数据库）
+    queue = new PersistentQueue({
+      dbPath: ":memory:",
+      busyTimeoutMs: 5000,
+      visibilityTimeoutMs: 60_000,
+      maxRetries: 3,
+      deadLetterEnabled: true,
+      pollIntervalMs: 50,
+    });
+
+    spawnFn = createMockSpawn();
+    worktreeCreateFn = createMockWorktreeCreate();
+    notifierSendDm = vi.fn().mockResolvedValue(undefined);
+
+    const notifier = { sendCard: vi.fn().mockResolvedValue(undefined), sendDm: notifierSendDm };
+
+    registry = new SubagentRegistry({
+      config: testConfig.sidecar,
+      notifier: notifier as never,
+      registryPath: `/tmp/teamsland-test-registry-queue-${Date.now()}.json`,
+    });
+
+    registerQueueConsumer(queue, {
+      processController: { spawn: spawnFn, interrupt: vi.fn(), isAlive: vi.fn().mockReturnValue(true) } as never,
+      dataPlane: { processStream: vi.fn().mockResolvedValue(undefined) } as never,
+      assembler: { buildInitialPrompt: vi.fn().mockResolvedValue("你好，请开始工作") } as never,
+      registry,
+      worktreeManager: { create: worktreeCreateFn, reap: vi.fn().mockResolvedValue([]) } as never,
+      notifier: notifier as never,
+      larkCli: { contactSearch: vi.fn().mockResolvedValue([]), groupSearch: vi.fn().mockResolvedValue([]) } as never,
+      config: testConfig,
+      teamId: "default",
+      documentParser: { parseMarkdown: vi.fn().mockReturnValue({ title: "", sections: [], entities: [] }) } as never,
+      memoryStore: null,
+      extractLoop: null,
+      memoryUpdater: null,
+      confirmationWatcher: { watch: vi.fn().mockResolvedValue("approved") } as never,
+    });
+  });
+
+  afterEach(() => {
+    queue.close();
+  });
+
+  it("meego_issue_created 队列消息触发 Agent 启动", async () => {
+    const event: MeegoEvent = {
+      eventId: "evt-queue-001",
+      issueId: "IQ-001",
+      projectKey: "project_xxx",
+      type: "issue.created",
+      payload: { title: "队列测试：创建登录页面", description: "通过 Queue 消费触发" },
+      timestamp: Date.now(),
+    };
+
+    queue.enqueue({
+      type: "meego_issue_created",
+      payload: { event },
+      traceId: event.eventId,
+    });
+
+    // 等待轮询消费
+    await new Promise((r) => setTimeout(r, 300));
+
+    expect(spawnFn).toHaveBeenCalledOnce();
+    expect(spawnFn).toHaveBeenCalledWith(expect.objectContaining({ issueId: "IQ-001" }));
+    expect(registry.runningCount()).toBe(1);
+  });
+
+  it("lark_mention 队列消息触发 Agent 启动并回复群聊", async () => {
+    const event: MeegoEvent = {
+      eventId: "evt-queue-002",
+      issueId: "lark-msg-002",
+      projectKey: "project_xxx",
+      type: "issue.created",
+      payload: {
+        title: "队列测试：Lark @mention",
+        description: "通过 Queue 消费触发",
+        source: "lark_mention",
+        chatId: "oc_test",
+        senderId: "ou_test",
+        messageId: "lark-msg-002",
+      },
+      timestamp: Date.now(),
+    };
+
+    queue.enqueue({
+      type: "lark_mention",
+      payload: {
+        event,
+        chatId: "oc_test",
+        senderId: "ou_test",
+        messageId: "lark-msg-002",
+      },
+      priority: "high",
+      traceId: event.eventId,
+    });
+
+    // 等待轮询消费
+    await new Promise((r) => setTimeout(r, 300));
+
+    expect(spawnFn).toHaveBeenCalledOnce();
+    expect(registry.runningCount()).toBe(1);
+  });
+
+  it("meego_issue_assigned 队列消息触发通知", async () => {
+    const event: MeegoEvent = {
+      eventId: "evt-queue-003",
+      issueId: "IQ-003",
+      projectKey: "project_xxx",
+      type: "issue.assigned",
+      payload: { title: "队列测试：指派", assigneeId: "user-queue-001" },
+      timestamp: Date.now(),
+    };
+
+    queue.enqueue({
+      type: "meego_issue_assigned",
+      payload: { event },
+      traceId: event.eventId,
+    });
+
+    // 等待轮询消费
+    await new Promise((r) => setTimeout(r, 300));
+
+    expect(notifierSendDm).toHaveBeenCalledWith("user-queue-001", expect.stringContaining("IQ-003"));
+  });
+
+  it("未知消息类型不会导致消费者崩溃", async () => {
+    // 直接使用低层 enqueue 发送自定义类型
+    queue.enqueue({
+      type: "worker_completed" as never,
+      payload: { workerId: "w-001", sessionId: "s-001", issueId: "I-001", resultSummary: "done" } as never,
+      traceId: "trace-unknown-001",
+    });
+
+    // 等待轮询消费
+    await new Promise((r) => setTimeout(r, 300));
+
+    // 确认消费没有崩溃（占位处理器正常执行）
+    const stats = queue.stats();
+    expect(stats.completed).toBe(1);
   });
 });

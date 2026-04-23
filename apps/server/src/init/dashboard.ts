@@ -1,0 +1,140 @@
+// @teamsland/server — Dashboard 初始化模块
+
+import { resolve } from "node:path";
+import type { HookEngine, HookMetricsCollector } from "@teamsland/hooks";
+import type { createLogger } from "@teamsland/observability";
+import type { SessionDB } from "@teamsland/session";
+import { ClaudeMdInjector, SkillInjector, type SubagentRegistry } from "@teamsland/sidecar";
+import type { AppConfig } from "@teamsland/types";
+import { startDashboard } from "../dashboard.js";
+import { LarkAuthManager } from "../lark-auth.js";
+import type { ContextResult } from "./context.js";
+import type { LarkResult } from "./lark.js";
+import type { SidecarResult } from "./sidecar.js";
+
+/**
+ * Dashboard 初始化结果
+ *
+ * @example
+ * ```typescript
+ * import type { DashboardResult } from "./dashboard.js";
+ *
+ * const dashboard: DashboardResult = initDashboard(config, registry, sessionDb, lark, controller, logger, sidecar, context);
+ * // 关闭时: dashboard.server.stop();
+ * ```
+ */
+export interface DashboardResult {
+  /** Dashboard HTTP/WebSocket 服务实例 */
+  server: ReturnType<typeof Bun.serve>;
+  /** Lark OAuth 管理器（未启用时为 undefined） */
+  authManager: LarkAuthManager | undefined;
+}
+
+/** Worker Skill 名称列表 */
+const WORKER_SKILL_NAMES = ["lark-reply", "meego-update", "teamsland-report"];
+
+/**
+ * 构建 SkillInjector 实例
+ *
+ * 扫描 `config/worker-skills/` 目录下的已知 Skill，结合 skillRouting 配置
+ * 构建 SkillInjector。
+ *
+ * @param config - 应用配置
+ * @param logger - 日志记录器
+ * @returns SkillInjector 实例
+ *
+ * @example
+ * ```typescript
+ * const injector = buildSkillInjector(config, logger);
+ * await injector.inject({ worktreePath: "/tmp/wt", taskType: "coding" });
+ * ```
+ */
+function buildSkillInjector(config: AppConfig, logger: ReturnType<typeof createLogger>): SkillInjector {
+  const skillsBasePath = resolve(process.cwd(), "config/worker-skills");
+  const skills = WORKER_SKILL_NAMES.map((name) => ({
+    name,
+    sourcePath: resolve(skillsBasePath, name),
+  }));
+
+  return new SkillInjector({
+    skills,
+    routing: config.skillRouting,
+    logger,
+  });
+}
+
+/**
+ * 初始化 Dashboard HTTP/WebSocket 服务
+ *
+ * 根据配置决定是否启用 Lark OAuth 认证，
+ * 创建 SkillInjector 和 ClaudeMdInjector 实例，
+ * 然后调用 `startDashboard` 启动 Bun.serve 服务。
+ *
+ * @param config - 应用配置
+ * @param registry - Agent 注册表
+ * @param sessionDb - 会话数据库
+ * @param lark - 飞书组件
+ * @param controller - 全局 AbortController
+ * @param logger - 日志记录器
+ * @param sidecar - Sidecar 初始化结果（processController、dataPlane）
+ * @param context - 业务上下文结果（worktreeManager）
+ * @param hookEngine - Hook 引擎实例（可选，未配置时为 null）
+ * @param hookMetricsCollector - Hook 指标收集器（可选，未配置时为 null）
+ * @returns Dashboard 服务实例和认证管理器
+ *
+ * @example
+ * ```typescript
+ * import { initDashboard } from "./init/dashboard.js";
+ *
+ * const dashboard = initDashboard(config, registry, sessionDb, lark, controller, logger, sidecar, context, hookEngine, hookMetricsCollector);
+ * logger.info({ port: config.dashboard.port }, "Dashboard 已启动");
+ * ```
+ */
+export function initDashboard(
+  config: AppConfig,
+  registry: SubagentRegistry,
+  sessionDb: SessionDB,
+  _lark: LarkResult,
+  controller: AbortController,
+  logger: ReturnType<typeof createLogger>,
+  sidecar: SidecarResult,
+  context: ContextResult,
+  hookEngine?: HookEngine | null,
+  hookMetricsCollector?: HookMetricsCollector | null,
+): DashboardResult {
+  const authManager =
+    config.dashboard.auth.provider === "lark_oauth"
+      ? new LarkAuthManager(config.lark, config.dashboard.auth, `http://localhost:${config.dashboard.port}`)
+      : undefined;
+
+  // Skill 注入器
+  const skillInjector = buildSkillInjector(config, logger);
+  logger.info("SkillInjector 已初始化");
+
+  // CLAUDE.md 任务上下文注入器
+  const claudeMdInjector = new ClaudeMdInjector();
+  logger.info("ClaudeMdInjector 已初始化");
+
+  const server = startDashboard(
+    {
+      registry,
+      sessionDb,
+      config: config.dashboard,
+      authManager,
+      processController: sidecar.processController,
+      worktreeManager: context.worktreeManager,
+      dataPlane: sidecar.dataPlane,
+      skillInjector,
+      claudeMdInjector,
+      meegoApiBase: config.meego.apiBaseUrl,
+      meegoPluginToken: config.meego.pluginAccessToken,
+      hookEngine,
+      hookMetricsCollector,
+    },
+    controller.signal,
+  );
+
+  logger.info({ port: config.dashboard.port }, "Dashboard 服务初始化完成");
+
+  return { server, authManager };
+}

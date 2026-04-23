@@ -1,0 +1,511 @@
+import { existsSync, mkdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { createLogger } from "@teamsland/observability";
+import type { AppConfig, RepoMappingEntry } from "@teamsland/types";
+
+const logger = createLogger("server:coordinator-init");
+
+/**
+ * Coordinator 工作区目录结构常量
+ *
+ * @example
+ * ```typescript
+ * import { WORKSPACE_DIRS } from "./coordinator-init.js";
+ * // WORKSPACE_DIRS.skills === ".claude/skills"
+ * ```
+ */
+const WORKSPACE_DIRS = {
+  claude: ".claude",
+  skills: ".claude/skills",
+  teamslandSpawn: ".claude/skills/teamsland-spawn",
+  larkMessage: ".claude/skills/lark-message",
+  larkDocs: ".claude/skills/lark-docs",
+  meegoQuery: ".claude/skills/meego-query",
+} as const;
+
+/**
+ * 初始化 Coordinator 工作区
+ *
+ * 在指定路径创建 Coordinator 运行所需的完整目录结构和配置文件。
+ * 已存在的文件不会被覆盖（幂等操作），保护用户自定义修改。
+ *
+ * @param config - 应用完整配置
+ * @returns 工作区绝对路径
+ *
+ * @example
+ * ```typescript
+ * import { initCoordinatorWorkspace } from "./coordinator-init.js";
+ * import type { AppConfig } from "@teamsland/types";
+ *
+ * declare const config: AppConfig;
+ * const workspacePath = await initCoordinatorWorkspace(config);
+ * // workspacePath === "/Users/xxx/.teamsland/coordinator"
+ * ```
+ */
+export async function initCoordinatorWorkspace(config: AppConfig): Promise<string> {
+  const rawPath = config.coordinator?.workspacePath ?? "~/.teamsland/coordinator";
+  const workspacePath = rawPath.replace("~", homedir());
+
+  logger.info({ workspacePath }, "初始化 Coordinator 工作区");
+
+  createDirectories(workspacePath);
+  await writeWorkspaceFiles(workspacePath, config);
+
+  logger.info({ workspacePath }, "Coordinator 工作区初始化完成");
+  return workspacePath;
+}
+
+/**
+ * 创建工作区所需的目录结构
+ *
+ * @param basePath - 工作区根目录
+ *
+ * @example
+ * ```typescript
+ * createDirectories("/home/user/.teamsland/coordinator");
+ * ```
+ */
+function createDirectories(basePath: string): void {
+  for (const dir of Object.values(WORKSPACE_DIRS)) {
+    const fullPath = join(basePath, dir);
+    if (!existsSync(fullPath)) {
+      mkdirSync(fullPath, { recursive: true });
+      logger.info({ dir: fullPath }, "目录已创建");
+    }
+  }
+}
+
+/**
+ * 写入所有工作区文件
+ *
+ * @param basePath - 工作区根目录
+ * @param config - 应用配置
+ *
+ * @example
+ * ```typescript
+ * await writeWorkspaceFiles("/home/user/.teamsland/coordinator", config);
+ * ```
+ */
+async function writeWorkspaceFiles(basePath: string, config: AppConfig): Promise<void> {
+  const files: Array<{ path: string; content: string }> = [
+    { path: join(basePath, "CLAUDE.md"), content: generateClaudeMd(config) },
+    { path: join(basePath, ".claude", "settings.json"), content: generateSettingsJson() },
+    {
+      path: join(basePath, WORKSPACE_DIRS.teamslandSpawn, "SKILL.md"),
+      content: generateTeamslandSpawnSkill(),
+    },
+    {
+      path: join(basePath, WORKSPACE_DIRS.larkMessage, "SKILL.md"),
+      content: generateLarkMessageSkill(),
+    },
+    {
+      path: join(basePath, WORKSPACE_DIRS.larkDocs, "SKILL.md"),
+      content: generateLarkDocsSkill(),
+    },
+    {
+      path: join(basePath, WORKSPACE_DIRS.meegoQuery, "SKILL.md"),
+      content: generateMeegoQuerySkill(),
+    },
+  ];
+
+  for (const file of files) {
+    await writeFileIfNotExists(file.path, file.content);
+  }
+}
+
+/**
+ * 仅在文件不存在时写入内容（幂等写入）
+ *
+ * @param filePath - 文件绝对路径
+ * @param content - 文件内容
+ *
+ * @example
+ * ```typescript
+ * await writeFileIfNotExists("/path/to/file.md", "# Hello");
+ * ```
+ */
+async function writeFileIfNotExists(filePath: string, content: string): Promise<void> {
+  if (existsSync(filePath)) {
+    logger.info({ file: filePath }, "文件已存在，跳过写入");
+    return;
+  }
+  await Bun.write(filePath, content);
+  logger.info({ file: filePath }, "文件已创建");
+}
+
+/**
+ * 生成仓库映射表的 Markdown 格式
+ *
+ * @param entries - 仓库映射配置
+ * @returns Markdown 表格字符串
+ *
+ * @example
+ * ```typescript
+ * const table = formatRepoMappingTable([
+ *   { meegoProjectId: "p1", repos: [{ path: "/repos/fe", name: "前端" }] },
+ * ]);
+ * ```
+ */
+function formatRepoMappingTable(entries: ReadonlyArray<RepoMappingEntry>): string {
+  const lines: string[] = ["| Meego 项目 ID | 仓库名称 | 本地路径 |", "| --- | --- | --- |"];
+
+  for (const entry of entries) {
+    for (const repo of entry.repos) {
+      lines.push(`| ${entry.meegoProjectId} | ${repo.name} | ${repo.path} |`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * 生成群聊项目映射表的 Markdown 格式
+ *
+ * @param mapping - chatId → projectId 映射
+ * @returns Markdown 表格字符串
+ *
+ * @example
+ * ```typescript
+ * const table = formatChatProjectMappingTable({ "oc_xxx": "project_xxx" });
+ * ```
+ */
+function formatChatProjectMappingTable(mapping: Record<string, string>): string {
+  const lines: string[] = ["| 群聊 ID | Meego 项目 ID |", "| --- | --- |"];
+
+  for (const [chatId, projectId] of Object.entries(mapping)) {
+    lines.push(`| ${chatId} | ${projectId} |`);
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * 根据配置动态生成 Coordinator 的 CLAUDE.md
+ *
+ * @param config - 应用配置
+ * @returns CLAUDE.md 文件内容
+ *
+ * @example
+ * ```typescript
+ * const content = generateClaudeMd(config);
+ * ```
+ */
+function generateClaudeMd(config: AppConfig): string {
+  const repoTable = formatRepoMappingTable(config.repoMapping);
+  const chatMapping = config.lark.connector?.chatProjectMapping ?? {};
+  const chatTable = formatChatProjectMappingTable(chatMapping);
+
+  return `# Coordinator 大脑
+
+你是团队的 AI 大管家。你的职责是：
+1. 理解消息意图
+2. 决策：回复 / spawn worker / 更新状态 / 忽略
+3. 跟踪 worker 状态
+4. 转发 worker 结果给用户
+
+## 决策流程
+
+收到消息后，按以下顺序决策：
+
+1. **是否需要处理？** — 闲聊、重复消息、已处理的事件 → 忽略或简短回复
+2. **能直接回答吗？** — 状态查询、简单问题 → 直接回复
+3. **需要执行任务？** — 代码修改、文档撰写、Bug 修复 → spawn worker
+4. **需要通知他人？** — 工单变更、任务完成 → 通过 lark-cli 发消息
+
+## 团队项目
+
+### 仓库映射
+
+${repoTable}
+
+### 群聊 → 项目映射
+
+${chatTable}
+
+## 工作规范
+
+- 永远保持轻量、快速响应
+- 所有耗时超过几秒的工作都 spawn worker
+- spawn worker 时用 teamsland CLI（参见 teamsland-spawn skill）
+- 定期检查 running workers 的状态：\`teamsland list\`
+- Worker 完成后获取结果并转发给用户
+
+## 回复规范
+
+- 使用中文回复
+- 保持简洁、专业
+- 涉及代码时使用 Markdown 代码块
+- 回复中包含相关的工单 ID 或 Worker ID 方便追溯
+`;
+}
+
+/**
+ * 生成 Coordinator 的 Claude settings.json
+ *
+ * @returns settings.json 文件内容
+ *
+ * @example
+ * ```typescript
+ * const content = generateSettingsJson();
+ * ```
+ */
+function generateSettingsJson(): string {
+  const settings = {
+    permissions: {
+      allow: [
+        "Bash(teamsland *)",
+        "Bash(lark-cli *)",
+        "Bash(curl *)",
+        "Bash(cat *)",
+        "Bash(echo *)",
+        "Bash(date *)",
+        "Read",
+        "Write",
+      ],
+      deny: ["Bash(rm *)", "Bash(sudo *)", "Bash(git push *)", "Bash(npm *)", "Bash(bun *)"],
+    },
+  };
+
+  return JSON.stringify(settings, null, 2);
+}
+
+/**
+ * 生成 teamsland-spawn SKILL.md 内容
+ *
+ * @returns SKILL.md 文件内容
+ *
+ * @example
+ * ```typescript
+ * const content = generateTeamslandSpawnSkill();
+ * ```
+ */
+function generateTeamslandSpawnSkill(): string {
+  return `---
+name: teamsland-spawn
+description: Spawn and manage teamsland workers. Use when you need to delegate a task to a worker agent, check worker status, get results, or cancel a running worker.
+allowed-tools: Bash(teamsland *)
+---
+
+# teamsland Worker Management
+
+## Spawning a Worker
+
+\`\`\`bash
+teamsland spawn --repo <repo-path> --task "$(cat <<'EOF'
+<task prompt here>
+EOF
+)"
+\`\`\`
+
+## Resume in Existing Worktree
+
+\`\`\`bash
+teamsland spawn --worktree <worktree-path> --task "$(cat <<'EOF'
+<task prompt here>
+EOF
+)"
+\`\`\`
+
+## With Metadata
+
+\`\`\`bash
+teamsland spawn --repo <repo-path> \\
+  --task-brief "简短描述" \\
+  --origin-chat "oc_xxx" \\
+  --origin-sender "ou_xxx" \\
+  --task "$(cat <<'EOF'
+<task prompt here>
+EOF
+)"
+\`\`\`
+
+## Checking Status
+
+\`\`\`bash
+teamsland list
+teamsland status <worker-id>
+teamsland result <worker-id>
+\`\`\`
+
+## Cancelling
+
+\`\`\`bash
+teamsland cancel <worker-id>
+teamsland cancel <worker-id> --force
+\`\`\`
+
+## CRITICAL: Always use single-quoted EOF
+
+Always use \`'EOF'\` (single-quoted) to prevent shell expansion of \`$variables\` and backticks.
+`;
+}
+
+/**
+ * 生成 lark-message SKILL.md 内容
+ *
+ * @returns SKILL.md 文件内容
+ *
+ * @example
+ * ```typescript
+ * const content = generateLarkMessageSkill();
+ * ```
+ */
+function generateLarkMessageSkill(): string {
+  return `---
+name: lark-message
+description: Send messages to Lark chats and users. Use when you need to reply in a group chat, send a direct message, or forward worker results to users.
+allowed-tools: Bash(lark-cli *)
+---
+
+# Lark Message Skill
+
+通过 lark-cli 发送飞书消息。
+
+## 发送群聊消息
+
+\`\`\`bash
+lark-cli send --chat <chat-id> --text "消息内容"
+\`\`\`
+
+## 回复指定消息
+
+\`\`\`bash
+lark-cli send --chat <chat-id> --reply-to <message-id> --text "回复内容"
+\`\`\`
+
+## 发送私聊消息
+
+\`\`\`bash
+lark-cli send --user <user-id> --text "私聊内容"
+\`\`\`
+
+## 发送富文本（Markdown）
+
+\`\`\`bash
+lark-cli send --chat <chat-id> --markdown "$(cat <<'EOF'
+**标题**
+
+- 要点 1
+- 要点 2
+
+\\\`\\\`\\\`typescript
+const x = 1;
+\\\`\\\`\\\`
+EOF
+)"
+\`\`\`
+
+## 注意事项
+
+- 消息内容通过 heredoc 传递，避免 shell 转义问题
+- 使用 --reply-to 回复特定消息以保持对话上下文
+- 长文本建议使用 Markdown 格式
+`;
+}
+
+/**
+ * 生成 lark-docs SKILL.md 内容
+ *
+ * @returns SKILL.md 文件内容
+ *
+ * @example
+ * ```typescript
+ * const content = generateLarkDocsSkill();
+ * ```
+ */
+function generateLarkDocsSkill(): string {
+  return `---
+name: lark-docs
+description: Read and search Lark documents. Use when you need to fetch document content, search for information in Lark docs, or reference documentation.
+allowed-tools: Bash(lark-cli *)
+---
+
+# Lark Docs Skill
+
+通过 lark-cli 读取和搜索飞书文档。
+
+## 获取文档内容
+
+\`\`\`bash
+lark-cli docs get <doc-url-or-id>
+\`\`\`
+
+## 搜索文档
+
+\`\`\`bash
+lark-cli docs search --query "搜索关键词"
+\`\`\`
+
+## 列出最近文档
+
+\`\`\`bash
+lark-cli docs list --recent 10
+\`\`\`
+
+## 获取文档元信息
+
+\`\`\`bash
+lark-cli docs info <doc-url-or-id>
+\`\`\`
+
+## 注意事项
+
+- 文档 URL 和 ID 都可以作为参数
+- 搜索结果按相关度排序
+- 大文档可能需要分段获取
+`;
+}
+
+/**
+ * 生成 meego-query SKILL.md 内容
+ *
+ * @returns SKILL.md 文件内容
+ *
+ * @example
+ * ```typescript
+ * const content = generateMeegoQuerySkill();
+ * ```
+ */
+function generateMeegoQuerySkill(): string {
+  return `---
+name: meego-query
+description: Query Meego issues and project information. Use when you need to look up issue details, search for issues, or get project status.
+allowed-tools: Bash(curl *)
+---
+
+# Meego Query Skill
+
+通过 API 查询 Meego 工单和项目信息。
+
+## 查询工单详情
+
+\`\`\`bash
+curl -s "http://localhost:3000/api/meego/issues/<issue-id>" | cat
+\`\`\`
+
+## 搜索工单
+
+\`\`\`bash
+curl -s "http://localhost:3000/api/meego/issues?project=<project-key>&status=open" | cat
+\`\`\`
+
+## 获取项目工单统计
+
+\`\`\`bash
+curl -s "http://localhost:3000/api/meego/projects/<project-key>/stats" | cat
+\`\`\`
+
+## 获取指派给某人的工单
+
+\`\`\`bash
+curl -s "http://localhost:3000/api/meego/issues?assignee=<user-id>&status=open" | cat
+\`\`\`
+
+## 注意事项
+
+- 所有 API 请求通过本地代理访问
+- 响应为 JSON 格式，可结合 jq 处理
+- 大量结果会分页返回，注意 pagination 参数
+`;
+}

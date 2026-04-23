@@ -1,10 +1,7 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { RepoMapping } from "@teamsland/config";
 import type { Embedder } from "@teamsland/memory";
 import type { AbstractMemoryStore, AppConfig, MemoryEntry, TaskConfig } from "@teamsland/types";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { DynamicContextAssembler } from "../assembler.js";
 
 // --- Fake dependencies ---
@@ -86,39 +83,32 @@ const mockTask: TaskConfig = {
 // --- Tests ---
 
 describe("DynamicContextAssembler", () => {
-  let tempDir: string;
-
-  beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), "assembler-test-"));
-    await writeFile(join(tempDir, "frontend-dev.md"), "# 前端开发 Agent 指令\n\n你是前端开发 Agent。");
-  });
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  function buildAssembler(templateBasePath: string) {
+  function buildAssembler(memoryStore?: AbstractMemoryStore) {
     return new DynamicContextAssembler({
       config: mockConfig,
       repoMapping: new FakeRepoMapping() as unknown as RepoMapping,
-      memoryStore: new FakeMemoryStore(),
+      memoryStore: memoryStore ?? new FakeMemoryStore(),
       embedder: new FakeEmbedder(),
-      templateBasePath,
     });
   }
 
-  it("输出包含全部 5 段标题", async () => {
-    const assembler = buildAssembler(tempDir);
+  it("输出包含全部 3 段标题（§A/§B/§D）", async () => {
+    const assembler = buildAssembler();
     const prompt = await assembler.buildInitialPrompt(mockTask, "team-001");
     expect(prompt).toContain("§A — Issue 上下文");
     expect(prompt).toContain("§B — 历史记忆");
-    expect(prompt).toContain("§C — 可用技能");
     expect(prompt).toContain("§D — 仓库信息");
-    expect(prompt).toContain("§E — 角色指令");
+  });
+
+  it("不再包含 §C 和 §E 段", async () => {
+    const assembler = buildAssembler();
+    const prompt = await assembler.buildInitialPrompt(mockTask, "team-001");
+    expect(prompt).not.toContain("§C");
+    expect(prompt).not.toContain("§E");
   });
 
   it("§A 正确渲染 Meego 事件字段", async () => {
-    const assembler = buildAssembler(tempDir);
+    const assembler = buildAssembler();
     const prompt = await assembler.buildInitialPrompt(mockTask, "team-001");
     expect(prompt).toContain("ISSUE-001");
     expect(prompt).toContain("PROJ-ALPHA");
@@ -126,7 +116,7 @@ describe("DynamicContextAssembler", () => {
   });
 
   it("§A 包含任务描述", async () => {
-    const assembler = buildAssembler(tempDir);
+    const assembler = buildAssembler();
     const prompt = await assembler.buildInitialPrompt(mockTask, "team-001");
     expect(prompt).toContain("实现用户登录功能");
   });
@@ -144,57 +134,21 @@ describe("DynamicContextAssembler", () => {
       toDict: () => ({}),
       toVectorPoint: () => ({ id: "mem-1", vector: [], payload: {} }),
     };
-    const assembler = new DynamicContextAssembler({
-      config: mockConfig,
-      repoMapping: new FakeRepoMapping() as unknown as RepoMapping,
-      memoryStore: new FakeMemoryStore([entry]),
-      embedder: new FakeEmbedder(),
-      templateBasePath: tempDir,
-    });
+    const assembler = buildAssembler(new FakeMemoryStore([entry]));
     const prompt = await assembler.buildInitialPrompt(mockTask, "team-001");
     expect(prompt).toContain("团队使用 shadcn/ui 组件库");
   });
 
-  it("§C 包含 skillRouting 对应的技能列表", async () => {
-    const assembler = buildAssembler(tempDir);
-    const prompt = await assembler.buildInitialPrompt(mockTask, "team-001");
-    expect(prompt).toContain("frontend-scaffold");
-    expect(prompt).toContain("component-generator");
-    expect(prompt).toContain("oauth-integration");
-  });
-
-  it("§C triggerType 无对应路由时段落仍存在但技能列表为空", async () => {
-    const taskWithUnknownTrigger = { ...mockTask, triggerType: "unknown-type" };
-    const assembler = buildAssembler(tempDir);
-    await writeFile(join(tempDir, "frontend-dev.md"), "# 角色指令");
-    const prompt = await assembler.buildInitialPrompt(taskWithUnknownTrigger, "team-001");
-    expect(prompt).toContain("§C — 可用技能");
-    // 技能列表为空，不包含任何具体技能名
-    expect(prompt).not.toContain("frontend-scaffold");
-  });
-
   it("§D 包含 FakeRepoMapping 返回的仓库路径", async () => {
-    const assembler = buildAssembler(tempDir);
+    const assembler = buildAssembler();
     const prompt = await assembler.buildInitialPrompt(mockTask, "team-001");
     expect(prompt).toContain("/repos/frontend");
     expect(prompt).toContain("前端仓库");
   });
 
   it("§D 包含工作树路径", async () => {
-    const assembler = buildAssembler(tempDir);
+    const assembler = buildAssembler();
     const prompt = await assembler.buildInitialPrompt(mockTask, "team-001");
     expect(prompt).toContain(mockTask.worktreePath);
-  });
-
-  it("§E 包含角色模板内容", async () => {
-    const assembler = buildAssembler(tempDir);
-    const prompt = await assembler.buildInitialPrompt(mockTask, "team-001");
-    expect(prompt).toContain("你是前端开发 Agent。");
-  });
-
-  it("模板文件不存在时抛出错误", async () => {
-    const assembler = buildAssembler(tempDir);
-    const badTask = { ...mockTask, agentRole: "non-existent-role" };
-    await expect(assembler.buildInitialPrompt(badTask, "team-001")).rejects.toThrow("角色模板文件不存在");
   });
 });

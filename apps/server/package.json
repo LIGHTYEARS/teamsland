@@ -14,11 +14,13 @@
     "@teamsland/memory": "workspace:*",
     "@teamsland/session": "workspace:*",
     "@teamsland/meego": "workspace:*",
+    "@teamsland/queue": "workspace:*",
     "@teamsland/ingestion": "workspace:*",
     "@teamsland/context": "workspace:*",
     "@teamsland/sidecar": "workspace:*",
     "@teamsland/swarm": "workspace:*",
     "@teamsland/git": "workspace:*",
+    "@teamsland/hooks": "workspace:*",
     "@teamsland/lark": "workspace:*",
     "@teamsland/observability": "workspace:*"
   }

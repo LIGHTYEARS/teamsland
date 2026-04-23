@@ -6,6 +6,9 @@ import { runWorker } from "./worker.js";
 const logger = createLogger("swarm:orchestrator");
 
 /**
+ * @deprecated 将在 Coordinator 架构下被 teamsland CLI 的多 worker spawn 替代。
+ * 参见 PRODUCT.md "大脑 + 手脚" 章节。
+ *
  * 执行 Swarm 任务编排
  *
  * 完整流程：

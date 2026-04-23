@@ -5,6 +5,8 @@ import type { EventHandler, MeegoEvent, MeegoEventType } from "@teamsland/types"
 const logger = createLogger("meego:event-bus");
 
 /**
+ * @deprecated 使用 PersistentQueue 替代。此类在双写过渡期保留，后续版本将移除。
+ *
  * Meego 事件总线
  *
  * 基于 bun:sqlite 实现崩溃安全的事件幂等去重，并将事件调度给已注册的处理器。

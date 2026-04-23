@@ -556,6 +556,109 @@ export interface LlmConfig {
   maxTokens: number;
 }
 
+// ─── queue 配置 ───
+
+/**
+ * 持久化消息队列配置
+ *
+ * 控制 PersistentQueue 的运行参数，可选配置。
+ * 未提供时 init/events.ts 使用内置默认值。
+ *
+ * @example
+ * ```typescript
+ * import type { QueueConfig } from "@teamsland/types";
+ *
+ * const cfg: QueueConfig = {
+ *   dbPath: "data/queue.sqlite",
+ *   busyTimeoutMs: 5000,
+ *   visibilityTimeoutMs: 60000,
+ *   maxRetries: 3,
+ *   deadLetterEnabled: true,
+ *   pollIntervalMs: 100,
+ * };
+ * ```
+ */
+export interface QueueConfig {
+  /** SQLite 数据库文件路径 */
+  dbPath: string;
+  /** SQLite busy_timeout（毫秒） */
+  busyTimeoutMs: number;
+  /** 消息处理超时（毫秒），超时后自动 nack */
+  visibilityTimeoutMs: number;
+  /** 默认最大重试次数 */
+  maxRetries: number;
+  /** 是否启用死信队列 */
+  deadLetterEnabled: boolean;
+  /** 消费轮询间隔（毫秒） */
+  pollIntervalMs: number;
+}
+
+// ─── coordinator 配置 ───
+
+/**
+ * Coordinator 配置
+ *
+ * 控制 Coordinator 的 session 管理、超时策略和启用状态。
+ *
+ * @example
+ * ```typescript
+ * import type { CoordinatorConfig } from "@teamsland/types";
+ *
+ * const cfg: CoordinatorConfig = {
+ *   workspacePath: "~/.teamsland/coordinator",
+ *   sessionIdleTimeoutMs: 300_000,
+ *   sessionMaxLifetimeMs: 1_800_000,
+ *   sessionReuseWindowMs: 300_000,
+ *   maxRecoveryRetries: 3,
+ *   inferenceTimeoutMs: 60_000,
+ *   enabled: false,
+ * };
+ * ```
+ */
+export interface CoordinatorConfig {
+  /** Coordinator 工作目录 */
+  workspacePath: string;
+  /** session 空闲超时（ms） */
+  sessionIdleTimeoutMs: number;
+  /** session 最大存活时间（ms） */
+  sessionMaxLifetimeMs: number;
+  /** 同一 chatId 连续消息复用 session 的时间窗口（ms） */
+  sessionReuseWindowMs: number;
+  /** 崩溃后最大重试次数 */
+  maxRecoveryRetries: number;
+  /** 单次推理超时（ms） */
+  inferenceTimeoutMs: number;
+  /** 是否启用 Coordinator */
+  enabled: boolean;
+}
+
+// ─── hooks 配置 ───
+
+/**
+ * Hook 引擎配置
+ *
+ * 控制 hook 文件目录、默认超时和多匹配行为。
+ *
+ * @example
+ * ```typescript
+ * import type { HooksConfig } from "@teamsland/types";
+ *
+ * const cfg: HooksConfig = {
+ *   hooksDir: "./hooks",
+ *   defaultTimeoutMs: 30000,
+ *   multiMatch: false,
+ * };
+ * ```
+ */
+export interface HooksConfig {
+  /** hooks 文件目录路径 */
+  hooksDir: string;
+  /** handle 超时时间（毫秒），默认 30000 */
+  defaultTimeoutMs: number;
+  /** 是否允许多个 hook 匹配同一事件，默认 false */
+  multiMatch: boolean;
+}
+
 // ─── 聚合根类型 ───
 
 /**
@@ -590,8 +693,12 @@ export interface AppConfig {
   repoMapping: RepoMappingConfig;
   /** Skill 路由 */
   skillRouting: SkillRoutingConfig;
-  /** Agent 角色模板文件的基础路径 */
-  templateBasePath?: string;
   /** LLM 配置（未配置时使用 stub，功能降级） */
   llm?: LlmConfig;
+  /** 持久化消息队列配置（可选，未配置时使用内置默认值） */
+  queue?: QueueConfig;
+  /** Coordinator 配置（可选，未配置时不启用） */
+  coordinator?: CoordinatorConfig;
+  /** Hook 引擎配置（可选，未配置时不加载 hook） */
+  hooks?: HooksConfig;
 }
