@@ -163,6 +163,7 @@ export class InterruptController {
 
     record.status = "interrupted";
     record.interruptReason = req.reason;
+    await this.registry.persist();
 
     this.logger.info({ agentId: req.agentId, method, transcriptPath }, "Agent 中断完成");
 

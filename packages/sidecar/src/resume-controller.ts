@@ -220,7 +220,7 @@ export class ResumeController {
     );
 
     // 重新注入 Skill
-    const taskType = req.taskType ?? "default";
+    const taskType = req.taskType ?? predecessor.workerType ?? "default";
     await this.skillInjector.inject({
       worktreePath: predecessor.worktreePath,
       taskType,
