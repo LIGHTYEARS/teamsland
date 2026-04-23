@@ -657,6 +657,10 @@ export interface HooksConfig {
   defaultTimeoutMs: number;
   /** 是否允许多个 hook 匹配同一事件，默认 false */
   multiMatch: boolean;
+  /** 待审批 hooks 文件目录路径 */
+  pendingDir?: string;
+  /** 自动生成的 hook 是否需要人工审批 */
+  requireApproval?: boolean;
 }
 
 // ─── 聚合根类型 ───

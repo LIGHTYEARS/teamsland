@@ -145,6 +145,8 @@
   "hooks": {
     "hooksDir": "~/.teamsland/coordinator/hooks",
     "defaultTimeoutMs": 30000,
-    "multiMatch": false
+    "multiMatch": false,
+    "pendingDir": "~/.teamsland/coordinator/hooks-pending",
+    "requireApproval": true
   }
 }
