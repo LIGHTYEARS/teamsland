@@ -19,6 +19,8 @@ export type CoordinatorEventType =
   | "worker_completed"
   | "worker_anomaly"
   | "worker_timeout"
+  | "worker_interrupted"
+  | "worker_resumed"
   | "diagnosis_ready"
   | "user_query";
 

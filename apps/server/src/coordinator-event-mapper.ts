@@ -19,6 +19,8 @@ const TYPE_MAP: Record<string, CoordinatorEventType> = {
   meego_sprint_started: "meego_sprint_started",
   worker_completed: "worker_completed",
   worker_anomaly: "worker_anomaly",
+  worker_interrupted: "worker_interrupted",
+  worker_resumed: "worker_resumed",
   diagnosis_ready: "diagnosis_ready",
 };
 
@@ -35,7 +37,9 @@ const TYPE_MAP: Record<string, CoordinatorEventType> = {
 const PRIORITY_MAP: Record<string, number> = {
   worker_anomaly: 0,
   lark_mention: 1,
+  worker_interrupted: 1,
   worker_completed: 2,
+  worker_resumed: 2,
   diagnosis_ready: 2,
   meego_issue_created: 3,
   meego_issue_assigned: 4,
@@ -191,6 +195,26 @@ function flattenPayload(message: QueueMessage): Record<string, unknown> {
         targetWorkerId: p.targetWorkerId,
         observerWorkerId: p.observerWorkerId,
         report: p.report,
+      };
+    }
+    case "worker_interrupted": {
+      const p = payload as {
+        workerId: string;
+        reason: string;
+      };
+      return {
+        workerId: p.workerId,
+        reason: p.reason,
+      };
+    }
+    case "worker_resumed": {
+      const p = payload as {
+        workerId: string;
+        predecessorId: string;
+      };
+      return {
+        workerId: p.workerId,
+        predecessorId: p.predecessorId,
       };
     }
     default: {

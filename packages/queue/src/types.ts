@@ -49,6 +49,8 @@ export type QueueMessageType =
   | "meego_sprint_started"
   | "worker_completed"
   | "worker_anomaly"
+  | "worker_interrupted"
+  | "worker_resumed"
   | "diagnosis_ready";
 
 /**
@@ -130,7 +132,9 @@ export type QueuePayload =
   | MeegoEventPayload
   | WorkerCompletedPayload
   | WorkerAnomalyPayload
-  | DiagnosisReadyPayload;
+  | DiagnosisReadyPayload
+  | WorkerInterruptedPayload
+  | WorkerResumedPayload;
 
 /**
  * 飞书 @mention 事件负载
@@ -255,6 +259,50 @@ export interface DiagnosisReadyPayload {
   observerWorkerId: string;
   /** 诊断报告 */
   report: string;
+}
+
+/**
+ * Worker 被打断事件负载
+ *
+ * 当 Worker 被 InterruptController 中断时发出。
+ *
+ * @example
+ * ```typescript
+ * import type { WorkerInterruptedPayload } from "@teamsland/queue";
+ *
+ * const payload: WorkerInterruptedPayload = {
+ *   workerId: "worker-001",
+ *   reason: "诊断发现死循环",
+ * };
+ * ```
+ */
+export interface WorkerInterruptedPayload {
+  /** 被中断的 Worker ID */
+  workerId: string;
+  /** 中断原因 */
+  reason: string;
+}
+
+/**
+ * Worker 恢复事件负载
+ *
+ * 当中断的 Worker 通过 ResumeController 恢复时发出。
+ *
+ * @example
+ * ```typescript
+ * import type { WorkerResumedPayload } from "@teamsland/queue";
+ *
+ * const payload: WorkerResumedPayload = {
+ *   workerId: "worker-002",
+ *   predecessorId: "worker-001",
+ * };
+ * ```
+ */
+export interface WorkerResumedPayload {
+  /** 新 Worker ID */
+  workerId: string;
+  /** 前任 Worker ID（被中断的） */
+  predecessorId: string;
 }
 
 /**
