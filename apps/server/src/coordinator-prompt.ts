@@ -77,6 +77,8 @@ export class CoordinatorPromptBuilder {
     worker_timeout: (e) => this.buildWorkerTimeout(e),
     diagnosis_ready: (e) => this.buildDiagnosisReady(e),
     user_query: (e) => this.buildUserQuery(e),
+    worker_interrupted: (e) => this.buildWorkerInterrupted(e),
+    worker_resumed: (e) => this.buildWorkerResumed(e),
   };
 
   /**
@@ -359,19 +361,64 @@ export class CoordinatorPromptBuilder {
    */
   private buildDiagnosisReady(event: CoordinatorEvent): string {
     const { payload } = event;
-    const diagnosisId = extractString(payload, "diagnosisId");
-    const summary = extractString(payload, "summary");
+    const targetWorkerId = extractString(payload, "targetWorkerId");
+    const observerWorkerId = extractString(payload, "observerWorkerId");
+    const report = extractString(payload, "report");
 
     return [
       "## 诊断报告就绪",
       "",
-      `诊断 ID: ${diagnosisId}`,
-      `摘要: ${summary}`,
+      `目标 Worker: ${targetWorkerId}`,
+      `观察者 Worker: ${observerWorkerId}`,
+      `诊断报告:`,
+      report,
       `时间: ${formatTimestamp(event.timestamp)}`,
       "",
       "---",
       "",
-      "请审阅诊断结果并决定后续行动。",
+      "请审阅诊断结果并决定后续行动：中断并恢复 / 继续观察 / 注入提示。",
+    ].join("\n");
+  }
+
+  /**
+   * 生成 Worker 中断事件的提示词
+   */
+  private buildWorkerInterrupted(event: CoordinatorEvent): string {
+    const { payload } = event;
+    const workerId = extractString(payload, "workerId");
+    const reason = extractString(payload, "reason");
+
+    return [
+      "## Worker 已中断",
+      "",
+      `Worker ID: ${workerId}`,
+      `中断原因: ${reason}`,
+      `时间: ${formatTimestamp(event.timestamp)}`,
+      "",
+      "---",
+      "",
+      "Worker 已被中断，请确认是否需要进一步处理。",
+    ].join("\n");
+  }
+
+  /**
+   * 生成 Worker 恢复事件的提示词
+   */
+  private buildWorkerResumed(event: CoordinatorEvent): string {
+    const { payload } = event;
+    const workerId = extractString(payload, "workerId");
+    const predecessorId = extractString(payload, "predecessorId");
+
+    return [
+      "## Worker 已恢复",
+      "",
+      `新 Worker ID: ${workerId}`,
+      `前任 Worker ID: ${predecessorId}`,
+      `时间: ${formatTimestamp(event.timestamp)}`,
+      "",
+      "---",
+      "",
+      "中断的 Worker 已通过 relay 方式恢复运行，请持续关注。",
     ].join("\n");
   }
 
