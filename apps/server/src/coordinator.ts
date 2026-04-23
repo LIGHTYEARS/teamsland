@@ -1,6 +1,8 @@
 // @teamsland/server — Coordinator Session Manager
 // 核心状态机：管理 Claude Code Coordinator 会话的生命周期
 
+import { unlink } from "node:fs/promises";
+import { join } from "node:path";
 import { createLogger } from "@teamsland/observability";
 import type {
   ActiveSession,
@@ -131,6 +133,77 @@ export interface CoordinatorSessionManagerOpts {
   promptBuilder?: CoordinatorPromptBuilderLike;
   /** 子进程生成函数（可选，默认使用 Bun.spawn） */
   spawnFn?: SpawnFn;
+}
+
+// ─── Session 持久化 ───
+
+const SESSION_FILE = ".session.json";
+
+/**
+ * 持久化 Session 数据结构
+ *
+ * @example
+ * ```typescript
+ * import type { PersistedSession } from "./coordinator.js";
+ *
+ * const session: PersistedSession = {
+ *   sessionId: "sess-001",
+ *   chatId: "oc_xxx",
+ *   startedAt: Date.now(),
+ *   processedEvents: ["evt-1"],
+ * };
+ * ```
+ */
+export interface PersistedSession {
+  /** Claude Code Session ID */
+  sessionId: string;
+  /** 关联的 Chat ID */
+  chatId: string | undefined;
+  /** 开始时间 (Unix ms) */
+  startedAt: number;
+  /** 已处理事件 ID 列表 */
+  processedEvents: string[];
+}
+
+/**
+ * 持久化当前 Session 到磁盘
+ *
+ * 传入 null 则删除持久化文件。使用 .tmp + rename 保证原子写入。
+ *
+ * @example
+ * ```typescript
+ * await persistSession("/path/to/workspace", { sessionId: "sess-001", chatId: "oc_xxx", startedAt: Date.now(), processedEvents: [] });
+ * await persistSession("/path/to/workspace", null); // 清除
+ * ```
+ */
+export async function persistSession(workspacePath: string, session: PersistedSession | null): Promise<void> {
+  const filePath = join(workspacePath, SESSION_FILE);
+  if (!session) {
+    await unlink(filePath).catch(() => {});
+    return;
+  }
+  const tmpPath = `${filePath}.tmp`;
+  await Bun.write(tmpPath, JSON.stringify(session));
+  const { rename } = await import("node:fs/promises");
+  await rename(tmpPath, filePath);
+}
+
+/**
+ * 从磁盘加载持久化 Session
+ *
+ * @returns PersistedSession 或 null（文件不存在时）
+ *
+ * @example
+ * ```typescript
+ * const session = await loadSession("/path/to/workspace");
+ * if (session) console.log(session.sessionId);
+ * ```
+ */
+export async function loadSession(workspacePath: string): Promise<PersistedSession | null> {
+  const filePath = join(workspacePath, SESSION_FILE);
+  const file = Bun.file(filePath);
+  if (!(await file.exists())) return null;
+  return JSON.parse(await file.text()) as PersistedSession;
 }
 
 /**
@@ -349,6 +422,13 @@ export class CoordinatorSessionManager {
     this.state = "running";
     this.scheduleIdleTimeout();
 
+    await persistSession(this.config.workspacePath, {
+      sessionId: this.activeSession.sessionId,
+      chatId: this.activeSession.chatId,
+      startedAt: this.activeSession.startedAt,
+      processedEvents: this.activeSession.processedEvents,
+    });
+
     logger.info({ sessionId, pid: proc.pid, eventId: event.id }, "Coordinator session 已启动");
   }
 
@@ -393,6 +473,13 @@ export class CoordinatorSessionManager {
     this.activeSession.lastActivityAt = Date.now();
     this.activeSession.processedEvents.push(event.id);
     this.scheduleIdleTimeout();
+
+    await persistSession(this.config.workspacePath, {
+      sessionId: this.activeSession.sessionId,
+      chatId: this.activeSession.chatId,
+      startedAt: this.activeSession.startedAt,
+      processedEvents: this.activeSession.processedEvents,
+    });
 
     logger.info(
       { sessionId, eventId: event.id, processedCount: this.activeSession.processedEvents.length },
@@ -522,6 +609,9 @@ export class CoordinatorSessionManager {
         "Coordinator session 已销毁",
       );
       this.activeSession = null;
+      persistSession(this.config.workspacePath, null).catch((err: unknown) => {
+        logger.warn({ err }, "清除持久化 session 失败");
+      });
     }
   }
 
