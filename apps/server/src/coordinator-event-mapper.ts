@@ -78,11 +78,21 @@ function flattenPayload(message: QueueMessage): Record<string, unknown> {
           payload: Record<string, unknown>;
         };
       };
+      // LarkConnector 将消息文本放入 event.payload.title，
+      // 将聊天历史上下文放入 event.payload.description
+      const eventPayload = p.event.payload;
+      const message =
+        typeof eventPayload.title === "string"
+          ? eventPayload.title
+          : typeof eventPayload.description === "string"
+            ? eventPayload.description
+            : undefined;
       return {
         chatId: p.chatId,
         senderId: p.senderId,
         messageId: p.messageId,
-        message: typeof p.event.payload.message === "string" ? p.event.payload.message : undefined,
+        message,
+        chatContext: typeof eventPayload.description === "string" ? eventPayload.description : undefined,
         issueId: p.event.issueId,
         projectKey: p.event.projectKey,
       };

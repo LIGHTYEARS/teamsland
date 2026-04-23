@@ -77,11 +77,9 @@ function createMockSpawnFn(): SpawnFn {
     (): SpawnedProcess => ({
       pid: 12345,
       stdin: {
-        getWriter: () =>
-          ({
-            write: vi.fn().mockResolvedValue(undefined),
-            close: vi.fn().mockResolvedValue(undefined),
-          }) as unknown as WritableStreamDefaultWriter<Uint8Array>,
+        write: vi.fn().mockReturnValue(0),
+        flush: vi.fn(),
+        end: vi.fn(),
       },
       stdout: new ReadableStream({
         start(controller) {

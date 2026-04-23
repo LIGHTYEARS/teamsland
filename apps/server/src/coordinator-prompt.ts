@@ -158,28 +158,36 @@ export class CoordinatorPromptBuilder {
    */
   private buildLarkMention(event: CoordinatorEvent): string {
     const { payload } = event;
-    const chatName = extractString(payload, "chatName");
     const chatId = extractString(payload, "chatId");
-    const senderName = extractString(payload, "senderName");
     const senderId = extractString(payload, "senderId");
     const message = extractString(payload, "message");
     const messageId = extractString(payload, "messageId");
+    const chatContext = extractString(payload, "chatContext", "");
 
-    return [
+    const parts = [
       "## 新消息",
       "",
-      `群聊「${chatName}」(ID: ${chatId}) 中，${senderName} (ID: ${senderId}) 说：`,
+      `群聊 (ID: ${chatId}) 中，用户 (ID: ${senderId}) 说：`,
       "",
       `> ${message}`,
       "",
       `消息 ID: ${messageId}`,
       `时间: ${formatTimestamp(event.timestamp)}`,
+    ];
+
+    if (chatContext && chatContext !== message) {
+      parts.push("", "### 聊天上下文", "", chatContext);
+    }
+
+    parts.push(
       "",
       "---",
       "",
       "请按照决策流程处理这条消息。如果需要 spawn worker，确保在 --task 中包含 --origin-chat " +
         `"${chatId}" 以便 worker 完成后回复。`,
-    ].join("\n");
+    );
+
+    return parts.join("\n");
   }
 
   /**

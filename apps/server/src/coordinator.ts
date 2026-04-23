@@ -49,15 +49,33 @@ interface StreamJsonInit {
 }
 
 /**
+ * Bun FileSink 接口（Bun.spawn stdin="pipe" 返回类型）
+ *
+ * @example
+ * ```typescript
+ * const sink: BunFileSink = proc.stdin;
+ * sink.write("hello");
+ * sink.flush();
+ * sink.end();
+ * ```
+ */
+export interface BunFileSink {
+  write(data: string | Uint8Array | ArrayBuffer): number;
+  flush(): void;
+  end(): void;
+}
+
+/**
  * 子进程生成结果接口
  *
  * 描述 Bun.spawn 的返回结构中 CoordinatorSessionManager 需要的字段。
+ * stdin 为 Bun 的 FileSink 类型，使用 .write()/.flush()/.end() 而非 Web Streams API。
  *
  * @example
  * ```typescript
  * const result: SpawnedProcess = {
  *   pid: 12345,
- *   stdin: { getWriter: () => writer },
+ *   stdin: { write: () => 0, flush: () => {}, end: () => {} },
  *   stdout: new ReadableStream(),
  *   stderr: new ReadableStream(),
  *   exited: Promise.resolve(0),
@@ -67,8 +85,8 @@ interface StreamJsonInit {
 export interface SpawnedProcess {
   /** 进程 ID */
   pid: number;
-  /** 标准输入（用于写入提示词） */
-  stdin: { getWriter: () => WritableStreamDefaultWriter<Uint8Array> };
+  /** 标准输入（Bun FileSink — 用于写入提示词） */
+  stdin: BunFileSink;
   /** 标准输出（用于读取结果） */
   stdout: ReadableStream<Uint8Array>;
   /** 标准错误 */
@@ -306,10 +324,10 @@ export class CoordinatorSessionManager {
       },
     );
 
-    // 写入提示词并关闭 stdin
-    const writer = proc.stdin.getWriter();
-    await writer.write(new TextEncoder().encode(prompt));
-    await writer.close();
+    // 写入提示词并关闭 stdin（Bun FileSink API）
+    proc.stdin.write(new TextEncoder().encode(prompt));
+    proc.stdin.flush();
+    proc.stdin.end();
 
     // 收集输出（含超时）
     const output = await this.collectOutput(proc);
@@ -366,9 +384,9 @@ export class CoordinatorSessionManager {
       },
     );
 
-    const writer = proc.stdin.getWriter();
-    await writer.write(new TextEncoder().encode(prompt));
-    await writer.close();
+    proc.stdin.write(new TextEncoder().encode(prompt));
+    proc.stdin.flush();
+    proc.stdin.end();
 
     await this.collectOutput(proc);
 

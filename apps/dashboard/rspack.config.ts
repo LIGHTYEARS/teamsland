@@ -6,7 +6,13 @@ const isDev = process.env.NODE_ENV === "development";
 
 export default defineConfig({
   entry: { main: "./src/index.tsx" },
-  resolve: { extensions: [".ts", ".tsx", ".js", ".jsx"] },
+  resolve: {
+    extensions: [".ts", ".tsx", ".js", ".jsx"],
+    extensionAlias: {
+      ".js": [".ts", ".tsx", ".js"],
+      ".jsx": [".tsx", ".jsx"],
+    },
+  },
   experiments: { css: true },
   module: {
     rules: [

@@ -140,7 +140,7 @@
     "sessionReuseWindowMs": 300000,
     "maxRecoveryRetries": 3,
     "inferenceTimeoutMs": 60000,
-    "enabled": false
+    "enabled": true
   },
   "hooks": {
     "hooksDir": "~/.teamsland/coordinator/hooks",
