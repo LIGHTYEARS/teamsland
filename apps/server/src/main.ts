@@ -1,8 +1,12 @@
 // @teamsland/server — main process entry point
 // 启动编排、优雅关闭
 
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { TeamMemoryStore } from "@teamsland/memory";
 import { createLogger, shutdownTracing } from "@teamsland/observability";
 import { toCoordinatorEvent } from "./coordinator-event-mapper.js";
+import { verifyWorkspaceIntegrity } from "./coordinator-init.js";
 import { initConfigAndLogging } from "./init/config-and-logging.js";
 import { initContext } from "./init/context.js";
 import { initCoordinator } from "./init/coordinator.js";
@@ -12,7 +16,7 @@ import { initHooks } from "./init/hooks.js";
 import { initLark } from "./init/lark.js";
 import { initScheduledTasks } from "./init/scheduled-tasks.js";
 import { initSidecar } from "./init/sidecar.js";
-import { initStorage } from "./init/storage.js";
+import { initStorage, TEAM_ID } from "./init/storage.js";
 
 (async () => {
   try {
@@ -54,13 +58,37 @@ import { initStorage } from "./init/storage.js";
     hooks.queueRef.current = queue;
 
     // ── Phase 5.5: Coordinator ──
-    const coordinator = await initCoordinator(config, queue, sidecar.registry, controller, logger);
+    const memoryStoreForCoordinator = storage.memoryStore instanceof TeamMemoryStore ? storage.memoryStore : null;
+    const coordinator = await initCoordinator(
+      config,
+      queue,
+      sidecar.registry,
+      controller,
+      logger,
+      memoryStoreForCoordinator,
+      storage.embedder,
+      TEAM_ID,
+    );
     if (coordinator.manager) {
       queue.consume(async (msg) => {
         const event = toCoordinatorEvent(msg);
         await coordinator.manager?.processEvent(event);
       });
       logger.info("Coordinator 队列消费者已注册");
+    }
+
+    // ── Phase 5.6: Workspace 完整性校验 ──
+    if (config.coordinator?.enabled) {
+      const workspacePath = config.coordinator.workspacePath?.startsWith("~")
+        ? join(homedir(), config.coordinator.workspacePath.slice(1))
+        : (config.coordinator.workspacePath ?? join(homedir(), ".teamsland/coordinator"));
+      const integrity = await verifyWorkspaceIntegrity(workspacePath);
+      if (!integrity.ok) {
+        logger.warn(
+          { missing: integrity.missing },
+          "Coordinator workspace 完整性检查失败，缺失文件将在下次 init 时重建",
+        );
+      }
     }
 
     // ── Phase 6: Dashboard ──
@@ -90,6 +118,7 @@ import { initStorage } from "./init/storage.js";
       timers.clearAll();
       if (sidecar.orphanTimer) clearInterval(sidecar.orphanTimer);
       if (coordinator.manager) coordinator.manager.reset();
+      if (coordinator.anomalyDetector) coordinator.anomalyDetector.stopAll();
       if (hooks.engine) hooks.engine.stop();
       dashboard.server.stop();
       await shutdownTracing();

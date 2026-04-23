@@ -106,6 +106,9 @@ export async function initEvents(
     extractLoop: context.extractLoop,
     memoryUpdater: context.memoryUpdater,
     confirmationWatcher: context.confirmationWatcher,
+    coordinatorManager: null,
+    interruptController: sidecar.interruptController ?? null,
+    observerController: sidecar.observerController ?? null,
   };
 
   // 注册旧 EventBus 处理器（双写路径 A）
