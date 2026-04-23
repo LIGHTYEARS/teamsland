@@ -3,7 +3,15 @@
 import type { LarkNotifier } from "@teamsland/lark";
 import { createLogger } from "@teamsland/observability";
 import type { SessionDB } from "@teamsland/session";
-import { ObservableMessageBus, ProcessController, SidecarDataPlane, SubagentRegistry } from "@teamsland/sidecar";
+import {
+  InterruptController,
+  ObservableMessageBus,
+  ObserverController,
+  ProcessController,
+  SidecarDataPlane,
+  SubagentRegistry,
+  TranscriptReader,
+} from "@teamsland/sidecar";
 import type { AppConfig } from "@teamsland/types";
 
 /**
@@ -28,6 +36,12 @@ export interface SidecarResult {
   dataPlane: SidecarDataPlane;
   /** 孤儿清理定时器（可能为 null） */
   orphanTimer: ReturnType<typeof setInterval> | null;
+  /** 中断控制器 */
+  interruptController: InterruptController;
+  /** 观察者控制器 */
+  observerController: ObserverController;
+  /** Transcript 读取器 */
+  transcriptReader: TranscriptReader;
 }
 
 /**
@@ -79,5 +93,33 @@ export async function initSidecar(
   const dataPlane = new SidecarDataPlane({ registry, sessionDb, logger, messageBus });
   logger.info("SidecarDataPlane 已初始化");
 
-  return { processController, registry, messageBus, dataPlane, orphanTimer };
+  // TranscriptReader
+  const transcriptReader = new TranscriptReader(createLogger("sidecar:transcript"));
+
+  // InterruptController
+  const interruptController = new InterruptController(
+    processController,
+    registry,
+    transcriptReader,
+    createLogger("sidecar:interrupt"),
+  );
+
+  // ObserverController
+  const observerController = new ObserverController(
+    registry,
+    processController,
+    transcriptReader,
+    createLogger("sidecar:observer"),
+  );
+
+  return {
+    processController,
+    registry,
+    messageBus,
+    dataPlane,
+    orphanTimer,
+    interruptController,
+    observerController,
+    transcriptReader,
+  };
 }
