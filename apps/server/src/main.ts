@@ -55,6 +55,7 @@ import { getVikingClient, initViking } from "./init/viking.js";
       hooks.engine,
       hooks.hookContext,
       hooks.metricsCollector,
+      getVikingClient(viking),
     );
 
     // 将 PersistentQueue 绑定到 Hook 上下文的延迟引用

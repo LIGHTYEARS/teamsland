@@ -3,6 +3,7 @@
 import type { HookContext, HookEngine, HookMetricsCollector } from "@teamsland/hooks";
 import { LarkConnector } from "@teamsland/lark";
 import { MeegoConnector, MeegoEventBus } from "@teamsland/meego";
+import type { IVikingMemoryClient } from "@teamsland/memory";
 import { TeamMemoryStore } from "@teamsland/memory";
 import type { createLogger } from "@teamsland/observability";
 import type { EnqueueOptions } from "@teamsland/queue";
@@ -55,6 +56,7 @@ export interface EventsResult {
  * @param hookEngine - Hook 引擎实例（可选，传入时事件先经过 hook 层拦截）
  * @param hookContext - Hook 运行时上下文（hookEngine 存在时必须提供）
  * @param hookMetricsCollector - Hook 指标收集器（hookEngine 存在时必须提供）
+ * @param vikingClient - OpenViking 客户端（worker 完成时写回记忆，可选）
  * @returns EventsResult，包含 eventBus 和 queue
  *
  * @example
@@ -76,6 +78,7 @@ export async function initEvents(
   hookEngine?: HookEngine | null,
   hookContext?: HookContext | null,
   hookMetricsCollector?: HookMetricsCollector | null,
+  vikingClient?: IVikingMemoryClient | null,
 ): Promise<EventsResult> {
   // PersistentQueue
   const queue = new PersistentQueue({
@@ -109,6 +112,7 @@ export async function initEvents(
     coordinatorManager: null,
     interruptController: sidecar.interruptController ?? null,
     observerController: sidecar.observerController ?? null,
+    vikingClient: vikingClient ?? null,
   };
 
   // 注册旧 EventBus 处理器（双写路径 A）
