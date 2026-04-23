@@ -208,7 +208,7 @@ describe("coordinator-event-mapper", () => {
           issueId: "I1",
           projectKey: "P1",
           type: "issue.created",
-          payload: { message: "帮我看看这个问题" },
+          payload: { title: "帮我看看这个问题" },
           timestamp: 0,
         },
         chatId: "oc_xxx",
@@ -221,6 +221,7 @@ describe("coordinator-event-mapper", () => {
         senderId: "ou_xxx",
         messageId: "msg_xxx",
         message: "帮我看看这个问题",
+        chatContext: undefined,
         issueId: "I1",
         projectKey: "P1",
       });

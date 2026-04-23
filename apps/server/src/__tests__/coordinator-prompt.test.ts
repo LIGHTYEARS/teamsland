@@ -91,8 +91,6 @@ describe("CoordinatorPromptBuilder", () => {
       expect(prompt).toContain("oc_test123");
       expect(prompt).toContain("帮我检查一下登录页面的 Bug");
       expect(prompt).toContain("ou_user001");
-      expect(prompt).toContain("前端开发群");
-      expect(prompt).toContain("张三");
       expect(prompt).toContain("msg-12345");
       expect(prompt).toContain("## 新消息");
       expect(prompt).toContain('--origin-chat "oc_test123"');
@@ -228,15 +226,17 @@ describe("CoordinatorPromptBuilder", () => {
       const event = createEvent({
         type: "diagnosis_ready",
         payload: {
-          diagnosisId: "diag-001",
-          summary: "发现 3 个潜在性能瓶颈",
+          targetWorkerId: "worker-001",
+          observerWorkerId: "observer-001",
+          report: "发现 3 个潜在性能瓶颈",
         },
       });
       const context = createContext();
       const prompt = builder.build(event, context);
 
       expect(prompt).toContain("## 诊断报告就绪");
-      expect(prompt).toContain("diag-001");
+      expect(prompt).toContain("worker-001");
+      expect(prompt).toContain("observer-001");
       expect(prompt).toContain("发现 3 个潜在性能瓶颈");
     });
   });

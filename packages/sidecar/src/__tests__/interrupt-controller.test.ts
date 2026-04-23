@@ -48,6 +48,7 @@ describe("InterruptController", () => {
 
     const registry = {
       get: vi.fn().mockReturnValue(record),
+      persist: vi.fn().mockResolvedValue(undefined),
     } as unknown as SubagentRegistry;
 
     const transcriptReader = {
@@ -79,6 +80,7 @@ describe("InterruptController", () => {
 
     const registry = {
       get: vi.fn().mockReturnValue(record),
+      persist: vi.fn().mockResolvedValue(undefined),
     } as unknown as SubagentRegistry;
 
     const transcriptReader = {
