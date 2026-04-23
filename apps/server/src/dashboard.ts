@@ -448,24 +448,19 @@ interface WsClientMessage {
 }
 
 /**
- * 处理 WebSocket 客户端消息
- *
- * 根据消息类型分派到对应的处理逻辑：
- * - `terminal-start`: 创建终端会话
- * - `terminal-input`: 向终端写入数据
- * - `terminal-stop`: 关闭终端会话
- * - 其他类型记录调试日志
- *
- * @param ws - WebSocket 连接实例
- * @param message - 原始消息数据
- * @param terminalService - 终端服务实例
+ * 处理 WebSocket 客户端消息，分派到终端消息处理或记录未识别类型
  *
  * @example
  * ```typescript
- * handleWsMessage(ws, rawMessage, terminalService);
+ * handleWsMessage(ws, rawMessage, terminalService, wsTerminals);
  * ```
  */
-function handleWsMessage(ws: unknown, message: string | Buffer, terminalService: TerminalService): void {
+function handleWsMessage(
+  ws: unknown,
+  message: string | Buffer,
+  terminalService: TerminalService,
+  wsTerminals: Map<unknown, Set<string>>,
+): void {
   let parsed: WsClientMessage;
   try {
     parsed = JSON.parse(String(message)) as WsClientMessage;
@@ -476,28 +471,8 @@ function handleWsMessage(ws: unknown, message: string | Buffer, terminalService:
 
   const sender = ws as { send(data: string): void };
 
-  if (parsed.type === "terminal-start") {
-    handleTerminalStart(parsed, sender, terminalService).catch((err: unknown) => {
-      logger.error({ err }, "终端启动处理失败");
-    });
-    return;
-  }
-
-  if (parsed.type === "terminal-input") {
-    const id = typeof parsed.id === "string" ? parsed.id : "";
-    const data = typeof parsed.data === "string" ? parsed.data : "";
-    if (id && data) {
-      terminalService.write(id, data);
-    }
-    return;
-  }
-
-  if (parsed.type === "terminal-stop") {
-    const id = typeof parsed.id === "string" ? parsed.id : "";
-    if (id) {
-      terminalService.destroy(id);
-      sender.send(JSON.stringify({ type: "terminal-stopped", id }));
-    }
+  if (parsed.type.startsWith("terminal-")) {
+    handleTerminalMessage(parsed, sender, terminalService, ws, wsTerminals);
     return;
   }
 
@@ -505,66 +480,163 @@ function handleWsMessage(ws: unknown, message: string | Buffer, terminalService:
 }
 
 /**
- * 处理终端启动请求
- *
- * 创建终端会话并异步将 stdout 数据转发到 WebSocket 客户端。
- *
- * @param parsed - 解析后的消息
- * @param sender - WebSocket 发送器
- * @param terminalService - 终端服务实例
+ * 分派 terminal-start/input/resize/stop 消息到对应处理逻辑
  *
  * @example
  * ```typescript
- * await handleTerminalStart({ type: "terminal-start", id: "t1", cwd: "/tmp" }, sender, terminalService);
+ * handleTerminalMessage(parsed, sender, terminalService, ws, wsTerminals);
+ * ```
+ */
+function handleTerminalMessage(
+  parsed: WsClientMessage,
+  sender: { send(data: string): void },
+  terminalService: TerminalService,
+  ws: unknown,
+  wsTerminals: Map<unknown, Set<string>>,
+): void {
+  switch (parsed.type) {
+    case "terminal-start":
+      handleTerminalStart(parsed, sender, terminalService, ws, wsTerminals).catch((err: unknown) => {
+        logger.error({ err }, "终端启动处理失败");
+      });
+      break;
+    case "terminal-input":
+      handleTerminalInput(parsed, terminalService);
+      break;
+    case "terminal-resize":
+      handleTerminalResize(parsed, terminalService);
+      break;
+    case "terminal-stop":
+      handleTerminalStop(parsed, sender, terminalService, ws, wsTerminals);
+      break;
+    default:
+      logger.debug({ type: parsed.type }, "WebSocket 收到未识别的终端消息类型");
+  }
+}
+
+/** 处理终端输入消息 */
+function handleTerminalInput(parsed: WsClientMessage, terminalService: TerminalService): void {
+  const id = typeof parsed.id === "string" ? parsed.id : "";
+  const data = typeof parsed.data === "string" ? parsed.data : "";
+  if (id && data) {
+    terminalService.write(id, data);
+  }
+}
+
+/** 处理终端尺寸调整消息 */
+function handleTerminalResize(parsed: WsClientMessage, terminalService: TerminalService): void {
+  const id = typeof parsed.id === "string" ? parsed.id : "";
+  const cols = typeof parsed.cols === "number" ? Math.trunc(Math.min(Math.max(parsed.cols, 1), 500)) : 0;
+  const rows = typeof parsed.rows === "number" ? Math.trunc(Math.min(Math.max(parsed.rows, 1), 500)) : 0;
+  if (id && cols > 0 && rows > 0) {
+    terminalService.resize(id, cols, rows);
+  }
+}
+
+/** 处理终端停止消息 */
+function handleTerminalStop(
+  parsed: WsClientMessage,
+  sender: { send(data: string): void },
+  terminalService: TerminalService,
+  ws: unknown,
+  wsTerminals: Map<unknown, Set<string>>,
+): void {
+  const id = typeof parsed.id === "string" ? parsed.id : "";
+  if (!id) return;
+
+  terminalService.destroy(id);
+  wsTerminals.get(ws)?.delete(id);
+  try {
+    sender.send(JSON.stringify({ type: "terminal-stopped", id }));
+  } catch {
+    // WebSocket 可能已断开
+  }
+}
+
+/**
+ * 创建 PTY 终端会话，通过回调将输出数据实时转发到 WebSocket 客户端
+ *
+ * @example
+ * ```typescript
+ * await handleTerminalStart(parsed, sender, terminalService, ws, wsTerminals);
  * ```
  */
 async function handleTerminalStart(
   parsed: WsClientMessage,
   sender: { send(data: string): void },
   terminalService: TerminalService,
+  ws: unknown,
+  wsTerminals: Map<unknown, Set<string>>,
 ): Promise<void> {
   const id = typeof parsed.id === "string" ? parsed.id : `term-${Date.now()}`;
   const cwd = typeof parsed.cwd === "string" ? parsed.cwd : process.cwd();
 
-  const validatedCwd = await validatePath(cwd);
+  let validatedCwd: string | null;
+  try {
+    validatedCwd = await validatePath(cwd);
+  } catch (err) {
+    logger.error({ err, cwd }, "终端工作目录验证异常");
+    try {
+      sender.send(JSON.stringify({ type: "terminal-error", id, error: "工作目录验证失败" }));
+    } catch {
+      // WebSocket 可能已断开
+    }
+    return;
+  }
   if (!validatedCwd) {
     sender.send(JSON.stringify({ type: "terminal-error", id, error: "工作目录路径无效" }));
     return;
   }
 
-  const stdout = terminalService.create(id, validatedCwd);
-  if (!stdout) {
+  const decoder = new TextDecoder();
+  const ok = terminalService.create(id, validatedCwd, {
+    cols: typeof parsed.cols === "number" ? parsed.cols : undefined,
+    rows: typeof parsed.rows === "number" ? parsed.rows : undefined,
+    onData: (data) => {
+      try {
+        const text = decoder.decode(data, { stream: true });
+        sender.send(JSON.stringify({ type: "terminal-output", id, data: text }));
+      } catch {
+        // WebSocket 可能已断开
+      }
+    },
+    onExit: () => {
+      // flush TextDecoder 残留的不完整 UTF-8 字节
+      try {
+        const remaining = decoder.decode();
+        if (remaining) {
+          sender.send(JSON.stringify({ type: "terminal-output", id, data: remaining }));
+        }
+      } catch {
+        // WebSocket 可能已断开
+      }
+      // 仅在会话仍存在时（即非主动 destroy）发送 stopped
+      if (terminalService.has(id)) {
+        terminalService.destroy(id);
+        wsTerminals.get(ws)?.delete(id);
+        try {
+          sender.send(JSON.stringify({ type: "terminal-stopped", id }));
+        } catch {
+          // WebSocket 可能已断开
+        }
+      }
+    },
+  });
+
+  if (!ok) {
     sender.send(JSON.stringify({ type: "terminal-error", id, error: "终端会话已存在" }));
     return;
   }
 
+  // 注册 ws → terminal 映射
+  let termIds = wsTerminals.get(ws);
+  if (!termIds) {
+    termIds = new Set();
+    wsTerminals.set(ws, termIds);
+  }
+  termIds.add(id);
+
   sender.send(JSON.stringify({ type: "terminal-started", id }));
-
-  // 异步读取 stdout 并转发到 WebSocket
-  const reader = stdout.getReader();
-  const decoder = new TextDecoder();
-
-  const pump = async () => {
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const text = decoder.decode(value, { stream: true });
-        try {
-          sender.send(JSON.stringify({ type: "terminal-output", id, data: text }));
-        } catch {
-          // WebSocket 可能已断开
-          break;
-        }
-      }
-    } catch {
-      // 进程可能已退出
-    } finally {
-      reader.releaseLock();
-    }
-  };
-
-  pump().catch(() => {});
 }
 
 /**
@@ -595,7 +667,7 @@ async function handleTerminalStart(
  * - `POST /api/hooks/:filename/approve` — 审批通过 Hook (需认证)
  * - `POST /api/hooks/:filename/reject` — 拒绝 Hook (需认证)
  * - `GET /api/hooks/evolution-log` — 进化日志 (需认证)
- * - `GET /api/ws` — WebSocket 升级（支持 terminal-start/input/stop）
+ * - `GET /api/ws` — WebSocket 升级（支持 terminal-start/input/resize/stop）
  *
  * @param deps - Dashboard 依赖
  * @param signal - 可选的 AbortSignal，用于优雅关闭
@@ -627,6 +699,8 @@ export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): Retur
     appConfig,
   } = deps;
   const clients = new Set<unknown>();
+  /** 追踪每个 WebSocket 连接关联的终端会话 ID，用于连接断开时自动清理 */
+  const wsTerminals = new Map<unknown, Set<string>>();
   const authEnabled = config.auth.provider === "lark_oauth" && authManager;
   const terminalService = new TerminalService();
 
@@ -673,10 +747,18 @@ export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): Retur
         logger.debug({ clientCount: clients.size }, "WebSocket 客户端已连接");
       },
       message(ws, message) {
-        handleWsMessage(ws, message, terminalService);
+        handleWsMessage(ws, message, terminalService, wsTerminals);
       },
       close(ws) {
         clients.delete(ws);
+        // 清理该连接关联的所有终端会话
+        const termIds = wsTerminals.get(ws);
+        if (termIds) {
+          for (const id of termIds) {
+            terminalService.destroy(id);
+          }
+          wsTerminals.delete(ws);
+        }
         logger.debug({ clientCount: clients.size }, "WebSocket 客户端已断开");
       },
     },
@@ -689,6 +771,7 @@ export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): Retur
       logger.info("收到 AbortSignal，正在关闭 Dashboard 服务");
       unsubscribe();
       terminalService.destroyAll();
+      wsTerminals.clear();
       for (const ws of clients) {
         try {
           (ws as { close(): void }).close();

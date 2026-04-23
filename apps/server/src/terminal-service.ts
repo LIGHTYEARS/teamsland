@@ -1,4 +1,4 @@
-// @teamsland/server — 终端会话管理服务
+// @teamsland/server — 终端会话管理服务（基于 Bun 原生 PTY）
 // 管理通过 WebSocket 连接的交互式 Shell 会话
 
 import { createLogger } from "@teamsland/observability";
@@ -6,20 +6,37 @@ import { createLogger } from "@teamsland/observability";
 const logger = createLogger("server:terminal");
 
 /**
+ * PTY 终端会话创建选项
+ *
+ * @example
+ * ```typescript
+ * const options: TerminalCreateOptions = {
+ *   cols: 120,
+ *   rows: 30,
+ *   onData: (data) => ws.send(data),
+ *   onExit: () => console.log("终端已退出"),
+ * };
+ * ```
+ */
+interface TerminalCreateOptions {
+  /** 终端列数 */
+  cols?: number;
+  /** 终端行数 */
+  rows?: number;
+  /** PTY 输出数据回调 */
+  onData: (data: Uint8Array) => void;
+  /** PTY 退出回调 */
+  onExit?: () => void;
+}
+
+/**
  * 终端会话
  *
- * 封装一个 Bun.spawn 创建的 Shell 子进程，关联 WebSocket 连接以实现双向通信。
+ * 封装一个通过 Bun PTY 创建的交互式 Shell 子进程。
  *
  * @example
  * ```typescript
  * import type { TerminalSession } from "./terminal-service.js";
- *
- * const session: TerminalSession = {
- *   id: "term_001",
- *   proc: Bun.spawn(["bash"], { stdout: "pipe", stdin: "pipe" }),
- *   cwd: "/Users/dev/project",
- *   createdAt: Date.now(),
- * };
  * ```
  */
 interface TerminalSession {
@@ -34,18 +51,23 @@ interface TerminalSession {
 }
 
 /**
- * 终端服务
+ * 终端服务（Bun 原生 PTY）
  *
- * 管理多个终端会话的生命周期。每个终端会话通过 Bun.spawn 启动一个交互式 Shell 进程，
- * 使用 stdin/stdout pipe 进行双向数据传输。
+ * 管理多个终端会话的生命周期。每个终端会话通过 Bun.spawn 的 `terminal` 选项
+ * 启动一个真正的 PTY 交互式 Shell 进程，支持完整的终端语义：颜色、readline、
+ * tab 补全、交互式程序（vim、less 等）。
  *
  * @example
  * ```typescript
  * import { TerminalService } from "./terminal-service.js";
  *
  * const service = new TerminalService();
- * const session = service.create("term_001", "/Users/dev/project");
+ * service.create("term_001", "/Users/dev/project", {
+ *   onData: (data) => ws.send(data),
+ *   onExit: () => console.log("退出"),
+ * });
  * service.write("term_001", "ls -la\n");
+ * service.resize("term_001", 100, 40);
  * service.destroy("term_001");
  * ```
  */
@@ -53,41 +75,47 @@ export class TerminalService {
   private sessions = new Map<string, TerminalSession>();
 
   /**
-   * 创建终端会话
+   * 创建终端会话（PTY 模式）
    *
-   * 在指定工作目录启动一个新的交互式 Shell 进程。
-   * 返回一个 ReadableStream 供调用方读取 Shell 输出。
+   * 在指定工作目录启动一个新的交互式 Shell 进程。通过 Bun 原生 PTY 支持
+   * 提供完整的终端体验，输出通过回调异步推送。
    *
    * @param id - 终端会话 ID
    * @param cwd - 工作目录
-   * @returns Shell stdout ReadableStream，或 null（ID 已存在时）
+   * @param options - PTY 创建选项（列/行数、数据回调）
+   * @returns 是否创建成功
    *
    * @example
    * ```typescript
-   * const stdout = service.create("term_001", "/Users/dev/project");
-   * if (stdout) {
-   *   const reader = stdout.getReader();
-   *   // 读取输出...
-   * }
+   * const ok = service.create("term_001", "/Users/dev/project", {
+   *   cols: 120,
+   *   rows: 30,
+   *   onData: (data) => console.log(new TextDecoder().decode(data)),
+   * });
    * ```
    */
-  create(id: string, cwd: string): ReadableStream<Uint8Array> | null {
+  create(id: string, cwd: string, options: TerminalCreateOptions): boolean {
     if (this.sessions.has(id)) {
       logger.warn({ id }, "终端会话已存在");
-      return null;
+      return false;
     }
 
     const shell = process.env.SHELL ?? "/bin/bash";
-    const proc = Bun.spawn([shell, "-i"], {
+    const proc = Bun.spawn([shell], {
       cwd,
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "pipe",
+      terminal: {
+        cols: options.cols ?? 80,
+        rows: options.rows ?? 24,
+        name: "xterm-256color",
+        data: (_terminal, data) => {
+          options.onData(data);
+        },
+        exit: () => {
+          options.onExit?.();
+        },
+      },
       env: {
         ...process.env,
-        TERM: "xterm-256color",
-        COLUMNS: "120",
-        LINES: "30",
       },
     });
 
@@ -99,15 +127,15 @@ export class TerminalService {
     };
 
     this.sessions.set(id, session);
-    logger.info({ id, cwd, pid: proc.pid }, "终端会话已创建");
+    logger.info({ id, cwd, pid: proc.pid }, "终端会话已创建（PTY 模式）");
 
-    return proc.stdout as ReadableStream<Uint8Array>;
+    return true;
   }
 
   /**
    * 向终端会话写入数据
    *
-   * 将用户输入的文本写入对应 Shell 进程的 stdin。
+   * 将用户输入的文本通过 PTY 写入对应 Shell 进程。
    *
    * @param id - 终端会话 ID
    * @param data - 要写入的文本数据
@@ -124,19 +152,44 @@ export class TerminalService {
       return;
     }
 
-    const writer = session.proc.stdin as unknown as WritableStream<Uint8Array>;
-    const encoded = new TextEncoder().encode(data);
-    const w = writer.getWriter();
-    w.write(encoded).then(
-      () => w.releaseLock(),
-      () => w.releaseLock(),
-    );
+    const terminal = session.proc.terminal;
+    if (!terminal) {
+      logger.warn({ id }, "终端 PTY 不可用");
+      return;
+    }
+    terminal.write(data);
+  }
+
+  /**
+   * 调整终端尺寸
+   *
+   * 通知 PTY 更新终端窗口大小。前端在浏览器窗口 resize 时调用此方法，
+   * 确保终端程序（vim、htop 等）正确感知窗口变化。
+   *
+   * @param id - 终端会话 ID
+   * @param cols - 列数
+   * @param rows - 行数
+   *
+   * @example
+   * ```typescript
+   * service.resize("term_001", 100, 40);
+   * ```
+   */
+  resize(id: string, cols: number, rows: number): void {
+    const session = this.sessions.get(id);
+    if (!session) return;
+
+    const terminal = session.proc.terminal;
+    if (!terminal) return;
+
+    terminal.resize(cols, rows);
+    logger.debug({ id, cols, rows }, "终端尺寸已调整");
   }
 
   /**
    * 销毁终端会话
    *
-   * 终止 Shell 进程并清理资源。
+   * 关闭 PTY 并终止 Shell 进程，清理资源。
    *
    * @param id - 终端会话 ID
    *
@@ -149,6 +202,11 @@ export class TerminalService {
     const session = this.sessions.get(id);
     if (!session) return;
 
+    try {
+      session.proc.terminal?.close();
+    } catch {
+      // PTY 可能已关闭
+    }
     try {
       session.proc.kill();
     } catch {
@@ -185,7 +243,8 @@ export class TerminalService {
    * ```
    */
   destroyAll(): void {
-    for (const [id] of this.sessions) {
+    const ids = [...this.sessions.keys()];
+    for (const id of ids) {
       this.destroy(id);
     }
     logger.info("所有终端会话已销毁");
