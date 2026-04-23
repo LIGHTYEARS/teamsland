@@ -13,6 +13,8 @@ export { SidecarDataPlane } from "./data-plane.js";
 export type { InterruptRequest, InterruptResult } from "./interrupt-controller.js";
 export { InterruptController } from "./interrupt-controller.js";
 export { ObservableMessageBus } from "./message-bus.js";
+export type { ObserveRequest, ObserveResult } from "./observer-controller.js";
+export { buildObserverPrompt, ObserverController } from "./observer-controller.js";
 export type { SpawnParams, SpawnResult } from "./process-controller.js";
 export { ProcessController } from "./process-controller.js";
 export type { SubagentRegistryOpts } from "./registry.js";
