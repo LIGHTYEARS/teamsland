@@ -34,7 +34,7 @@
     "max_concurrent": 10,
     "dense": {
       "provider": "volcengine",
-      "api_key": "${ARK_EMBEDDING_API_KEY}",
+      "api_key": "a7c779b0-b6d1-4e0e-8f9b-bba1292f7d65",
       "api_base": "https://ark-cn-beijing.bytedance.net/api/v3",
       "model": "ep-20260324224619-zgcl6",
       "dimension": 1024,
@@ -43,7 +43,7 @@
   },
   "vlm": {
     "provider": "volcengine",
-    "api_key": "${ARK_VLM_API_KEY}",
+    "api_key": "ark-882be2ec-52c5-4641-a40c-cfb3dcfd1a67-a7bdb",
     "api_base": "https://ark-cn-beijing.bytedance.net/api/v3",
     "model": "ep-20260320212524-n9bst",
     "max_concurrent": 10
