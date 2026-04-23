@@ -28,3 +28,19 @@ export { NullEmbedder } from "./null-embedder.js";
 export { NullMemoryStore } from "./null-memory-store.js";
 export { retrieve } from "./retriever.js";
 export { checkVec0Available, TeamMemoryStore } from "./team-memory-store.js";
+export { VikingHealthMonitor } from "./viking-health-monitor.js";
+// OpenViking
+export type {
+  AddResourceOptions,
+  CommitResult,
+  FindOptions,
+  FindResult,
+  FindResultItem,
+  FsEntry,
+  IVikingMemoryClient,
+  ResourceResult,
+  SessionContext,
+  TaskStatus,
+  WriteOptions,
+} from "./viking-memory-client.js";
+export { NullVikingMemoryClient, VikingMemoryClient } from "./viking-memory-client.js";
