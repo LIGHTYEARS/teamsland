@@ -25,7 +25,7 @@ Commands:
   transcript <id>  Show transcript file path for a Worker
 
 Global Options:
-  --server <url>  Server URL (default: TEAMSLAND_SERVER env or http://localhost:3000)
+  --server <url>  Server URL (default: TEAMSLAND_SERVER env or http://localhost:3001)
   --json          Output in JSON format
   --help          Show this help message
 
@@ -91,7 +91,7 @@ function parseGlobalArgs(argv: string[]): {
     foundCommand = true;
   }
 
-  const resolvedUrl = serverUrl ?? process.env.TEAMSLAND_SERVER ?? "http://localhost:3000";
+  const resolvedUrl = serverUrl ?? process.env.TEAMSLAND_SERVER ?? "http://localhost:3001";
 
   return { serverUrl: resolvedUrl, jsonOutput, command, commandArgs };
 }

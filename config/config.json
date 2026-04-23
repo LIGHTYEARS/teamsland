@@ -128,7 +128,7 @@
   "queue": {
     "dbPath": "data/queue.sqlite",
     "busyTimeoutMs": 5000,
-    "visibilityTimeoutMs": 60000,
+    "visibilityTimeoutMs": 360000,
     "maxRetries": 3,
     "deadLetterEnabled": true,
     "pollIntervalMs": 100
@@ -139,7 +139,7 @@
     "sessionMaxLifetimeMs": 1800000,
     "sessionReuseWindowMs": 300000,
     "maxRecoveryRetries": 3,
-    "inferenceTimeoutMs": 60000,
+    "inferenceTimeoutMs": 300000,
     "enabled": true
   },
   "hooks": {
