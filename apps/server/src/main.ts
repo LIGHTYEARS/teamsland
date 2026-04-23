@@ -3,7 +3,6 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { TeamMemoryStore } from "@teamsland/memory";
 import { createLogger, shutdownTracing } from "@teamsland/observability";
 import { toCoordinatorEvent } from "./coordinator-event-mapper.js";
 import { verifyWorkspaceIntegrity } from "./coordinator-init.js";
@@ -16,7 +15,8 @@ import { initHooks } from "./init/hooks.js";
 import { initLark } from "./init/lark.js";
 import { initScheduledTasks } from "./init/scheduled-tasks.js";
 import { initSidecar } from "./init/sidecar.js";
-import { initStorage, TEAM_ID } from "./init/storage.js";
+import { initStorage } from "./init/storage.js";
+import { getVikingClient, initViking } from "./init/viking.js";
 
 (async () => {
   try {
@@ -25,6 +25,9 @@ import { initStorage, TEAM_ID } from "./init/storage.js";
 
     // ── Phase 1: 存储层 ──
     const storage = await initStorage(config, logger);
+
+    // ── Phase 1.5: OpenViking 连接 ──
+    const viking = initViking(config, logger);
 
     // ── Phase 2: 飞书组件 ──
     const lark = initLark(config, logger);
@@ -58,17 +61,8 @@ import { initStorage, TEAM_ID } from "./init/storage.js";
     hooks.queueRef.current = queue;
 
     // ── Phase 5.5: Coordinator ──
-    const memoryStoreForCoordinator = storage.memoryStore instanceof TeamMemoryStore ? storage.memoryStore : null;
-    const coordinator = await initCoordinator(
-      config,
-      queue,
-      sidecar.registry,
-      controller,
-      logger,
-      memoryStoreForCoordinator,
-      storage.embedder,
-      TEAM_ID,
-    );
+    const vikingClient = getVikingClient(viking);
+    const coordinator = await initCoordinator(config, queue, sidecar.registry, controller, logger, vikingClient);
     if (coordinator.manager) {
       queue.consume(async (msg) => {
         const event = toCoordinatorEvent(msg);
@@ -120,6 +114,7 @@ import { initStorage, TEAM_ID } from "./init/storage.js";
       if (coordinator.manager) coordinator.manager.reset();
       if (coordinator.anomalyDetector) coordinator.anomalyDetector.stopAll();
       if (hooks.engine) hooks.engine.stop();
+      if (viking.healthMonitor) viking.healthMonitor.stop();
       dashboard.server.stop();
       await shutdownTracing();
       await sidecar.registry.persist();

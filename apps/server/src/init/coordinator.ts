@@ -1,6 +1,6 @@
 // @teamsland/server — Coordinator 初始化模块
 
-import type { Embedder, TeamMemoryStore } from "@teamsland/memory";
+import type { IVikingMemoryClient } from "@teamsland/memory";
 import { createLogger } from "@teamsland/observability";
 import type { PersistentQueue } from "@teamsland/queue";
 import { AnomalyDetector, type SubagentRegistry } from "@teamsland/sidecar";
@@ -39,7 +39,7 @@ export interface CoordinatorResult {
  * 按顺序完成以下步骤：
  * 1. 检查 Coordinator 是否启用
  * 2. 初始化工作区目录结构和配置文件
- * 3. 创建 LiveContextLoader（接入注册表、队列、记忆存储）
+ * 3. 创建 LiveContextLoader（接入注册表和 VikingMemoryClient）
  * 4. 创建 Session Manager（含上下文加载器和提示词构建器）
  * 5. 创建并启动 Worker 生命周期监控器
  *
@@ -48,16 +48,14 @@ export interface CoordinatorResult {
  * @param registry - Agent 注册表
  * @param controller - 全局 AbortController
  * @param parentLogger - 父级日志记录器
- * @param memoryStore - 团队记忆存储（可为 null）
- * @param embedder - Embedding 生成器（可为 null）
- * @param teamId - 团队 ID
+ * @param vikingClient - OpenViking 记忆客户端
  * @returns CoordinatorResult，包含 manager 和 lifecycleMonitor
  *
  * @example
  * ```typescript
  * import { initCoordinator } from "./init/coordinator.js";
  *
- * const coordinator = await initCoordinator(config, queue, registry, controller, logger, memoryStore, embedder, "team-001");
+ * const coordinator = await initCoordinator(config, queue, registry, controller, logger, vikingClient);
  * if (coordinator.manager) {
  *   await coordinator.manager.processEvent(event);
  * }
@@ -69,9 +67,7 @@ export async function initCoordinator(
   registry: SubagentRegistry,
   controller: AbortController,
   parentLogger: ReturnType<typeof createLogger>,
-  memoryStore: TeamMemoryStore | null,
-  embedder: Embedder | null,
-  teamId: string,
+  vikingClient: IVikingMemoryClient,
 ): Promise<CoordinatorResult> {
   if (!config.coordinator?.enabled) {
     parentLogger.info("Coordinator 未启用，跳过初始化");
@@ -87,10 +83,7 @@ export async function initCoordinator(
   // 2. 创建 LiveContextLoader
   const contextLoader = new LiveContextLoader({
     registry,
-    queue,
-    memoryStore,
-    embedder,
-    teamId,
+    vikingClient,
   });
   const promptBuilder = new CoordinatorPromptBuilder();
 
