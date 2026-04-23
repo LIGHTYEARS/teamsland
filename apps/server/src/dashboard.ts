@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { WorktreeManager } from "@teamsland/git";
 import type { HookEngine, HookMetricsCollector } from "@teamsland/hooks";
+import type { IVikingMemoryClient } from "@teamsland/memory";
 import { createLogger } from "@teamsland/observability";
 import type { SessionDB } from "@teamsland/session";
 import type {
@@ -17,6 +18,7 @@ import { handleFileRoutes, validatePath } from "./file-routes.js";
 import { handleGitRoutes } from "./git-routes.js";
 import { extractToken, type LarkAuthManager } from "./lark-auth.js";
 import { TerminalService } from "./terminal-service.js";
+import { handleVikingRoutes } from "./viking-routes.js";
 import { handleWorkerRoutes } from "./worker-routes.js";
 
 const logger = createLogger("server:dashboard");
@@ -34,7 +36,7 @@ const logger = createLogger("server:dashboard");
  *   worktreeManager,
  *   dataPlane,
  *   skillInjector,
- *   claudeMdInjector,
+ *   claudeMdInjector, vikingClient,
  * };
  * ```
  */
@@ -67,6 +69,8 @@ export interface DashboardDeps {
   hookMetricsCollector?: HookMetricsCollector | null;
   /** 应用完整配置（可选，用于 Hook 审批 / 进化日志 API） */
   appConfig?: AppConfig | null;
+  /** OpenViking 记忆服务客户端（可选，用于 Viking 代理路由） */
+  vikingClient?: IVikingMemoryClient | null;
 }
 
 /** WebSocket 推送消息类型 */
@@ -178,7 +182,7 @@ function checkApiAuth(
 }
 
 /** 路由主请求（从 Bun.serve fetch 中调出以降低 cognitive complexity） */
-function routeRequest(
+async function routeRequest(
   req: Request,
   url: URL,
   ctx: {
@@ -197,8 +201,9 @@ function routeRequest(
     hookEngine: HookEngine | null | undefined;
     hookMetricsCollector: HookMetricsCollector | null | undefined;
     appConfig: AppConfig | null | undefined;
+    vikingClient: IVikingMemoryClient | null | undefined;
   },
-): Response | Promise<Response> | null {
+): Promise<Response | null> {
   if (req.method === "GET" && url.pathname === "/health") {
     return jsonResponse({ status: "ok", uptime: process.uptime() });
   }
@@ -238,6 +243,10 @@ function routeRequest(
   // Git 操作路由（/api/git/*）
   const gitResult = handleGitRoutes(req, url);
   if (gitResult) return gitResult;
+
+  // Viking 代理路由（/api/viking/*）
+  const vikingResult = ctx.vikingClient ? await handleVikingRoutes(req, url, ctx.vikingClient) : null;
+  if (vikingResult) return vikingResult;
 
   return handleApiRoutes(
     req,
@@ -667,6 +676,7 @@ async function handleTerminalStart(
  * - `POST /api/hooks/:filename/approve` — 审批通过 Hook (需认证)
  * - `POST /api/hooks/:filename/reject` — 拒绝 Hook (需认证)
  * - `GET /api/hooks/evolution-log` — 进化日志 (需认证)
+ * - `/api/viking/*` — OpenViking 代理路由 (需认证，详见 viking-routes.ts)
  * - `GET /api/ws` — WebSocket 升级（支持 terminal-start/input/resize/stop）
  *
  * @param deps - Dashboard 依赖
@@ -697,6 +707,7 @@ export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): Retur
     hookEngine,
     hookMetricsCollector,
     appConfig,
+    vikingClient,
   } = deps;
   const clients = new Set<unknown>();
   /** 追踪每个 WebSocket 连接关联的终端会话 ID，用于连接断开时自动清理 */
@@ -711,7 +722,7 @@ export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): Retur
   const server = Bun.serve({
     port: config.port,
 
-    fetch(req, server) {
+    async fetch(req, server) {
       const url = new URL(req.url);
 
       if (url.pathname === "/api/ws") {
@@ -736,8 +747,9 @@ export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): Retur
         hookEngine,
         hookMetricsCollector,
         appConfig,
+        vikingClient,
       };
-      return routeRequest(req, url, ctx) ?? jsonResponse({ error: "Not Found" }, 404);
+      return (await routeRequest(req, url, ctx)) ?? jsonResponse({ error: "Not Found" }, 404);
     },
 
     websocket: {

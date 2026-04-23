@@ -2,6 +2,7 @@
 
 import { resolve } from "node:path";
 import type { HookEngine, HookMetricsCollector } from "@teamsland/hooks";
+import type { IVikingMemoryClient } from "@teamsland/memory";
 import type { createLogger } from "@teamsland/observability";
 import type { SessionDB } from "@teamsland/session";
 import { ClaudeMdInjector, SkillInjector, type SubagentRegistry } from "@teamsland/sidecar";
@@ -80,13 +81,14 @@ function buildSkillInjector(config: AppConfig, logger: ReturnType<typeof createL
  * @param context - 业务上下文结果（worktreeManager）
  * @param hookEngine - Hook 引擎实例（可选，未配置时为 null）
  * @param hookMetricsCollector - Hook 指标收集器（可选，未配置时为 null）
+ * @param vikingClient - OpenViking 记忆服务客户端（可选，未配置时为 null）
  * @returns Dashboard 服务实例和认证管理器
  *
  * @example
  * ```typescript
  * import { initDashboard } from "./init/dashboard.js";
  *
- * const dashboard = initDashboard(config, registry, sessionDb, lark, controller, logger, sidecar, context, hookEngine, hookMetricsCollector);
+ * const dashboard = initDashboard(config, registry, sessionDb, lark, controller, logger, sidecar, context, hookEngine, hookMetricsCollector, vikingClient);
  * logger.info({ port: config.dashboard.port }, "Dashboard 已启动");
  * ```
  */
@@ -101,6 +103,7 @@ export function initDashboard(
   context: ContextResult,
   hookEngine?: HookEngine | null,
   hookMetricsCollector?: HookMetricsCollector | null,
+  vikingClient?: IVikingMemoryClient | null,
 ): DashboardResult {
   const authManager =
     config.dashboard.auth.provider === "lark_oauth"
@@ -131,6 +134,7 @@ export function initDashboard(
       hookEngine,
       hookMetricsCollector,
       appConfig: config,
+      vikingClient,
     },
     controller.signal,
   );

@@ -97,6 +97,7 @@ import { getVikingClient, initViking } from "./init/viking.js";
       context,
       hooks.engine,
       hooks.metricsCollector,
+      vikingClient,
     );
 
     // ── Phase 7: 定时任务 ──
