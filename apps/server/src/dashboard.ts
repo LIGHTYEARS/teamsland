@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { WorktreeManager } from "@teamsland/git";
 import type { HookEngine, HookMetricsCollector } from "@teamsland/hooks";
 import { createLogger } from "@teamsland/observability";
@@ -9,7 +11,7 @@ import type {
   SkillInjector,
   SubagentRegistry,
 } from "@teamsland/sidecar";
-import type { AgentRecord, DashboardConfig } from "@teamsland/types";
+import type { AgentRecord, AppConfig, DashboardConfig } from "@teamsland/types";
 import { handleExtendedApiRoutes } from "./api-routes.js";
 import { handleFileRoutes, validatePath } from "./file-routes.js";
 import { handleGitRoutes } from "./git-routes.js";
@@ -63,6 +65,8 @@ export interface DashboardDeps {
   hookEngine?: HookEngine | null;
   /** Hook 指标收集器（可选，用于 Hook 指标 API） */
   hookMetricsCollector?: HookMetricsCollector | null;
+  /** 应用完整配置（可选，用于 Hook 审批 / 进化日志 API） */
+  appConfig?: AppConfig | null;
 }
 
 /** WebSocket 推送消息类型 */
@@ -192,6 +196,7 @@ function routeRequest(
     meegoPluginToken: string | undefined;
     hookEngine: HookEngine | null | undefined;
     hookMetricsCollector: HookMetricsCollector | null | undefined;
+    appConfig: AppConfig | null | undefined;
   },
 ): Response | Promise<Response> | null {
   if (req.method === "GET" && url.pathname === "/health") {
@@ -201,6 +206,10 @@ function routeRequest(
   if (ctx.authEnabled && ctx.authManager) {
     const authResult = handleAuthRoutes(req, url, ctx.authManager, ctx.config);
     if (authResult) return authResult;
+  }
+
+  if (!ctx.authEnabled && url.pathname.startsWith("/auth")) {
+    return jsonResponse({ authEnabled: false }, 200);
   }
 
   const authBlock = checkApiAuth(req, url, ctx.authManager, ctx.authEnabled);
@@ -230,7 +239,153 @@ function routeRequest(
   const gitResult = handleGitRoutes(req, url);
   if (gitResult) return gitResult;
 
-  return handleApiRoutes(req, url, ctx.registry, ctx.sessionDb, ctx.hookEngine, ctx.hookMetricsCollector);
+  return handleApiRoutes(
+    req,
+    url,
+    ctx.registry,
+    ctx.sessionDb,
+    ctx.hookEngine,
+    ctx.hookMetricsCollector,
+    ctx.appConfig,
+  );
+}
+
+/** 解析以 ~ 开头的路径 */
+function resolveTilde(p: string): string {
+  return p.startsWith("~") ? join(homedir(), p.slice(1)) : p;
+}
+
+/** GET /api/hooks/pending — 待审批 hook 列表 */
+async function handleHooksPending(pendingDir: string): Promise<Response> {
+  const resolvedDir = resolveTilde(pendingDir);
+  const { readdir } = await import("node:fs/promises");
+  const files = await readdir(resolvedDir).catch(() => [] as string[]);
+  const pending = files.filter((f) => f.endsWith(".ts")).map((f) => ({ filename: f, path: join(resolvedDir, f) }));
+  return jsonResponse({ pending });
+}
+
+/** POST /api/hooks/:filename/approve — 审批通过 */
+async function handleHookApprove(
+  filename: string,
+  pendingDir: string,
+  hooksDir: string,
+  workspacePath: string,
+): Promise<Response> {
+  const resolvedPending = resolveTilde(pendingDir);
+  const resolvedHooks = resolveTilde(hooksDir);
+  const resolvedWorkspace = resolveTilde(workspacePath);
+  const { rename } = await import("node:fs/promises");
+  try {
+    await rename(join(resolvedPending, filename), join(resolvedHooks, filename));
+    const { appendEvolutionLog } = await import("./evolution-log.js");
+    await appendEvolutionLog(resolvedWorkspace, {
+      timestamp: new Date().toISOString(),
+      action: "approve_hook",
+      path: `hooks/${filename}`,
+      reason: "Dashboard 审批通过",
+    });
+    return jsonResponse({ approved: filename });
+  } catch (err: unknown) {
+    return jsonResponse({ error: err instanceof Error ? err.message : String(err) }, 400);
+  }
+}
+
+/** POST /api/hooks/:filename/reject — 拒绝 */
+async function handleHookReject(
+  req: Request,
+  filename: string,
+  pendingDir: string,
+  workspacePath: string,
+): Promise<Response> {
+  const resolvedPending = resolveTilde(pendingDir);
+  const resolvedWorkspace = resolveTilde(workspacePath);
+  const { unlink } = await import("node:fs/promises");
+  let reason = "未指定原因";
+  try {
+    const body = (await req.json()) as { reason?: string };
+    if (typeof body.reason === "string") reason = body.reason;
+  } catch {
+    /* 使用默认原因 */
+  }
+  try {
+    await unlink(join(resolvedPending, filename));
+    const { appendEvolutionLog } = await import("./evolution-log.js");
+    await appendEvolutionLog(resolvedWorkspace, {
+      timestamp: new Date().toISOString(),
+      action: "reject_hook",
+      path: `hooks-pending/${filename}`,
+      reason,
+      rejectedReason: reason,
+    });
+    return jsonResponse({ rejected: filename });
+  } catch (err: unknown) {
+    return jsonResponse({ error: err instanceof Error ? err.message : String(err) }, 400);
+  }
+}
+
+/** GET /api/hooks/evolution-log — 进化日志 */
+async function handleHooksEvolutionLog(url: URL, workspacePath: string): Promise<Response> {
+  const resolvedWorkspace = resolveTilde(workspacePath);
+  const { readEvolutionLog } = await import("./evolution-log.js");
+  const limit = Number(url.searchParams.get("limit")) || 100;
+  const offset = Number(url.searchParams.get("offset")) || 0;
+  const entries = await readEvolutionLog(resolvedWorkspace, limit, offset);
+  return jsonResponse({ entries, total: entries.length });
+}
+
+/** Hook 进化管理所需配置项 */
+interface HookEvolutionConfig {
+  pendingDir: string | undefined;
+  hooksDir: string | undefined;
+  workspacePath: string;
+}
+
+/** 从 AppConfig 中提取 Hook 进化管理配置 */
+function extractHookEvolutionConfig(config: AppConfig | null | undefined): HookEvolutionConfig {
+  return {
+    pendingDir: config?.hooks?.pendingDir,
+    hooksDir: config?.hooks?.hooksDir,
+    workspacePath: config?.coordinator?.workspacePath ?? "~/.teamsland/coordinator",
+  };
+}
+
+/** 处理 POST /api/hooks/:filename/approve 或 /reject */
+function handleHookMutation(req: Request, url: URL, cfg: HookEvolutionConfig): Response | Promise<Response> | null {
+  const approveMatch = url.pathname.match(/^\/api\/hooks\/([^/]+)\/approve$/);
+  if (req.method === "POST" && approveMatch) {
+    const filename = approveMatch[1];
+    if (!cfg.pendingDir || !cfg.hooksDir) return jsonResponse({ error: "hooks 目录未配置" }, 400);
+    return handleHookApprove(filename, cfg.pendingDir, cfg.hooksDir, cfg.workspacePath);
+  }
+
+  const rejectMatch = url.pathname.match(/^\/api\/hooks\/([^/]+)\/reject$/);
+  if (req.method === "POST" && rejectMatch) {
+    const filename = rejectMatch[1];
+    if (!cfg.pendingDir) return jsonResponse({ error: "pendingDir 未配置" }, 400);
+    return handleHookReject(req, filename, cfg.pendingDir, cfg.workspacePath);
+  }
+
+  return null;
+}
+
+/** 处理 Hook 进化管理路由（pending/approve/reject/evolution-log） */
+function handleHookEvolutionRoutes(
+  req: Request,
+  url: URL,
+  config?: AppConfig | null,
+): Response | Promise<Response> | null {
+  const cfg = extractHookEvolutionConfig(config);
+
+  if (req.method === "GET" && url.pathname === "/api/hooks/pending") {
+    if (!cfg.pendingDir) return jsonResponse({ error: "pendingDir 未配置" }, 400);
+    return handleHooksPending(cfg.pendingDir);
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/hooks/evolution-log") {
+    return handleHooksEvolutionLog(url, cfg.workspacePath);
+  }
+
+  return handleHookMutation(req, url, cfg);
 }
 
 /** 处理 Hook 相关 API 路由 */
@@ -239,22 +394,19 @@ function handleHookRoutes(
   url: URL,
   hookEngine?: HookEngine | null,
   hookMetricsCollector?: HookMetricsCollector | null,
-): Response | null {
+  config?: AppConfig | null,
+): Response | Promise<Response> | null {
   if (req.method === "GET" && url.pathname === "/api/hooks/status") {
-    if (!hookEngine) {
-      return jsonResponse({ enabled: false, message: "Hook 引擎未启用" });
-    }
+    if (!hookEngine) return jsonResponse({ enabled: false, message: "Hook 引擎未启用" });
     return jsonResponse({ enabled: true, ...hookEngine.getStatus() });
   }
 
   if (req.method === "GET" && url.pathname === "/api/hooks/metrics") {
-    if (!hookMetricsCollector) {
-      return jsonResponse({ enabled: false, message: "Hook 指标收集器未启用" });
-    }
+    if (!hookMetricsCollector) return jsonResponse({ enabled: false, message: "Hook 指标收集器未启用" });
     return jsonResponse({ enabled: true, ...hookMetricsCollector.getSnapshot() });
   }
 
-  return null;
+  return handleHookEvolutionRoutes(req, url, config);
 }
 
 function handleApiRoutes(
@@ -264,7 +416,8 @@ function handleApiRoutes(
   sessionDb: SessionDB,
   hookEngine?: HookEngine | null,
   hookMetricsCollector?: HookMetricsCollector | null,
-): Response | null {
+  appConfig?: AppConfig | null,
+): Response | Promise<Response> | null {
   if (req.method === "GET" && url.pathname === "/api/agents") {
     return jsonResponse(registry.allRunning());
   }
@@ -282,7 +435,7 @@ function handleApiRoutes(
     });
   }
 
-  const hookResult = handleHookRoutes(req, url, hookEngine, hookMetricsCollector);
+  const hookResult = handleHookRoutes(req, url, hookEngine, hookMetricsCollector, appConfig);
   if (hookResult) return hookResult;
 
   return null;
@@ -438,6 +591,10 @@ async function handleTerminalStart(
  * - `POST /api/git/commit` — 提交变更 (需认证)
  * - `GET /api/hooks/status` — Hook 引擎状态 (需认证)
  * - `GET /api/hooks/metrics` — Hook 指标快照 (需认证)
+ * - `GET /api/hooks/pending` — 待审批 Hook 列表 (需认证)
+ * - `POST /api/hooks/:filename/approve` — 审批通过 Hook (需认证)
+ * - `POST /api/hooks/:filename/reject` — 拒绝 Hook (需认证)
+ * - `GET /api/hooks/evolution-log` — 进化日志 (需认证)
  * - `GET /api/ws` — WebSocket 升级（支持 terminal-start/input/stop）
  *
  * @param deps - Dashboard 依赖
@@ -467,6 +624,7 @@ export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): Retur
     meegoPluginToken,
     hookEngine,
     hookMetricsCollector,
+    appConfig,
   } = deps;
   const clients = new Set<unknown>();
   const authEnabled = config.auth.provider === "lark_oauth" && authManager;
@@ -503,6 +661,7 @@ export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): Retur
         meegoPluginToken,
         hookEngine,
         hookMetricsCollector,
+        appConfig,
       };
       return routeRequest(req, url, ctx) ?? jsonResponse({ error: "Not Found" }, 404);
     },

@@ -130,6 +130,7 @@ export function initDashboard(
       meegoPluginToken: config.meego.pluginAccessToken,
       hookEngine,
       hookMetricsCollector,
+      appConfig: config,
     },
     controller.signal,
   );
