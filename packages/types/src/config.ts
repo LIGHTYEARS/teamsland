@@ -663,6 +663,42 @@ export interface HooksConfig {
   requireApproval?: boolean;
 }
 
+// ─── OpenViking 配置 ───
+
+/**
+ * OpenViking 外部服务连接配置
+ *
+ * teamsland 通过 HTTP 调用独立部署的 OpenViking server，
+ * 心跳检测健康状态，不健康时自动降级到 NullVikingMemoryClient。
+ *
+ * @example
+ * ```typescript
+ * import type { OpenVikingConfig } from "@teamsland/types";
+ *
+ * const cfg: OpenVikingConfig = {
+ *   baseUrl: "http://127.0.0.1:1933",
+ *   agentId: "teamsland",
+ *   timeoutMs: 30000,
+ *   heartbeatIntervalMs: 30000,
+ *   heartbeatFailThreshold: 3,
+ * };
+ * ```
+ */
+export interface OpenVikingConfig {
+  /** OpenViking server HTTP 地址 */
+  baseUrl: string;
+  /** agent 标识（X-OpenViking-Agent header） */
+  agentId: string;
+  /** API Key（X-API-Key header，dev 模式可省略） */
+  apiKey?: string;
+  /** 请求超时（毫秒） */
+  timeoutMs: number;
+  /** 心跳检测间隔（毫秒） */
+  heartbeatIntervalMs: number;
+  /** 连续心跳失败几次后降级 */
+  heartbeatFailThreshold: number;
+}
+
 // ─── 聚合根类型 ───
 
 /**
@@ -705,4 +741,6 @@ export interface AppConfig {
   coordinator?: CoordinatorConfig;
   /** Hook 引擎配置（可选，未配置时不加载 hook） */
   hooks?: HooksConfig;
+  /** OpenViking 记忆服务配置（可选，未配置时使用 NullClient） */
+  openViking?: OpenVikingConfig;
 }

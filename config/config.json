@@ -148,5 +148,12 @@
     "multiMatch": false,
     "pendingDir": "~/.teamsland/coordinator/hooks-pending",
     "requireApproval": true
+  },
+  "openViking": {
+    "baseUrl": "http://127.0.0.1:1933",
+    "agentId": "teamsland",
+    "timeoutMs": 30000,
+    "heartbeatIntervalMs": 30000,
+    "heartbeatFailThreshold": 3
   }
 }
