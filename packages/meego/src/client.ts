@@ -212,9 +212,6 @@ export class MeegoClient {
     return key;
   }
 
-  // ── 占位方法，后续 Task 逐步实现 ──
-  // （Task 4-8 将替换这些占位）
-
   /** 搜索用户 */
   async searchUsers(query: string, projectKey?: string): Promise<MeegoApiResult<import("./types.js").MeegoUser[]>> {
     const body: Record<string, unknown> = { query };
