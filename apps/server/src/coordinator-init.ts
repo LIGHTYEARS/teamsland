@@ -390,25 +390,25 @@ allowed-tools: Bash(lark-cli *)
 ## 发送群聊消息
 
 \`\`\`bash
-lark-cli send --chat <chat-id> --text "消息内容"
+lark-cli im +messages-send --chat-id <chat-id> --text "消息内容"
 \`\`\`
 
 ## 回复指定消息
 
 \`\`\`bash
-lark-cli send --chat <chat-id> --reply-to <message-id> --text "回复内容"
+lark-cli im +messages-send --chat-id <chat-id> --text "回复内容"
 \`\`\`
 
 ## 发送私聊消息
 
 \`\`\`bash
-lark-cli send --user <user-id> --text "私聊内容"
+lark-cli im +messages-send --user-id <user-id> --text "私聊内容"
 \`\`\`
 
 ## 发送富文本（Markdown）
 
 \`\`\`bash
-lark-cli send --chat <chat-id> --markdown "$(cat <<'EOF'
+lark-cli im +messages-send --chat-id <chat-id> --markdown "$(cat <<'EOF'
 **标题**
 
 - 要点 1
@@ -421,10 +421,30 @@ EOF
 )"
 \`\`\`
 
+## 飞书 Markdown 限制
+
+飞书的 --markdown 选项会自动转为 post 富文本格式，**以下语法不被支持**：
+
+- **表格**（\`| col1 | col2 |\`）— 不会渲染，改用列表格式
+- **HTML 标签** — 不会渲染
+
+**表格替代方案**：用缩进列表代替表格：
+
+\`\`\`
+项目 A
+  - 字段 1: 值 1
+  - 字段 2: 值 2
+
+项目 B
+  - 字段 1: 值 1
+  - 字段 2: 值 2
+\`\`\`
+
+支持的格式：**加粗**、*斜体*、~~删除线~~、\\\`行内代码\\\`、代码块、有序/无序列表、超链接。
+
 ## 注意事项
 
 - 消息内容通过 heredoc 传递，避免 shell 转义问题
-- 使用 --reply-to 回复特定消息以保持对话上下文
 - 长文本建议使用 Markdown 格式
 `;
 }

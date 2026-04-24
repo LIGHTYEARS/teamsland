@@ -222,7 +222,7 @@ describe("initCoordinatorWorkspace", () => {
       "utf-8",
     );
     expect(larkMessageSkill).toContain("lark-message");
-    expect(larkMessageSkill).toContain("lark-cli send");
+    expect(larkMessageSkill).toContain("lark-cli im +messages-send");
 
     const larkDocsSkill = readFileSync(join(workspacePath, ".claude", "skills", "lark-docs", "SKILL.md"), "utf-8");
     expect(larkDocsSkill).toContain("lark-docs");
