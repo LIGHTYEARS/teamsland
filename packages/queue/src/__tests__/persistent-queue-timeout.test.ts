@@ -139,7 +139,7 @@ describe("PersistentQueue", () => {
       const retryBefore = beforeRow?.retry_count ?? 0;
 
       // 迟到的 handler resolve — safeAck 应跳过（queue closed + currentMessageId 已清除）
-      lateResolve?.();
+      (lateResolve as (() => void) | null)?.();
       await new Promise((r) => setTimeout(r, 50));
 
       // 验证消息状态不应被 ack 为 completed

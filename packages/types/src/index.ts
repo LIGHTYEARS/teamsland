@@ -24,6 +24,7 @@ export type {
   MeegoSpaceConfig,
   MeegoWebhookConfig,
   MemoryConfig,
+  OpenVikingConfig,
   QueueConfig,
   RepoEntry,
   RepoMappingConfig,

@@ -82,6 +82,7 @@ describe("handleWorkerRoutes", () => {
   let killSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    // @ts-expect-error — mockImplementation return type doesn't match process.kill overloads
     killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
   });
 

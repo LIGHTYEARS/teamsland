@@ -9,7 +9,7 @@ vi.mock("@teamsland/observability", () => ({
     debug: vi.fn(),
     fatal: vi.fn(),
   }),
-  withSpan: (_t: string, _n: string, fn: (...args: never) => unknown) => fn({} as never),
+  withSpan: (_t: string, _n: string, fn: (span: unknown) => unknown) => fn({}),
 }));
 
 import type { FindResult, IVikingMemoryClient, SessionContext } from "@teamsland/memory";

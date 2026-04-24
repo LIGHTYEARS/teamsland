@@ -6,6 +6,7 @@
   "exports": {
     "./lib/*": "./lib/*.ts",
     "./components/ui/*": "./components/ui/*.tsx",
+    "./elements/types": "./elements/types.ts",
     "./elements/*": "./elements/*.tsx"
   },
   "dependencies": {

@@ -11,7 +11,7 @@ describe("TeamslandClient", () => {
   beforeEach(() => {
     client = new TeamslandClient(BASE_URL);
     mockFetch = vi.fn();
-    globalThis.fetch = mockFetch;
+    globalThis.fetch = mockFetch as unknown as typeof fetch;
   });
 
   afterEach(() => {

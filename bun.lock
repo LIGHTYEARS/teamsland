@@ -34,6 +34,7 @@
         "react-dom": "^19.1",
         "react-error-boundary": "^6.1.1",
         "react-resizable-panels": "^2.1.7",
+        "shiki": "3.22.0",
       },
       "devDependencies": {
         "@rspack/cli": "^1.3",

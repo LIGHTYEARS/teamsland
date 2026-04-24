@@ -253,7 +253,7 @@ export class SkillInjector {
     for (const entry of files) {
       if (!entry.isFile()) continue;
 
-      const parentPath = entry.parentPath ?? entry.path;
+      const parentPath = entry.parentPath ?? (entry as unknown as { path: string }).path;
       const srcFile = join(parentPath, entry.name);
       const relPath = srcFile.slice(sourcePath.length + 1);
       const destFile = join(targetDir, relPath);

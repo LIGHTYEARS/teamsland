@@ -328,10 +328,7 @@ export class VikingMemoryClient implements IVikingMemoryClient {
     this.agentId = config.agentId;
     this.apiKey = config.apiKey;
     this.timeoutMs = config.timeoutMs;
-    logger.info("VikingMemoryClient 初始化", {
-      baseUrl: this.baseUrl,
-      agentId: this.agentId,
-    });
+    logger.info({ baseUrl: this.baseUrl, agentId: this.agentId }, "VikingMemoryClient 初始化");
   }
 
   /**
@@ -377,15 +374,13 @@ export class VikingMemoryClient implements IVikingMemoryClient {
       logger.debug("healthCheck 成功");
       return true;
     } catch (err: unknown) {
-      logger.warn("healthCheck 失败", {
-        error: err instanceof Error ? err.message : String(err),
-      });
+      logger.warn({ error: err instanceof Error ? err.message : String(err) }, "healthCheck 失败");
       return false;
     }
   }
 
   async find(query: string, opts?: FindOptions): Promise<FindResult> {
-    logger.debug("find 请求", { query, opts });
+    logger.debug({ query, opts }, "find 请求");
     return this.request<FindResult>("/api/v1/search/find", {
       method: "POST",
       body: JSON.stringify({ query, ...opts }),
@@ -393,22 +388,22 @@ export class VikingMemoryClient implements IVikingMemoryClient {
   }
 
   async read(uri: string): Promise<string> {
-    logger.debug("read 请求", { uri });
+    logger.debug({ uri }, "read 请求");
     return this.request<string>(`/api/v1/content/read?uri=${encodeURIComponent(uri)}`);
   }
 
   async abstract(uri: string): Promise<string> {
-    logger.debug("abstract 请求", { uri });
+    logger.debug({ uri }, "abstract 请求");
     return this.request<string>(`/api/v1/content/abstract?uri=${encodeURIComponent(uri)}`);
   }
 
   async overview(uri: string): Promise<string> {
-    logger.debug("overview 请求", { uri });
+    logger.debug({ uri }, "overview 请求");
     return this.request<string>(`/api/v1/content/overview?uri=${encodeURIComponent(uri)}`);
   }
 
   async write(uri: string, content: string, opts?: WriteOptions): Promise<void> {
-    logger.debug("write 请求", { uri, opts });
+    logger.debug({ uri, opts }, "write 请求");
     await this.request<unknown>("/api/v1/content/write", {
       method: "POST",
       body: JSON.stringify({ uri, content, ...opts }),
@@ -416,12 +411,12 @@ export class VikingMemoryClient implements IVikingMemoryClient {
   }
 
   async ls(uri: string): Promise<FsEntry[]> {
-    logger.debug("ls 请求", { uri });
+    logger.debug({ uri }, "ls 请求");
     return this.request<FsEntry[]>(`/api/v1/fs/ls?uri=${encodeURIComponent(uri)}`);
   }
 
   async mkdir(uri: string, description?: string): Promise<void> {
-    logger.debug("mkdir 请求", { uri, description });
+    logger.debug({ uri, description }, "mkdir 请求");
     await this.request<unknown>("/api/v1/fs/mkdir", {
       method: "POST",
       body: JSON.stringify({ uri, description }),
@@ -429,7 +424,7 @@ export class VikingMemoryClient implements IVikingMemoryClient {
   }
 
   async rm(uri: string, recursive?: boolean): Promise<void> {
-    logger.debug("rm 请求", { uri, recursive });
+    logger.debug({ uri, recursive }, "rm 请求");
     const params = new URLSearchParams({ uri });
     if (recursive !== undefined) {
       params.set("recursive", String(recursive));
@@ -440,7 +435,7 @@ export class VikingMemoryClient implements IVikingMemoryClient {
   }
 
   async addResource(path: string, opts: AddResourceOptions): Promise<ResourceResult> {
-    logger.debug("addResource 请求", { path, opts });
+    logger.debug({ path, opts }, "addResource 请求");
     return this.request<ResourceResult>("/api/v1/resources", {
       method: "POST",
       body: JSON.stringify({ path, ...opts }),
@@ -448,7 +443,7 @@ export class VikingMemoryClient implements IVikingMemoryClient {
   }
 
   async createSession(id?: string): Promise<string> {
-    logger.debug("createSession 请求", { id });
+    logger.debug({ id }, "createSession 请求");
     const result = await this.request<{ session_id: string }>("/api/v1/sessions", {
       method: "POST",
       body: JSON.stringify(id !== undefined ? { session_id: id } : {}),
@@ -457,7 +452,7 @@ export class VikingMemoryClient implements IVikingMemoryClient {
   }
 
   async getSessionContext(id: string, tokenBudget?: number): Promise<SessionContext> {
-    logger.debug("getSessionContext 请求", { id, tokenBudget });
+    logger.debug({ id, tokenBudget }, "getSessionContext 请求");
     const params = new URLSearchParams();
     if (tokenBudget !== undefined) {
       params.set("token_budget", String(tokenBudget));
@@ -468,7 +463,7 @@ export class VikingMemoryClient implements IVikingMemoryClient {
   }
 
   async addMessage(sessionId: string, role: string, content: string): Promise<void> {
-    logger.debug("addMessage 请求", { sessionId, role });
+    logger.debug({ sessionId, role }, "addMessage 请求");
     await this.request<unknown>(`/api/v1/sessions/${encodeURIComponent(sessionId)}/messages`, {
       method: "POST",
       body: JSON.stringify({ role, content }),
@@ -476,17 +471,17 @@ export class VikingMemoryClient implements IVikingMemoryClient {
   }
 
   async commitSession(sessionId: string): Promise<CommitResult> {
-    logger.debug("commitSession 请求", { sessionId });
+    logger.debug({ sessionId }, "commitSession 请求");
     return this.request<CommitResult>(`/api/v1/sessions/${encodeURIComponent(sessionId)}/commit`, { method: "POST" });
   }
 
   async deleteSession(sessionId: string): Promise<void> {
-    logger.debug("deleteSession 请求", { sessionId });
+    logger.debug({ sessionId }, "deleteSession 请求");
     await this.request<unknown>(`/api/v1/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
   }
 
   async getTask(taskId: string): Promise<TaskStatus> {
-    logger.debug("getTask 请求", { taskId });
+    logger.debug({ taskId }, "getTask 请求");
     return this.request<TaskStatus>(`/api/v1/tasks/${encodeURIComponent(taskId)}`);
   }
 }

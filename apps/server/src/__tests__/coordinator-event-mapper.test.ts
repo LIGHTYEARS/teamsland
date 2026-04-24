@@ -14,7 +14,7 @@ function makeMessage(type: string, payload: Record<string, unknown>, overrides?:
   return {
     id: "msg-001",
     type: type as QueueMessage["type"],
-    payload: payload as QueueMessage["payload"],
+    payload: payload as unknown as QueueMessage["payload"],
     priority: "normal",
     status: "pending",
     retryCount: 0,

@@ -1,4 +1,3 @@
-import type { Server } from "bun";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { CommitResult, FindResult, FsEntry, SessionContext, TaskStatus } from "../viking-memory-client.js";
 import { NullVikingMemoryClient, VikingMemoryClient } from "../viking-memory-client.js";
@@ -199,7 +198,7 @@ describe("NullVikingMemoryClient", () => {
 // ─── VikingMemoryClient ───
 
 describe("VikingMemoryClient", () => {
-  let server: Server;
+  let server: ReturnType<typeof Bun.serve>;
   let client: VikingMemoryClient;
   const staticRoutes = buildRoutes();
 

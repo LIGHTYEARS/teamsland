@@ -255,7 +255,7 @@ function HooksEvolutionTab() {
           <TableEmpty colSpan={4}>No evolution events recorded.</TableEmpty>
         ) : (
           entries.map((e) => (
-            <TableRow key={`${e.timestamp}-${e.hookName}-${e.action}`}>
+            <TableRow key={`${e.timestamp}-${e.hookPath}-${e.action}`}>
               <TableCell className="text-xs tabular-nums text-muted-foreground">
                 {new Date(e.timestamp).toLocaleString()}
               </TableCell>
