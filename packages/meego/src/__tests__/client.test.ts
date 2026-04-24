@@ -468,3 +468,80 @@ describe("MeegoClient — 工作流操作", () => {
     expect(result.ok).toBe(true);
   });
 });
+
+describe("MeegoClient — 文件操作", () => {
+  it("uploadFile 应使用 FormData 并 POST /{project}/file/upload", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fn: (input: string | URL | Request, init?: RequestInit) => Promise<Response> = async (input, init) => {
+      calls.push({ url: String(input), init });
+      return new Response(JSON.stringify({ err_code: 0, data: "file-token-abc" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+    const client = new MeegoClient({
+      baseUrl: "https://meego.test",
+      token: "t",
+      userKey: "u",
+      fetchFn: fn,
+    });
+
+    const file = new Blob(["hello"], { type: "text/plain" });
+    const result = await client.uploadFile("proj_a", file, "test.txt");
+
+    expect(calls[0].url).toContain("/file/upload");
+    expect(calls[0].init?.method).toBe("POST");
+    expect(calls[0].init?.body).toBeInstanceOf(FormData);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data).toBe("file-token-abc");
+  });
+
+  it("addAttachment 应使用 FormData 并 POST /{project}/work_item/{type}/{id}/file/upload", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fn: (input: string | URL | Request, init?: RequestInit) => Promise<Response> = async (input, init) => {
+      calls.push({ url: String(input), init });
+      return new Response(JSON.stringify({ err_code: 0, data: "attach-token-xyz" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+    const client = new MeegoClient({
+      baseUrl: "https://meego.test",
+      token: "t",
+      userKey: "u",
+      fetchFn: fn,
+    });
+
+    const file = new Blob(["pdf content"], { type: "application/pdf" });
+    const result = await client.addAttachment("proj_a", "issue", 123, file, "report.pdf", {
+      fieldKey: "attachment_field",
+    });
+
+    expect(calls[0].url).toContain("/work_item/issue/123/file/upload");
+    expect(calls[0].init?.method).toBe("POST");
+    const formData = calls[0].init?.body as FormData;
+    expect(formData).toBeInstanceOf(FormData);
+    expect(formData.get("field_key")).toBe("attachment_field");
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data).toBe("attach-token-xyz");
+  });
+
+  it("uploadFile 在 API 返回错误时应返回 ok: false", async () => {
+    const client = new MeegoClient({
+      baseUrl: "https://meego.test",
+      token: "t",
+      userKey: "u",
+      fetchFn: async () =>
+        new Response(JSON.stringify({ err_code: 10001, err_msg: "no permission" }), {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
+        }),
+    });
+
+    const file = new Blob(["data"]);
+    const result = await client.uploadFile("proj_a", file, "test.txt");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errCode).toBe(10001);
+  });
+});

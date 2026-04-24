@@ -157,6 +157,54 @@ export class MeegoClient {
     }
   }
 
+  /**
+   * FormData 请求的通用处理，文件上传专用。
+   *
+   * @returns Meego API 统一结果。
+   *
+   * @example
+   * ```typescript
+   * const form = new FormData();
+   * form.append("file", blob, "demo.txt");
+   * // 由 uploadFile/addAttachment 间接调用。
+   * ```
+   */
+  private async requestFormData<T>(url: string, form: FormData): Promise<MeegoApiResult<T>> {
+    try {
+      const resp = await this.fetchFn(url, {
+        method: "POST",
+        headers: {
+          "X-PLUGIN-TOKEN": this.token,
+          "X-USER-KEY": this.userKey,
+        },
+        body: form,
+      });
+
+      let raw: Record<string, unknown>;
+      try {
+        raw = (await resp.json()) as Record<string, unknown>;
+      } catch {
+        return {
+          ok: false,
+          errCode: resp.status,
+          message: `HTTP ${resp.status}: 响应体非 JSON`,
+        };
+      }
+
+      if (isMeegoSuccess(raw)) {
+        return { ok: true, data: raw.data as T };
+      }
+
+      const error = extractMeegoError(raw);
+      logger.warn({ url, ...error }, "Meego 文件上传失败");
+      return { ok: false, ...error };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error({ url, err }, "Meego 文件上传网络错误");
+      return { ok: false, errCode: -1, message };
+    }
+  }
+
   /** 解析项目 key，优先使用参数值，其次使用默认值 */
   private resolveProjectKey(projectKey?: string): string {
     const key = projectKey ?? this.defaultProjectKey;
@@ -494,5 +542,66 @@ export class MeegoClient {
     });
     if (!result.ok) return result;
     return { ok: true, data: result.data.formItems ?? [] };
+  }
+
+  // ── 文件操作 ──
+
+  /**
+   * 上传文件到 Meego 空间。
+   *
+   * @param projectKey - 项目 key。
+   * @param file - 文件内容。
+   * @param filename - 文件名。
+   * @returns 成功时 data 为文件 token。
+   *
+   * @example
+   * ```typescript
+   * const blob = new Blob(["hello"], { type: "text/plain" });
+   * const result = await client.uploadFile("proj_a", blob, "hello.txt");
+   * ```
+   */
+  async uploadFile(projectKey: string, file: File | Blob, filename: string): Promise<MeegoApiResult<string>> {
+    const pk = this.resolveProjectKey(projectKey);
+    const url = `${this.baseUrl}/open_api/${pk}/file/upload`;
+    const form = new FormData();
+    form.append("file", file, filename);
+    return this.requestFormData<string>(url, form);
+  }
+
+  /**
+   * 向工作项附件字段添加附件。
+   *
+   * @param projectKey - 项目 key。
+   * @param workItemType - 工作项类型 key。
+   * @param workItemId - 工作项 ID。
+   * @param file - 文件内容。
+   * @param filename - 文件名。
+   * @param opts - 附件字段定位参数。
+   * @returns 成功时 data 为附件 token。
+   *
+   * @example
+   * ```typescript
+   * const blob = new Blob(["log"]);
+   * await client.addAttachment("proj_a", "issue", 123, blob, "log.txt", {
+   *   fieldKey: "attachment",
+   * });
+   * ```
+   */
+  async addAttachment(
+    projectKey: string,
+    workItemType: string,
+    workItemId: number,
+    file: File | Blob,
+    filename: string,
+    opts?: import("./types.js").AddAttachmentOpts,
+  ): Promise<MeegoApiResult<string>> {
+    const pk = this.resolveProjectKey(projectKey);
+    const url = `${this.baseUrl}/open_api/${pk}/work_item/${workItemType}/${workItemId}/file/upload`;
+    const form = new FormData();
+    form.append("file", file, filename);
+    if (opts?.fieldKey) form.append("field_key", opts.fieldKey);
+    if (opts?.fieldAlias) form.append("field_alias", opts.fieldAlias);
+    if (opts?.index) form.append("index", opts.index);
+    return this.requestFormData<string>(url, form);
   }
 }
