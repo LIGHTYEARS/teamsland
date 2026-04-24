@@ -320,4 +320,179 @@ export class MeegoClient {
     const pk = this.resolveProjectKey(projectKey);
     return this.request("DELETE", `/${pk}/work_item/${workItemType}/${workItemId}`);
   }
+
+  // ── 工作流操作 ──
+
+  /**
+   * 获取工作项工作流详情。
+   *
+   * @param flowType - 0 表示节点流，1 表示状态流。
+   * @returns 工作流节点、状态流节点和连接关系。
+   *
+   * @example
+   * ```typescript
+   * const result = await client.getWorkflow("proj_a", "issue", 123, 1);
+   * if (result.ok) {
+   *   console.log(result.data.connections);
+   * }
+   * ```
+   */
+  async getWorkflow(
+    projectKey: string,
+    workItemType: string,
+    workItemId: number,
+    flowType: 0 | 1 = 1,
+  ): Promise<MeegoApiResult<import("./types.js").MeegoWorkflowDetail>> {
+    const pk = this.resolveProjectKey(projectKey);
+    return this.request("POST", `/${pk}/work_item/${workItemType}/${workItemId}/workflow/query`, { flowType });
+  }
+
+  /**
+   * 完成节点流工作项中的指定节点。
+   *
+   * @returns Meego API 统一结果，成功时 data 为 null。
+   *
+   * @example
+   * ```typescript
+   * await client.finishNode("proj_a", "story", 123, "node-1", {
+   *   owners: ["user_a"],
+   * });
+   * ```
+   */
+  async finishNode(
+    projectKey: string,
+    workItemType: string,
+    workItemId: number,
+    nodeId: string,
+    opts?: import("./types.js").NodeOperateOpts,
+  ): Promise<MeegoApiResult<null>> {
+    const pk = this.resolveProjectKey(projectKey);
+    const body: Record<string, unknown> = { action: "confirm" };
+    if (opts?.owners) body.nodeOwners = opts.owners;
+    if (opts?.schedule) body.nodeSchedule = opts.schedule;
+    if (opts?.fields) body.fields = opts.fields;
+    return this.request("POST", `/${pk}/workflow/${workItemType}/${workItemId}/node/${nodeId}/operate`, body);
+  }
+
+  /**
+   * 更新节点流工作项中的指定节点信息。
+   *
+   * @returns Meego API 统一结果，成功时 data 为 null。
+   *
+   * @example
+   * ```typescript
+   * await client.updateNode("proj_a", "story", 123, "node-2", {
+   *   owners: ["user_b"],
+   * });
+   * ```
+   */
+  async updateNode(
+    projectKey: string,
+    workItemType: string,
+    workItemId: number,
+    nodeId: string,
+    opts?: import("./types.js").NodeOperateOpts,
+  ): Promise<MeegoApiResult<null>> {
+    const pk = this.resolveProjectKey(projectKey);
+    const body: Record<string, unknown> = {};
+    if (opts?.owners) body.nodeOwners = opts.owners;
+    if (opts?.schedule) body.nodeSchedule = opts.schedule;
+    if (opts?.fields) body.fields = opts.fields;
+    return this.request("PUT", `/${pk}/workflow/${workItemType}/${workItemId}/node/${nodeId}`, body);
+  }
+
+  /**
+   * 流转状态流工作项。
+   *
+   * 如果只传入 `toState`，会先读取工作流并匹配当前状态到目标状态的 transitionId。
+   *
+   * @returns Meego API 统一结果，成功时 data 为 null。
+   *
+   * @example
+   * ```typescript
+   * await client.transitState("proj_a", "issue", 123, { toState: "RESOLVED" });
+   * await client.transitState("proj_a", "issue", 123, { transitionId: 42 });
+   * ```
+   */
+  async transitState(
+    projectKey: string,
+    workItemType: string,
+    workItemId: number,
+    opts: import("./types.js").TransitStateOpts,
+  ): Promise<MeegoApiResult<null>> {
+    const pk = this.resolveProjectKey(projectKey);
+    let transitionId = opts.transitionId;
+
+    if (transitionId === undefined) {
+      if (!opts.toState) {
+        return {
+          ok: false,
+          errCode: -1,
+          message: "toState 或 transitionId 必须提供其一",
+        };
+      }
+
+      const wfResult = await this.getWorkflow(pk, workItemType, workItemId, 1);
+      if (!wfResult.ok) return wfResult;
+
+      const currentState = wfResult.data.stateFlowNodes?.find((node) => node.status === 2)?.id;
+      if (!currentState) {
+        return {
+          ok: false,
+          errCode: -1,
+          message: "无法确定当前状态（无 status=2 节点）",
+        };
+      }
+
+      const target = opts.toState.toUpperCase();
+      transitionId = wfResult.data.connections?.find(
+        (conn) => conn.sourceStateKey === currentState && conn.targetStateKey.toUpperCase() === target,
+      )?.transitionId;
+
+      if (transitionId === undefined) {
+        return {
+          ok: false,
+          errCode: -1,
+          message: `无法从状态 ${currentState} 流转到 ${opts.toState}`,
+        };
+      }
+    }
+
+    const body: Record<string, unknown> = { transitionId };
+    if (opts.fields) body.fields = opts.fields;
+    if (opts.roleOwners) body.roleOwners = opts.roleOwners;
+    return this.request("POST", `/${pk}/workflow/${workItemType}/${workItemId}/node/state_change`, body);
+  }
+
+  /**
+   * 查询状态流转所需字段，不实际执行流转。
+   *
+   * @returns 目标状态流转前需要填写的字段列表。
+   *
+   * @example
+   * ```typescript
+   * const result = await client.getTransitionFields("proj_a", "issue", 123, "RESOLVED");
+   * if (result.ok) {
+   *   console.log(result.data.map((item) => item.key));
+   * }
+   * ```
+   */
+  async getTransitionFields(
+    projectKey: string,
+    workItemType: string,
+    workItemId: number,
+    toState: string,
+  ): Promise<MeegoApiResult<import("./types.js").MeegoTransitionFieldItem[]>> {
+    const result = await this.request<{
+      formItems: import("./types.js").MeegoTransitionFieldItem[];
+    }>("POST", "/work_item/transition_required_info/get", {
+      projectKey: this.resolveProjectKey(projectKey),
+      workItemTypeKey: workItemType,
+      workItemId,
+      stateKey: toState,
+      mode: "unfinished",
+    });
+    if (!result.ok) return result;
+    return { ok: true, data: result.data.formItems ?? [] };
+  }
 }

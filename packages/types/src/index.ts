@@ -14,6 +14,7 @@ export type {
   HooksConfig,
   LarkBotConfig,
   LarkConfig,
+  LarkConnectorConfig,
   LarkNotificationConfig,
   LlmConfig,
   MeegoConfig,

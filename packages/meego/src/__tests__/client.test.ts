@@ -302,3 +302,169 @@ describe("MeegoClient — 工作项写操作", () => {
     expect(calls[0].init?.method).toBe("DELETE");
   });
 });
+
+describe("MeegoClient — 工作流操作", () => {
+  it("getWorkflow 应 POST workflow/query with flowType", async () => {
+    const { fn, calls } = spyFetch({
+      err_code: 0,
+      data: {
+        workflow_nodes: [{ id: "n1", name: "开始" }],
+        connections: [],
+      },
+    });
+    const client = new MeegoClient({
+      baseUrl: "https://meego.test",
+      token: "t",
+      userKey: "u",
+      fetchFn: fn,
+    });
+
+    const result = await client.getWorkflow("proj_a", "story", 123, 0);
+
+    expect(calls[0].url).toContain("/workflow/query");
+    const body = JSON.parse(calls[0].init?.body as string);
+    expect(body.flow_type).toBe(0);
+    expect(result.ok).toBe(true);
+  });
+
+  it("finishNode 应 POST node/{nodeId}/operate with action=confirm", async () => {
+    const { fn, calls } = spyFetch({ err_code: 0, data: null });
+    const client = new MeegoClient({
+      baseUrl: "https://meego.test",
+      token: "t",
+      userKey: "u",
+      fetchFn: fn,
+    });
+
+    await client.finishNode("proj_a", "story", 123, "node-1", {
+      owners: ["user_a"],
+    });
+
+    expect(calls[0].url).toContain("/node/node-1/operate");
+    const body = JSON.parse(calls[0].init?.body as string);
+    expect(body.action).toBe("confirm");
+    expect(body.node_owners).toEqual(["user_a"]);
+  });
+
+  it("updateNode 应 PUT node/{nodeId}", async () => {
+    const { fn, calls } = spyFetch({ err_code: 0, data: null });
+    const client = new MeegoClient({
+      baseUrl: "https://meego.test",
+      token: "t",
+      userKey: "u",
+      fetchFn: fn,
+    });
+
+    await client.updateNode("proj_a", "story", 123, "node-2", {
+      owners: ["user_b"],
+      schedule: { estimateStartDate: 1700000000000 },
+    });
+
+    expect(calls[0].url).toContain("/node/node-2");
+    expect(calls[0].init?.method).toBe("PUT");
+  });
+
+  it("transitState 应 POST state_change with transitionId", async () => {
+    const { fn, calls } = spyFetch({ err_code: 0, data: null });
+    const client = new MeegoClient({
+      baseUrl: "https://meego.test",
+      token: "t",
+      userKey: "u",
+      fetchFn: fn,
+    });
+
+    await client.transitState("proj_a", "issue", 123, {
+      transitionId: 42,
+    });
+
+    expect(calls[0].url).toContain("/state_change");
+    const body = JSON.parse(calls[0].init?.body as string);
+    expect(body.transition_id).toBe(42);
+  });
+
+  it("transitState 仅传 toState 时应先查 workflow 再匹配 transitionId", async () => {
+    let callIndex = 0;
+    const responses = [
+      {
+        err_code: 0,
+        data: {
+          state_flow_nodes: [
+            { id: "OPEN", status: 2 },
+            { id: "RESOLVED", status: 1 },
+          ],
+          connections: [{ transition_id: 99, source_state_key: "OPEN", target_state_key: "RESOLVED" }],
+        },
+      },
+      { err_code: 0, data: null },
+    ];
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fn: (input: string | URL | Request, init?: RequestInit) => Promise<Response> = async (input, init) => {
+      calls.push({ url: String(input), init });
+      const resp = responses[callIndex++];
+      return new Response(JSON.stringify(resp), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    const client = new MeegoClient({
+      baseUrl: "https://meego.test",
+      token: "t",
+      userKey: "u",
+      fetchFn: fn,
+    });
+
+    const result = await client.transitState("proj_a", "issue", 123, {
+      toState: "RESOLVED",
+    });
+
+    expect(calls).toHaveLength(2);
+    expect(calls[0].url).toContain("/workflow/query");
+    expect(calls[1].url).toContain("/state_change");
+    const body = JSON.parse(calls[1].init?.body as string);
+    expect(body.transition_id).toBe(99);
+    expect(result.ok).toBe(true);
+  });
+
+  it("transitState 仅传 toState 但找不到匹配流转时应返回错误", async () => {
+    const client = new MeegoClient({
+      baseUrl: "https://meego.test",
+      token: "t",
+      userKey: "u",
+      fetchFn: mockFetch({
+        err_code: 0,
+        data: {
+          state_flow_nodes: [{ id: "OPEN", status: 2 }],
+          connections: [],
+        },
+      }),
+    });
+
+    const result = await client.transitState("proj_a", "issue", 123, {
+      toState: "RESOLVED",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("RESOLVED");
+    }
+  });
+
+  it("getTransitionFields 应 POST transition_required_info/get", async () => {
+    const { fn, calls } = spyFetch({
+      err_code: 0,
+      data: { form_items: [{ key: "priority", class: "field", finished: false }] },
+    });
+    const client = new MeegoClient({
+      baseUrl: "https://meego.test",
+      token: "t",
+      userKey: "u",
+      fetchFn: fn,
+    });
+
+    const result = await client.getTransitionFields("proj_a", "issue", 123, "RESOLVED");
+
+    expect(calls[0].url).toContain("/transition_required_info/get");
+    expect(result.ok).toBe(true);
+  });
+});
