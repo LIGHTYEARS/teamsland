@@ -184,4 +184,96 @@ export class MeegoClient {
     if (workItemType) body.workItemTypeKey = workItemType;
     return this.request("POST", `/${pk}/field/all`, body);
   }
+
+  // ── 工作项查询 ──
+
+  /**
+   * 查询单个工作项详情
+   */
+  async getWorkItem(
+    projectKey: string,
+    workItemType: string,
+    workItemId: number,
+  ): Promise<MeegoApiResult<import("./types.js").MeegoWorkItem>> {
+    const pk = this.resolveProjectKey(projectKey);
+    const result = await this.request<unknown[]>("POST", `/${pk}/work_item/${workItemType}/query`, {
+      workItemIds: [workItemId],
+    });
+    if (!result.ok) return result;
+    const item = Array.isArray(result.data) && result.data.length > 0 ? result.data[0] : null;
+    if (!item) {
+      return { ok: false, errCode: 30005, message: "工作项不存在" };
+    }
+    return { ok: true, data: item as import("./types.js").MeegoWorkItem };
+  }
+
+  /**
+   * 查询工作项格式化摘要
+   */
+  async getWorkItemBrief(
+    projectKey: string,
+    workItemType: string,
+    workItemId: number,
+  ): Promise<MeegoApiResult<import("./types.js").MeegoWorkItemBrief>> {
+    const pk = this.resolveProjectKey(projectKey);
+    const result = await this.request<unknown[]>("POST", `/${pk}/work_item/${workItemType}/query`, {
+      workItemIds: [workItemId],
+      expand: { needMultiText: true },
+    });
+    if (!result.ok) return result;
+    const raw =
+      Array.isArray(result.data) && result.data.length > 0 ? (result.data[0] as Record<string, unknown>) : null;
+    if (!raw) {
+      return { ok: false, errCode: 30005, message: "工作项不存在" };
+    }
+
+    const fields: Record<string, unknown> = {};
+    for (const pair of (raw.fields ?? raw.fieldValuePairs ?? []) as Array<{
+      fieldKey: string;
+      fieldValue: unknown;
+    }>) {
+      fields[pair.fieldKey] = pair.fieldValue;
+    }
+
+    const brief: import("./types.js").MeegoWorkItemBrief = {
+      id: raw.id as number,
+      name: raw.name as string,
+      type: (raw.workItemTypeKey ?? workItemType) as string,
+      mode: raw.pattern === "Node" ? "节点流" : "状态流",
+      status: (raw.workItemStatus as Record<string, string> | undefined)?.stateKey,
+      template: {
+        id: raw.templateId as number | undefined,
+        name: (raw.templateType ?? "") as string,
+      },
+      currentNodes:
+        raw.pattern === "Node" ? ((raw.currentNodes ?? []) as Array<{ id: string; name: string }>) : undefined,
+      fields,
+      createdAt: raw.createdAt as number | undefined,
+      updatedAt: raw.updatedAt as number | undefined,
+      createdBy: raw.createdBy as string | undefined,
+      updatedBy: raw.updatedBy as string | undefined,
+    };
+
+    return { ok: true, data: brief };
+  }
+
+  /**
+   * 搜索/过滤工作项列表
+   */
+  async searchWorkItems(
+    projectKey: string,
+    workItemType: string,
+    opts?: import("./types.js").SearchWorkItemsOpts,
+  ): Promise<MeegoApiResult<import("./types.js").MeegoSearchResult>> {
+    const pk = this.resolveProjectKey(projectKey);
+    const body: Record<string, unknown> = {
+      workItemTypeKeys: [workItemType],
+      limit: opts?.limit ?? 20,
+      pageNum: opts?.pageNum ?? 1,
+    };
+    if (opts?.filters && opts.filters.length > 0) {
+      body.filters = opts.filters;
+    }
+    return this.request("POST", `/${pk}/work_item/filter`, body);
+  }
 }
