@@ -276,4 +276,48 @@ export class MeegoClient {
     }
     return this.request("POST", `/${pk}/work_item/filter`, body);
   }
+
+  // ── 工作项写操作 ──
+
+  /**
+   * 创建工作项
+   *
+   * @returns 成功时 data 为新工作项 ID（number）
+   */
+  async createWorkItem(
+    projectKey: string,
+    workItemType: string,
+    name: string,
+    opts?: import("./types.js").CreateWorkItemOpts,
+  ): Promise<MeegoApiResult<number>> {
+    const pk = this.resolveProjectKey(projectKey);
+    const body: Record<string, unknown> = {
+      workItemTypeKey: workItemType,
+      name,
+    };
+    if (opts?.fields) body.fieldValuePairs = opts.fields;
+    if (opts?.templateId) body.templateId = opts.templateId;
+    return this.request("POST", `/${pk}/work_item/create`, body);
+  }
+
+  /**
+   * 更新工作项字段
+   */
+  async updateWorkItem(
+    projectKey: string,
+    workItemType: string,
+    workItemId: number,
+    fields: import("./types.js").MeegoFieldValuePair[],
+  ): Promise<MeegoApiResult<null>> {
+    const pk = this.resolveProjectKey(projectKey);
+    return this.request("PUT", `/${pk}/work_item/${workItemType}/${workItemId}`, { updateFields: fields });
+  }
+
+  /**
+   * 删除工作项
+   */
+  async deleteWorkItem(projectKey: string, workItemType: string, workItemId: number): Promise<MeegoApiResult<null>> {
+    const pk = this.resolveProjectKey(projectKey);
+    return this.request("DELETE", `/${pk}/work_item/${workItemType}/${workItemId}`);
+  }
 }

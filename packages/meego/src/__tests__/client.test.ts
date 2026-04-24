@@ -249,3 +249,56 @@ describe("MeegoClient — 工作项查询", () => {
     expect(body.limit).toBe(20);
   });
 });
+
+describe("MeegoClient — 工作项写操作", () => {
+  it("createWorkItem 应 POST /{project}/work_item/create", async () => {
+    const { fn, calls } = spyFetch({ err_code: 0, data: 999 });
+    const client = new MeegoClient({
+      baseUrl: "https://meego.test",
+      token: "t",
+      userKey: "u",
+      fetchFn: fn,
+    });
+
+    const result = await client.createWorkItem("proj_a", "issue", "登录崩溃", {
+      fields: [{ fieldKey: "priority", fieldValue: { value: "1" } }],
+    });
+
+    expect(calls[0].url).toContain("/work_item/create");
+    const body = JSON.parse(calls[0].init?.body as string);
+    expect(body.work_item_type_key).toBe("issue");
+    expect(body.name).toBe("登录崩溃");
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data).toBe(999);
+  });
+
+  it("updateWorkItem 应 PUT /{project}/work_item/{type}/{id}", async () => {
+    const { fn, calls } = spyFetch({ err_code: 0, data: null });
+    const client = new MeegoClient({
+      baseUrl: "https://meego.test",
+      token: "t",
+      userKey: "u",
+      fetchFn: fn,
+    });
+
+    await client.updateWorkItem("proj_a", "issue", 123, [{ fieldKey: "priority", fieldValue: { value: "0" } }]);
+
+    expect(calls[0].url).toContain("/work_item/issue/123");
+    expect(calls[0].init?.method).toBe("PUT");
+  });
+
+  it("deleteWorkItem 应 DELETE /{project}/work_item/{type}/{id}", async () => {
+    const { fn, calls } = spyFetch({ err_code: 0, data: null });
+    const client = new MeegoClient({
+      baseUrl: "https://meego.test",
+      token: "t",
+      userKey: "u",
+      fetchFn: fn,
+    });
+
+    await client.deleteWorkItem("proj_a", "issue", 123);
+
+    expect(calls[0].url).toContain("/work_item/issue/123");
+    expect(calls[0].init?.method).toBe("DELETE");
+  });
+});
