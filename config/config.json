@@ -17,7 +17,8 @@
       "reconnectIntervalSeconds": 10
     },
     "apiBaseUrl": "https://project.feishu.cn/open_api",
-    "pluginAccessToken": "${MEEGO_PLUGIN_ACCESS_TOKEN}"
+    "pluginAccessToken": "${MEEGO_PLUGIN_ACCESS_TOKEN}",
+    "userKey": "${MEEGO_USER_KEY}"
   },
   "lark": {
     "appId": "${LARK_APP_ID}",

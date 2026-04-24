@@ -117,6 +117,8 @@ export interface MeegoConfig {
   apiBaseUrl: string;
   /** 插件访问令牌（Plugin Access Token） */
   pluginAccessToken: string;
+  /** 调用者 user_key（在飞书项目中双击头像获取，API CRUD 操作必需） */
+  userKey?: string;
 }
 
 // ─── lark.yaml ───

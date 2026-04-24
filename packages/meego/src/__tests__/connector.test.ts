@@ -11,6 +11,9 @@ const makeConfig = (port: number, secret?: string): MeegoConfig => ({
   webhook: { host: "127.0.0.1", port, path: "/meego/webhook", secret },
   poll: { intervalSeconds: 60, lookbackMinutes: 5 },
   longConnection: { enabled: false, reconnectIntervalSeconds: 10 },
+  apiBaseUrl: "https://project.feishu.cn/open_api",
+  pluginAccessToken: "",
+  userKey: "",
 });
 
 describe("MeegoConnector — webhook 模式", () => {

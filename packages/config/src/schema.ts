@@ -58,6 +58,7 @@ const MeegoConfigSchema = z.object({
   longConnection: MeegoLongConnectionSchema,
   apiBaseUrl: z.string().url().default("https://project.feishu.cn/open_api"),
   pluginAccessToken: z.string().default(""),
+  userKey: z.string().default(""),
 });
 
 const LarkBotSchema = z.object({
@@ -233,6 +234,16 @@ export const AppConfigSchema = z.object({
       maxRecoveryRetries: z.number().default(3),
       inferenceTimeoutMs: z.number().default(60_000),
       enabled: z.boolean().default(false),
+    })
+    .optional(),
+  openViking: z
+    .object({
+      baseUrl: z.string().url(),
+      agentId: z.string().min(1),
+      apiKey: z.string().optional(),
+      timeoutMs: z.number().int().positive(),
+      heartbeatIntervalMs: z.number().int().positive(),
+      heartbeatFailThreshold: z.number().int().positive(),
     })
     .optional(),
 });
