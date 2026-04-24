@@ -1,6 +1,6 @@
 # @teamsland/meego Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Implement the `@teamsland/meego` package — Meego 事件摄入与人工确认工作流。Provides `MeegoEventBus` (SQLite 幂等去重 + handler 调度), `MeegoConnector` (webhook/poll/长连接三模式), and `ConfirmationWatcher` (Lark DM 提醒轮询) as the public API.
 
@@ -51,7 +51,7 @@ The `@teamsland/meego` package scaffold exists with an empty `export {}` in `src
 **Files:**
 - Modify: `packages/meego/package.json`
 
-- [ ] **Step 1: Add @teamsland/observability dependency**
+- [x] **Step 1: Add @teamsland/observability dependency**
 
 Replace the entire content of `/Users/bytedance/workspace/teamsland/packages/meego/package.json`:
 
@@ -72,7 +72,7 @@ Replace the entire content of `/Users/bytedance/workspace/teamsland/packages/mee
 }
 ```
 
-- [ ] **Step 2: Update tsconfig.json to add observability reference**
+- [x] **Step 2: Update tsconfig.json to add observability reference**
 
 Replace the entire content of `/Users/bytedance/workspace/teamsland/packages/meego/tsconfig.json`:
 
@@ -90,12 +90,12 @@ Replace the entire content of `/Users/bytedance/workspace/teamsland/packages/mee
 }
 ```
 
-- [ ] **Step 3: Install dependencies**
+- [x] **Step 3: Install dependencies**
 
 Run: `cd /Users/bytedance/workspace/teamsland && bun install`
 Expected: Resolves without errors
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /Users/bytedance/workspace/teamsland && git add packages/meego/package.json packages/meego/tsconfig.json bun.lockb && git commit -m "$(cat <<'EOF'
@@ -117,7 +117,7 @@ EOF
 - Create: `packages/meego/src/__tests__/event-bus.test.ts`
 - Create: `packages/meego/src/event-bus.ts`
 
-- [ ] **Step 1: Create event-bus test first**
+- [x] **Step 1: Create event-bus test first**
 
 Create `/Users/bytedance/workspace/teamsland/packages/meego/src/__tests__/event-bus.test.ts`:
 
@@ -216,12 +216,12 @@ describe("MeegoEventBus", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd /Users/bytedance/workspace/teamsland && bunx --bun vitest run packages/meego/src/__tests__/event-bus.test.ts`
 Expected: FAIL — `../event-bus.js` does not exist
 
-- [ ] **Step 3: Create event-bus.ts implementation**
+- [x] **Step 3: Create event-bus.ts implementation**
 
 Create `/Users/bytedance/workspace/teamsland/packages/meego/src/event-bus.ts`:
 
@@ -391,22 +391,22 @@ export class MeegoEventBus {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cd /Users/bytedance/workspace/teamsland && bunx --bun vitest run packages/meego/src/__tests__/event-bus.test.ts`
 Expected: All 7 tests pass
 
-- [ ] **Step 5: Run typecheck**
+- [x] **Step 5: Run typecheck**
 
 Run: `cd /Users/bytedance/workspace/teamsland && bunx tsc --noEmit --project packages/meego/tsconfig.json`
 Expected: No errors
 
-- [ ] **Step 6: Run lint**
+- [x] **Step 6: Run lint**
 
 Run: `cd /Users/bytedance/workspace/teamsland && bunx biome check packages/meego/src/event-bus.ts packages/meego/src/__tests__/event-bus.test.ts`
 Expected: No errors. If Biome reports issues, fix with `bunx biome check --write` and re-run.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /Users/bytedance/workspace/teamsland && git add packages/meego/src/event-bus.ts packages/meego/src/__tests__/event-bus.test.ts && git commit -m "$(cat <<'EOF'
@@ -429,7 +429,7 @@ EOF
 - Create: `packages/meego/src/__tests__/connector.test.ts`
 - Create: `packages/meego/src/connector.ts`
 
-- [ ] **Step 1: Create connector test first**
+- [x] **Step 1: Create connector test first**
 
 Create `/Users/bytedance/workspace/teamsland/packages/meego/src/__tests__/connector.test.ts`:
 
@@ -565,12 +565,12 @@ describe("MeegoConnector — poll 模式", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd /Users/bytedance/workspace/teamsland && bunx --bun vitest run packages/meego/src/__tests__/connector.test.ts`
 Expected: FAIL — `../connector.js` does not exist
 
-- [ ] **Step 3: Create connector.ts implementation**
+- [x] **Step 3: Create connector.ts implementation**
 
 Create `/Users/bytedance/workspace/teamsland/packages/meego/src/connector.ts`:
 
@@ -815,22 +815,22 @@ export class MeegoConnector {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cd /Users/bytedance/workspace/teamsland && bunx --bun vitest run packages/meego/src/__tests__/connector.test.ts`
 Expected: All 5 tests pass
 
-- [ ] **Step 5: Run typecheck**
+- [x] **Step 5: Run typecheck**
 
 Run: `cd /Users/bytedance/workspace/teamsland && bunx tsc --noEmit --project packages/meego/tsconfig.json`
 Expected: No errors
 
-- [ ] **Step 6: Run lint**
+- [x] **Step 6: Run lint**
 
 Run: `cd /Users/bytedance/workspace/teamsland && bunx biome check packages/meego/src/connector.ts packages/meego/src/__tests__/connector.test.ts`
 Expected: No errors. If Biome reports issues, fix with `bunx biome check --write` and re-run.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /Users/bytedance/workspace/teamsland && git add packages/meego/src/connector.ts packages/meego/src/__tests__/connector.test.ts && git commit -m "$(cat <<'EOF'
@@ -853,7 +853,7 @@ EOF
 - Create: `packages/meego/src/__tests__/confirmation.test.ts`
 - Create: `packages/meego/src/confirmation.ts`
 
-- [ ] **Step 1: Create confirmation test first**
+- [x] **Step 1: Create confirmation test first**
 
 Create `/Users/bytedance/workspace/teamsland/packages/meego/src/__tests__/confirmation.test.ts`:
 
@@ -957,12 +957,12 @@ describe("ConfirmationWatcher", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd /Users/bytedance/workspace/teamsland && bunx --bun vitest run packages/meego/src/__tests__/confirmation.test.ts`
 Expected: FAIL — `../confirmation.js` does not exist
 
-- [ ] **Step 3: Create confirmation.ts implementation**
+- [x] **Step 3: Create confirmation.ts implementation**
 
 Create `/Users/bytedance/workspace/teamsland/packages/meego/src/confirmation.ts`:
 
@@ -1115,22 +1115,22 @@ export class ConfirmationWatcher {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cd /Users/bytedance/workspace/teamsland && bunx --bun vitest run packages/meego/src/__tests__/confirmation.test.ts`
 Expected: All 5 tests pass
 
-- [ ] **Step 5: Run typecheck**
+- [x] **Step 5: Run typecheck**
 
 Run: `cd /Users/bytedance/workspace/teamsland && bunx tsc --noEmit --project packages/meego/tsconfig.json`
 Expected: No errors
 
-- [ ] **Step 6: Run lint**
+- [x] **Step 6: Run lint**
 
 Run: `cd /Users/bytedance/workspace/teamsland && bunx biome check packages/meego/src/confirmation.ts packages/meego/src/__tests__/confirmation.test.ts`
 Expected: No errors. If Biome reports issues, fix with `bunx biome check --write` and re-run.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /Users/bytedance/workspace/teamsland && git add packages/meego/src/confirmation.ts packages/meego/src/__tests__/confirmation.test.ts && git commit -m "$(cat <<'EOF'
@@ -1152,7 +1152,7 @@ EOF
 **Files:**
 - Modify: `packages/meego/src/index.ts`
 
-- [ ] **Step 1: Replace index.ts with barrel exports**
+- [x] **Step 1: Replace index.ts with barrel exports**
 
 Replace the entire content of `/Users/bytedance/workspace/teamsland/packages/meego/src/index.ts`:
 
@@ -1165,17 +1165,17 @@ export { MeegoConnector } from "./connector.js";
 export { ConfirmationWatcher } from "./confirmation.js";
 ```
 
-- [ ] **Step 2: Run typecheck**
+- [x] **Step 2: Run typecheck**
 
 Run: `cd /Users/bytedance/workspace/teamsland && bunx tsc --noEmit --project packages/meego/tsconfig.json`
 Expected: No errors
 
-- [ ] **Step 3: Run lint**
+- [x] **Step 3: Run lint**
 
 Run: `cd /Users/bytedance/workspace/teamsland && bunx biome check packages/meego/src/index.ts`
 Expected: No errors
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /Users/bytedance/workspace/teamsland && git add packages/meego/src/index.ts && git commit -m "$(cat <<'EOF'
@@ -1192,22 +1192,22 @@ EOF
 
 ### Task 6: Full Verification
 
-- [ ] **Step 1: Run all meego tests**
+- [x] **Step 1: Run all meego tests**
 
 Run: `cd /Users/bytedance/workspace/teamsland && bunx --bun vitest run packages/meego/`
 Expected: All tests pass (event-bus: 7, connector: 5, confirmation: 5 — total 17)
 
-- [ ] **Step 2: Run typecheck for meego package**
+- [x] **Step 2: Run typecheck for meego package**
 
 Run: `cd /Users/bytedance/workspace/teamsland && bunx tsc --noEmit --project packages/meego/tsconfig.json`
 Expected: No errors
 
-- [ ] **Step 3: Run lint on entire meego package**
+- [x] **Step 3: Run lint on entire meego package**
 
 Run: `cd /Users/bytedance/workspace/teamsland && bunx biome check packages/meego/src/`
 Expected: No errors
 
-- [ ] **Step 4: Verify exported API surface**
+- [x] **Step 4: Verify exported API surface**
 
 Run:
 ```bash
@@ -1229,7 +1229,7 @@ MeegoConnector: function
 ConfirmationWatcher: function
 ```
 
-- [ ] **Step 5: Verify no any or non-null assertions in source**
+- [x] **Step 5: Verify no any or non-null assertions in source**
 
 Run: `cd /Users/bytedance/workspace/teamsland && grep -rn '\bany\b' packages/meego/src/ --include='*.ts' | grep -v '__tests__' | grep -v 'node_modules'`
 Expected: No output (or only in catch clauses like `catch (err: unknown)`)
@@ -1237,7 +1237,7 @@ Expected: No output (or only in catch clauses like `catch (err: unknown)`)
 Run: `cd /Users/bytedance/workspace/teamsland && grep -rn '!\.' packages/meego/src/ --include='*.ts' | grep -v '__tests__' | grep -v 'node_modules'`
 Expected: No non-null assertions
 
-- [ ] **Step 6: Verify file count**
+- [x] **Step 6: Verify file count**
 
 Run: `cd /Users/bytedance/workspace/teamsland && ls packages/meego/src/*.ts | wc -l`
 Expected: 4 (event-bus, connector, confirmation, index)
@@ -1245,7 +1245,7 @@ Expected: 4 (event-bus, connector, confirmation, index)
 Run: `cd /Users/bytedance/workspace/teamsland && ls packages/meego/src/__tests__/*.test.ts | wc -l`
 Expected: 3 test files
 
-- [ ] **Step 7: Verify no bare console.log**
+- [x] **Step 7: Verify no bare console.log**
 
 Run: `cd /Users/bytedance/workspace/teamsland && grep -rn 'console\.' packages/meego/src/ --include='*.ts' | grep -v '__tests__'`
 Expected: No output (all logging via createLogger)

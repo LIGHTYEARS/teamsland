@@ -6,7 +6,8 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "bun run --filter @teamsland/server dev",
+    "dev": "overmind start -f Procfile.dev",
+    "dev:server": "bun run --filter @teamsland/server dev",
     "dev:dashboard": "bun run --filter @teamsland/dashboard dev",
     "dev:docs": "bun run --filter @teamsland/docs dev",
     "build": "bun run --filter '*' build",
