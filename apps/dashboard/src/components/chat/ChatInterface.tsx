@@ -1,96 +1,92 @@
 import type { NormalizedMessage } from "@teamsland/types";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationEmptyState,
+  ConversationScrollButton,
+} from "@teamsland/ui/elements/conversation";
+import { useMemo } from "react";
+import { MessageBubble } from "./MessageBubble";
 import { MessageInput } from "./MessageInput";
-import { MessageList } from "./MessageList";
 
-/**
- * 聊天界面容器组件属性
- *
- * @example
- * ```tsx
- * <ChatInterface
- *   sessionId="sess_abc"
- *   messages={messages}
- *   isStreaming={false}
- *   onSendMessage={(msg) => console.log(msg)}
- *   onPermissionResponse={(id, action) => console.log(id, action)}
- *   canInteract={true}
- * />
- * ```
- */
 export interface ChatInterfaceProps {
-  /** 当前会话 ID */
   sessionId: string;
-  /** 归一化消息数组 */
   messages: NormalizedMessage[];
-  /** 是否正在流式接收 */
   isStreaming: boolean;
-  /** 发送消息回调 */
   onSendMessage: (message: string) => void;
-  /**
-   * 权限请求响应回调，透传给 MessageList -> MessageBubble
-   *
-   * @example
-   * ```tsx
-   * <ChatInterface
-   *   sessionId="sess_001"
-   *   messages={[]}
-   *   isStreaming={false}
-   *   onSendMessage={(msg) => console.log(msg)}
-   *   onPermissionResponse={(messageId, action) => {
-   *     send({ type: "permission-response", messageId, action });
-   *   }}
-   *   canInteract={true}
-   * />
-   * ```
-   */
+  onAbort?: () => void;
   onPermissionResponse?: (messageId: string, action: "allow" | "deny") => void;
-  /** 是否可交互（false 为只读模式，true 为接管模式） */
   canInteract: boolean;
 }
 
-/**
- * 聊天界面容器组件
- *
- * 整合 MessageList 和 MessageInput，构成完整的聊天交互界面。
- * MessageList 占据剩余空间用于消息展示，MessageInput 固定在底部。
- * canInteract 为 false 时输入框禁用，适用于只读观察模式。
- *
- * @example
- * ```tsx
- * import { ChatInterface } from "./ChatInterface";
- * import type { NormalizedMessage } from "@teamsland/types";
- *
- * function SessionView() {
- *   const messages: NormalizedMessage[] = [];
- *   const [isStreaming] = useState(false);
- *
- *   return (
- *     <ChatInterface
- *       sessionId="sess_001"
- *       messages={messages}
- *       isStreaming={isStreaming}
- *       onSendMessage={(msg) => console.log("发送:", msg)}
- *       canInteract={true}
- *     />
- *   );
- * }
- * ```
- */
+function buildToolResultMap(messages: NormalizedMessage[]): Map<string, NormalizedMessage> {
+  const map = new Map<string, NormalizedMessage>();
+  for (const msg of messages) {
+    if (msg.kind === "tool_result" && msg.toolId) {
+      map.set(msg.toolId, msg);
+    }
+  }
+  return map;
+}
+
 export function ChatInterface({
   sessionId,
   messages,
   isStreaming,
   onSendMessage,
+  onAbort,
   onPermissionResponse,
   canInteract,
 }: ChatInterfaceProps) {
+  const toolResultMap = useMemo(() => buildToolResultMap(messages), [messages]);
+
+  const pairedResultIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const msg of messages) {
+      if (msg.kind === "tool_use" && msg.toolId) {
+        const result = toolResultMap.get(msg.toolId);
+        if (result) ids.add(result.id);
+      }
+    }
+    return ids;
+  }, [messages, toolResultMap]);
+
   return (
     <div className="flex h-full flex-col" data-session-id={sessionId}>
-      <MessageList messages={messages} isStreaming={isStreaming} onPermissionResponse={onPermissionResponse} />
+      <Conversation className="flex-1">
+        <ConversationContent className="mx-auto min-w-[20rem] max-w-[80rem] gap-4 px-6 py-6">
+          {messages.length === 0 ? (
+            <ConversationEmptyState title="暂无消息" description="等待会话开始..." />
+          ) : (
+            messages.map((msg) => {
+              if (pairedResultIds.has(msg.id)) return null;
+              const toolResult = msg.kind === "tool_use" && msg.toolId ? toolResultMap.get(msg.toolId) : undefined;
+              return (
+                <MessageBubble
+                  key={msg.id}
+                  message={msg}
+                  toolResult={toolResult}
+                  onPermissionResponse={onPermissionResponse}
+                />
+              );
+            })
+          )}
+          {isStreaming && (
+            <div className="flex items-center gap-1.5 text-muted-foreground text-sm">
+              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-primary" />
+              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-primary [animation-delay:75ms]" />
+              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-primary [animation-delay:150ms]" />
+            </div>
+          )}
+        </ConversationContent>
+        <ConversationScrollButton />
+      </Conversation>
       <MessageInput
         onSend={onSendMessage}
+        onAbort={onAbort}
+        isStreaming={isStreaming}
         disabled={!canInteract || isStreaming}
-        placeholder={canInteract ? "输入消息，Ctrl+Enter 发送..." : "只读模式 — 接管后可发送消息"}
+        placeholder={canInteract ? "输入消息，Enter 发送..." : "只读模式 — 接管后可发送消息"}
       />
     </div>
   );

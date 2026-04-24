@@ -135,6 +135,7 @@ export function initDashboard(
       hookMetricsCollector,
       appConfig: config,
       vikingClient,
+      interruptController: sidecar.interruptController,
     },
     controller.signal,
   );

@@ -102,17 +102,46 @@ describe("LarkCli", () => {
   });
 
   describe("imHistory", () => {
-    it("解析 stdout JSON 数组为 LarkMessage[]", async () => {
-      const messages = [
-        { messageId: "om_1", sender: "ou_a", content: "hello", timestamp: 1713600000000 },
-        { messageId: "om_2", sender: "ou_b", content: "world", timestamp: 1713600001000 },
+    it("解析 LarkCliResponse 格式为 LarkMessage[]", async () => {
+      const cliResponse = {
+        ok: true,
+        data: {
+          messages: [
+            {
+              message_id: "om_1",
+              content: "hello",
+              create_time: "2024-04-20T16:00:00.000Z",
+              sender: { id: "ou_a", name: "Alice" },
+            },
+            {
+              message_id: "om_2",
+              content: "world",
+              create_time: "2024-04-20T16:00:01.000Z",
+              sender: { id: "ou_b", name: "Bob" },
+            },
+          ],
+        },
+      };
+      const expected = [
+        {
+          messageId: "om_1",
+          sender: "Alice",
+          content: "hello",
+          timestamp: new Date("2024-04-20T16:00:00.000Z").getTime(),
+        },
+        {
+          messageId: "om_2",
+          sender: "Bob",
+          content: "world",
+          timestamp: new Date("2024-04-20T16:00:01.000Z").getTime(),
+        },
       ];
-      const runner = createMockRunner({ exitCode: 0, stdout: JSON.stringify(messages), stderr: "" });
+      const runner = createMockRunner({ exitCode: 0, stdout: JSON.stringify(cliResponse), stderr: "" });
       const cli = new LarkCli(testConfig, runner);
 
       const result = await cli.imHistory("oc_chat001");
 
-      expect(result).toEqual(messages);
+      expect(result).toEqual(expected);
       expect(runner.run).toHaveBeenCalledWith([
         "lark-cli",
         "im",
@@ -129,7 +158,8 @@ describe("LarkCli", () => {
     });
 
     it("使用自定义 count 覆盖默认值", async () => {
-      const runner = createMockRunner({ exitCode: 0, stdout: "[]", stderr: "" });
+      const emptyResponse = { ok: true, data: { messages: [] } };
+      const runner = createMockRunner({ exitCode: 0, stdout: JSON.stringify(emptyResponse), stderr: "" });
       const cli = new LarkCli(testConfig, runner);
 
       await cli.imHistory("oc_chat001", 5);

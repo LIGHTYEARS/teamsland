@@ -174,56 +174,41 @@ async function runGit(args: string[], cwd: string): Promise<GitExecResult> {
   }
 }
 
+const GIT_GET_ROUTES: Record<string, (url: URL) => Promise<Response>> = {
+  "/api/git/status": handleGitStatus,
+  "/api/git/diff": handleGitDiff,
+  "/api/git/branches": handleGitBranches,
+  "/api/git/log": handleGitLog,
+};
+
+const GIT_POST_ROUTES: Record<string, (req: Request) => Promise<Response>> = {
+  "/api/git/stage": handleGitStage,
+  "/api/git/unstage": handleGitUnstage,
+  "/api/git/commit": handleGitCommit,
+  "/api/git/checkout": handleGitCheckout,
+};
+
 /**
- * 处理 Git 操作路由
+ * Git API 路由分发器
  *
- * 匹配 /api/git/status、/api/git/diff、/api/git/branches、
- * /api/git/stage、/api/git/commit、/api/git/checkout 路由。
- * 匹配时返回 Response 或 Promise<Response>，不匹配时返回 null。
- *
- * @param req - HTTP 请求
- * @param url - 解析后的 URL
- * @returns Response（匹配时）或 null（不匹配时）
+ * 根据请求方法和路径分发到对应的处理函数。
  *
  * @example
  * ```typescript
- * import { handleGitRoutes } from "./git-routes.js";
- *
- * const result = handleGitRoutes(req, url);
- * if (result) return result;
+ * const response = handleGitRoutes(req, new URL(req.url));
  * ```
  */
 export function handleGitRoutes(req: Request, url: URL): Response | Promise<Response> | null {
   if (!url.pathname.startsWith("/api/git")) return null;
 
-  // GET /api/git/status?path=...
-  if (req.method === "GET" && url.pathname === "/api/git/status") {
-    return handleGitStatus(url);
+  if (req.method === "GET") {
+    const handler = GIT_GET_ROUTES[url.pathname];
+    if (handler) return handler(url);
   }
 
-  // GET /api/git/diff?path=...
-  if (req.method === "GET" && url.pathname === "/api/git/diff") {
-    return handleGitDiff(url);
-  }
-
-  // GET /api/git/branches?path=...
-  if (req.method === "GET" && url.pathname === "/api/git/branches") {
-    return handleGitBranches(url);
-  }
-
-  // POST /api/git/stage
-  if (req.method === "POST" && url.pathname === "/api/git/stage") {
-    return handleGitStage(req);
-  }
-
-  // POST /api/git/commit
-  if (req.method === "POST" && url.pathname === "/api/git/commit") {
-    return handleGitCommit(req);
-  }
-
-  // POST /api/git/checkout
-  if (req.method === "POST" && url.pathname === "/api/git/checkout") {
-    return handleGitCheckout(req);
+  if (req.method === "POST") {
+    const handler = GIT_POST_ROUTES[url.pathname];
+    if (handler) return handler(req);
   }
 
   return null;
@@ -242,6 +227,43 @@ export function handleGitRoutes(req: Request, url: URL): Response | Promise<Resp
  * const response = await handleGitStatus(new URL("http://localhost/api/git/status?path=/Users/dev/project"));
  * ```
  */
+interface ParsedStatus {
+  branch: string;
+  files: Array<{ path: string; status: string; staged: boolean }>;
+}
+
+/** 解析 `git status --porcelain -b` 的输出行 */
+function parseStatusLines(lines: string[]): ParsedStatus {
+  let branch = "";
+  const files: ParsedStatus["files"] = [];
+
+  for (const line of lines) {
+    if (line.startsWith("##")) {
+      branch = line.replace("## ", "").split("...")[0] ?? "";
+      continue;
+    }
+    parseStatusFileLine(line, files);
+  }
+
+  return { branch, files };
+}
+
+/** 解析单行 git status 文件条目 */
+function parseStatusFileLine(line: string, files: ParsedStatus["files"]): void {
+  const indexStatus = line[0];
+  const workTreeStatus = line[1];
+  const filePath = line.slice(3).trim();
+  if (!filePath) return;
+
+  if (indexStatus && indexStatus !== " " && indexStatus !== "?") {
+    files.push({ path: filePath, status: indexStatus, staged: true });
+  }
+  if (workTreeStatus && workTreeStatus !== " ") {
+    const status = line.slice(0, 2).trim() === "??" ? "??" : workTreeStatus;
+    files.push({ path: filePath, status, staged: false });
+  }
+}
+
 async function handleGitStatus(url: URL): Promise<Response> {
   const rawPath = url.searchParams.get("path");
   const safePath = validateRepoPath(rawPath);
@@ -256,23 +278,8 @@ async function handleGitStatus(url: URL): Promise<Response> {
   }
 
   const lines = result.stdout.split("\n").filter((l) => l.trim());
-  let branch = "";
-  const files: Array<{ status: string; file: string }> = [];
-
-  for (const line of lines) {
-    if (line.startsWith("##")) {
-      // ## main...origin/main => "main"
-      branch = line.replace("## ", "").split("...")[0] ?? "";
-    } else {
-      const statusCode = line.slice(0, 2).trim();
-      const filePath = line.slice(3).trim();
-      if (filePath) {
-        files.push({ status: statusCode, file: filePath });
-      }
-    }
-  }
-
-  return jsonResponse({ branch, files, raw: result.stdout });
+  const parsed = parseStatusLines(lines);
+  return jsonResponse(parsed);
 }
 
 /**
@@ -403,6 +410,55 @@ async function handleGitStage(req: Request): Promise<Response> {
 }
 
 /**
+ * 处理 POST /api/git/unstage — 取消暂存文件
+ *
+ * 在指定目录执行 `git reset HEAD -- <files>`，将文件从暂存区移回工作区。
+ *
+ * @param req - HTTP 请求
+ * @returns Unstage 结果 JSON 响应
+ *
+ * @example
+ * ```typescript
+ * const response = await handleGitUnstage(new Request("http://localhost/api/git/unstage", {
+ *   method: "POST",
+ *   body: JSON.stringify({ path: "/Users/dev/project", files: ["src/index.ts"] }),
+ * }));
+ * ```
+ */
+async function handleGitUnstage(req: Request): Promise<Response> {
+  let body: StageBody;
+  try {
+    body = (await req.json()) as StageBody;
+  } catch {
+    return jsonResponse({ error: "invalid_json", message: "请求体必须是有效的 JSON" }, 400);
+  }
+
+  const safePath = validateRepoPath(body.path);
+  if (!safePath) {
+    return jsonResponse({ error: "invalid_path", message: "路径不合法或不在允许范围内" }, 403);
+  }
+
+  if (!Array.isArray(body.files) || body.files.length === 0) {
+    return jsonResponse({ error: "missing_field", message: "files 字段必须为非空数组" }, 400);
+  }
+
+  for (const file of body.files) {
+    if (typeof file !== "string" || !isSafeGitArg(file)) {
+      return jsonResponse({ error: "invalid_file", message: `文件名不合法: ${String(file)}` }, 400);
+    }
+  }
+
+  const result = await runGit(["reset", "HEAD", "--", ...body.files], safePath);
+  if (result.exitCode !== 0) {
+    logger.warn({ stderr: result.stderr, path: safePath }, "git reset 执行失败");
+    return jsonResponse({ error: "git_error", message: result.stderr.trim() || "git reset 失败" }, 500);
+  }
+
+  logger.info({ path: safePath, fileCount: body.files.length }, "文件已取消暂存");
+  return jsonResponse({ unstaged: true, files: body.files });
+}
+
+/**
  * 处理 POST /api/git/commit — 提交变更
  *
  * 在指定目录执行 `git commit -m`，使用请求体中的提交消息。
@@ -496,4 +552,91 @@ async function handleGitCheckout(req: Request): Promise<Response> {
 
   logger.info({ path: safePath, branch }, "Git 分支切换成功");
   return jsonResponse({ ok: true, branch });
+}
+
+/**
+ * Git 提交记录
+ *
+ * @example
+ * ```typescript
+ * const entry: GitLogEntry = {
+ *   hash: "abc1234",
+ *   message: "feat: add login",
+ *   author: "Dev",
+ *   date: "2026-04-23T10:00:00+08:00",
+ *   files: [{ path: "src/login.ts", status: "modified", additions: 12, deletions: 3 }],
+ * };
+ * ```
+ */
+interface GitLogEntry {
+  hash: string;
+  message: string;
+  author: string;
+  date: string;
+  files: Array<{ path: string; status: string; additions: number; deletions: number }>;
+}
+
+/** 解析单个 numstat 文件行 */
+function parseNumstatLine(line: string): GitLogEntry["files"][number] | null {
+  const match = line.match(/^(\d+|-)\t(\d+|-)\t(.+)$/);
+  if (!match) return null;
+
+  const additions = match[1] === "-" ? 0 : Number.parseInt(match[1], 10);
+  const deletions = match[2] === "-" ? 0 : Number.parseInt(match[2], 10);
+  const filePath = match[3];
+
+  let status = "modified";
+  if (additions > 0 && deletions === 0) status = "added";
+  if (additions === 0 && deletions > 0) status = "deleted";
+
+  return { path: filePath, status, additions, deletions };
+}
+
+/** 从 git log 原始输出解析 commit 列表 */
+function parseGitLogOutput(stdout: string): GitLogEntry[] {
+  const commits: GitLogEntry[] = [];
+  const blocks = stdout.split("\n\n");
+
+  for (const block of blocks) {
+    const lines = block.split("\n").filter((l) => l.length > 0);
+    if (lines.length === 0) continue;
+
+    const parts = lines[0].split("\0");
+    if (parts.length < 4) continue;
+
+    const [hash, message, author, date] = parts;
+    const files: GitLogEntry["files"] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const parsed = parseNumstatLine(lines[i]);
+      if (parsed) files.push(parsed);
+    }
+
+    commits.push({ hash: hash ?? "", message: message ?? "", author: author ?? "", date: date ?? "", files });
+  }
+
+  return commits;
+}
+
+async function handleGitLog(url: URL): Promise<Response> {
+  const rawPath = url.searchParams.get("path");
+  const safePath = validateRepoPath(rawPath);
+  if (!safePath) {
+    return jsonResponse({ error: "invalid_path", message: "路径不合法或不在允许范围内" }, 403);
+  }
+
+  const limitParam = url.searchParams.get("limit");
+  const limit = Math.min(Math.max(Number.parseInt(limitParam ?? "10", 10) || 10, 1), 50);
+
+  const result = await runGit(
+    ["log", `--max-count=${limit}`, "--pretty=format:%H%x00%s%x00%an%x00%aI", "--numstat"],
+    safePath,
+  );
+  if (result.exitCode !== 0) {
+    logger.warn({ stderr: result.stderr, path: safePath }, "git log 执行失败");
+    return jsonResponse({ error: "git_error", message: result.stderr.trim() || "git log 失败" }, 500);
+  }
+
+  const commits = parseGitLogOutput(result.stdout);
+  return jsonResponse({ commits });
 }

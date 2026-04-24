@@ -1,8 +1,15 @@
 import type { NormalizedMessage } from "@teamsland/types";
-import { Wrench } from "lucide-react";
+import { Agent, AgentContent, AgentHeader, AgentInstructions, AgentOutput } from "@teamsland/ui/elements/agent";
+import { CodeBlock } from "@teamsland/ui/elements/code-block";
+import { MessageResponse } from "@teamsland/ui/elements/message";
+import { Plan, PlanAction, PlanContent, PlanHeader, PlanTitle, PlanTrigger } from "@teamsland/ui/elements/plan";
+import { Task, TaskContent, TaskItem, TaskItemFile, TaskTrigger } from "@teamsland/ui/elements/task";
+import { Tool, ToolContent, ToolHeader, ToolOutput } from "@teamsland/ui/elements/tool";
+import type { ToolState } from "@teamsland/ui/elements/types";
+import { cn } from "@teamsland/ui/lib/utils";
+import { BookOpen, CheckCircle2, Circle, FileText, Loader2, Wrench } from "lucide-react";
+import type { BundledLanguage } from "shiki";
 import { BashOutput } from "./BashOutput";
-import { CollapsibleSection } from "./CollapsibleSection";
-import { FileListContent } from "./FileListContent";
 import { ToolDiffViewer } from "./ToolDiffViewer";
 
 /**
@@ -10,28 +17,14 @@ import { ToolDiffViewer } from "./ToolDiffViewer";
  *
  * @example
  * ```tsx
- * <ToolRenderer
- *   message={toolUseMessage}
- *   result={toolResultMessage}
- * />
+ * <ToolRenderer message={toolUseMessage} result={toolResultMessage} />
  * ```
  */
 export interface ToolRendererProps {
-  /** tool_use 类型的消息 */
   message: NormalizedMessage;
-  /** 匹配的 tool_result 消息 */
   result?: NormalizedMessage;
 }
 
-/**
- * 安全地将 unknown 转换为 Record<string, unknown>
- *
- * @example
- * ```ts
- * toRecord({ a: 1 }); // { a: 1 }
- * toRecord("not-object"); // {}
- * ```
- */
 function toRecord(value: unknown): Record<string, unknown> {
   if (value !== null && typeof value === "object" && !Array.isArray(value)) {
     return value as Record<string, unknown>;
@@ -39,40 +32,15 @@ function toRecord(value: unknown): Record<string, unknown> {
   return {};
 }
 
-/**
- * 安全地将 unknown 转换为字符串数组
- *
- * @example
- * ```ts
- * toStringArray(["a.ts", "b.ts"]); // ["a.ts", "b.ts"]
- * toStringArray("not-array"); // []
- * ```
- */
 function toStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === "string");
 }
 
-/**
- * 获取工具结果的文本内容
- *
- * @example
- * ```ts
- * getResultText({ toolResult: { content: "OK" } }); // "OK"
- * ```
- */
 function getResultText(resultMsg?: NormalizedMessage): string | undefined {
   return resultMsg?.toolResult?.content;
 }
 
-/**
- * 安全地将 JSON 转为格式化字符串
- *
- * @example
- * ```ts
- * safeStringify({ key: "value" }); // '{\n  "key": "value"\n}'
- * ```
- */
 function safeStringify(value: unknown): string {
   try {
     return JSON.stringify(value, null, 2);
@@ -81,7 +49,52 @@ function safeStringify(value: unknown): string {
   }
 }
 
-/** 工具渲染上下文 */
+/**
+ * 从文件路径推断 Shiki 高亮语言
+ *
+ * @example
+ * ```ts
+ * inferLanguage("/src/index.ts"); // "typescript"
+ * ```
+ */
+function inferLanguage(filePath: string): BundledLanguage {
+  const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
+  const langMap: Record<string, string> = {
+    ts: "typescript",
+    tsx: "tsx",
+    js: "javascript",
+    jsx: "jsx",
+    json: "json",
+    md: "markdown",
+    css: "css",
+    html: "html",
+    py: "python",
+    rs: "rust",
+    go: "go",
+    yaml: "yaml",
+    yml: "yaml",
+    sh: "bash",
+    toml: "toml",
+    sql: "sql",
+  };
+  return (langMap[ext] ?? "text") as BundledLanguage;
+}
+
+/**
+ * 从结果和错误状态推导 ToolState
+ *
+ * @example
+ * ```ts
+ * deriveToolState("OK", false); // "output-available"
+ * deriveToolState(undefined, false); // "input-available"
+ * ```
+ */
+function deriveToolState(resultText: string | undefined, isError: boolean): ToolState {
+  if (isError) return "output-error";
+  if (resultText !== undefined) return "output-available";
+  return "input-available";
+}
+
 interface ToolContext {
   toolName: string;
   input: Record<string, unknown>;
@@ -90,63 +103,71 @@ interface ToolContext {
   result?: NormalizedMessage;
 }
 
-/**
- * 渲染 Edit/Write 工具
- *
- * @example
- * ```tsx
- * renderDiffTool({ toolName: "Edit", input: {}, resultText: "OK", isError: false });
- * ```
- */
 function renderDiffTool(ctx: ToolContext): React.ReactNode {
   return <ToolDiffViewer toolName={ctx.toolName} toolInput={ctx.input} result={ctx.resultText} />;
 }
 
-/**
- * 渲染 Bash 工具
- *
- * @example
- * ```tsx
- * renderBashTool({ toolName: "Bash", input: { command: "ls" }, resultText: "file.ts", isError: false });
- * ```
- */
 function renderBashTool(ctx: ToolContext): React.ReactNode {
   const command = typeof ctx.input.command === "string" ? ctx.input.command : undefined;
   return <BashOutput command={command} output={ctx.resultText} isError={ctx.isError} />;
 }
 
 /**
- * 渲染 Glob/Grep 工具的文件列表
+ * 渲染搜索工具（Glob/Grep，使用 Task 组件展示搜索结果）
  *
  * @example
  * ```tsx
- * renderFileSearchTool({ toolName: "Glob", input: {}, resultText: "a.ts\nb.ts", isError: false });
+ * renderFileSearchTool({ toolName: "Grep", input: { pattern: "TODO" }, resultText: "a.ts\nb.ts", isError: false });
  * ```
  */
 function renderFileSearchTool(ctx: ToolContext): React.ReactNode {
+  const pattern = typeof ctx.input.pattern === "string" ? ctx.input.pattern : undefined;
+  const path = typeof ctx.input.path === "string" ? ctx.input.path : undefined;
+  const title = pattern ? `${ctx.toolName}: ${pattern}` : path ? `${ctx.toolName}: ${path}` : ctx.toolName;
+
   const resultData = ctx.result?.toolResult?.toolUseResult;
-  const files = toStringArray(resultData);
+  let files = toStringArray(resultData);
 
-  if (files.length > 0) {
-    return <FileListContent files={files} toolName={ctx.toolName} />;
+  if (files.length === 0 && ctx.resultText) {
+    files = ctx.resultText.split("\n").filter((line) => line.trim().length > 0);
   }
 
-  if (ctx.resultText) {
-    const lines = ctx.resultText.split("\n").filter((line) => line.trim().length > 0);
-    if (lines.length > 0) {
-      return <FileListContent files={lines} toolName={ctx.toolName} />;
-    }
-  }
+  const MAX_FILES = 20;
+  const hasMore = files.length > MAX_FILES;
+  const displayFiles = hasMore ? files.slice(0, MAX_FILES) : files;
 
   return (
-    <CollapsibleSection title={`${ctx.toolName}（无结果）`} icon={<Wrench size={14} className="text-gray-500" />}>
-      <p className="text-xs text-gray-500 italic">未找到匹配文件</p>
-    </CollapsibleSection>
+    <Task defaultOpen={false}>
+      <TaskTrigger title={title} />
+      <TaskContent>
+        {displayFiles.length > 0 ? (
+          <>
+            {displayFiles.map((file) => (
+              <TaskItem key={file}>
+                <TaskItemFile>
+                  <FileText className="size-3" />
+                  {file}
+                </TaskItemFile>
+              </TaskItem>
+            ))}
+            {hasMore && (
+              <TaskItem>
+                <span className="text-xs italic">还有 {files.length - MAX_FILES} 个文件...</span>
+              </TaskItem>
+            )}
+          </>
+        ) : (
+          <TaskItem>
+            <span className="italic">未找到匹配文件</span>
+          </TaskItem>
+        )}
+      </TaskContent>
+    </Task>
   );
 }
 
 /**
- * 渲染 Read 工具的文件内容
+ * 渲染 Read 工具（使用 CodeBlock 展示文件内容）
  *
  * @example
  * ```tsx
@@ -155,25 +176,66 @@ function renderFileSearchTool(ctx: ToolContext): React.ReactNode {
  */
 function renderReadTool(ctx: ToolContext): React.ReactNode {
   const filePath = typeof ctx.input.file_path === "string" ? ctx.input.file_path : "文件";
+  const state = deriveToolState(ctx.resultText, ctx.isError);
+  const language = inferLanguage(filePath);
+  const displayContent = ctx.resultText
+    ? ctx.resultText.length > 2000
+      ? `${ctx.resultText.slice(0, 2000)}...(已截断)`
+      : ctx.resultText
+    : "";
+
   return (
-    <CollapsibleSection
-      title={`Read: ${filePath}`}
-      icon={<Wrench size={14} className="text-blue-500" />}
-      defaultOpen={false}
-    >
-      {ctx.resultText ? (
-        <pre className="rounded-md bg-gray-900 text-gray-100 p-3 text-xs font-mono overflow-x-auto max-h-60 overflow-y-auto whitespace-pre-wrap break-words">
-          {ctx.resultText.length > 2000 ? `${ctx.resultText.slice(0, 2000)}...(已截断)` : ctx.resultText}
-        </pre>
-      ) : (
-        <p className="text-xs text-gray-500 italic">（无内容）</p>
-      )}
-    </CollapsibleSection>
+    <Tool defaultOpen={false}>
+      <ToolHeader
+        type="tool-invocation"
+        state={state}
+        title={`Read: ${filePath}`}
+        icon={<BookOpen className="size-4 text-muted-foreground" />}
+      />
+      <ToolContent>
+        {displayContent ? (
+          <CodeBlock code={displayContent} language={language} showLineNumbers />
+        ) : (
+          <p className="text-xs text-muted-foreground italic">（无内容）</p>
+        )}
+      </ToolContent>
+    </Tool>
   );
 }
 
 /**
- * 渲染未知工具的 JSON 输入/输出
+ * 渲染 Agent/Task 子代理工具调用（使用 Agent 组件展示）
+ *
+ * @example
+ * ```tsx
+ * renderAgentTool({ toolName: "Task", input: { description: "搜索", query: "..." }, resultText: "Done", isError: false });
+ * ```
+ */
+function renderAgentTool(ctx: ToolContext): React.ReactNode {
+  const description = typeof ctx.input.description === "string" ? ctx.input.description : undefined;
+  const query = typeof ctx.input.query === "string" ? ctx.input.query : undefined;
+  const subagentType = typeof ctx.input.subagent_type === "string" ? ctx.input.subagent_type : undefined;
+  const agentName = description ?? subagentType ?? ctx.toolName;
+
+  return (
+    <Agent>
+      <AgentHeader name={agentName} model={subagentType} />
+      <AgentContent>
+        {query && <AgentInstructions>{query}</AgentInstructions>}
+        {ctx.resultText && (
+          <AgentOutput>
+            <p className={ctx.isError ? "text-destructive" : "text-foreground"}>
+              {ctx.resultText.length > 3000 ? `${ctx.resultText.slice(0, 3000)}...` : ctx.resultText}
+            </p>
+          </AgentOutput>
+        )}
+      </AgentContent>
+    </Agent>
+  );
+}
+
+/**
+ * 渲染未知工具（使用 ToolOutput 展示 JSON）
  *
  * @example
  * ```tsx
@@ -181,38 +243,122 @@ function renderReadTool(ctx: ToolContext): React.ReactNode {
  * ```
  */
 function renderDefaultTool(ctx: ToolContext): React.ReactNode {
+  const state = deriveToolState(ctx.resultText, ctx.isError);
+
   return (
-    <CollapsibleSection
-      title={ctx.toolName}
-      icon={<Wrench size={14} className="text-gray-500" />}
-      badge={ctx.isError ? "error" : undefined}
-      defaultOpen={false}
-    >
-      <div className="space-y-2">
-        <div>
-          <p className="text-xs font-medium text-gray-500 mb-1">输入：</p>
-          <pre className="rounded-md bg-gray-100 p-2 text-xs font-mono overflow-x-auto max-h-40 overflow-y-auto whitespace-pre-wrap break-words">
-            {safeStringify(ctx.input)}
-          </pre>
-        </div>
-        {ctx.resultText && (
+    <Tool defaultOpen={false}>
+      <ToolHeader
+        type="tool-invocation"
+        state={state}
+        title={ctx.toolName}
+        icon={<Wrench className="size-4 text-muted-foreground" />}
+      />
+      <ToolContent>
+        <div className="space-y-2">
           <div>
-            <p className="text-xs font-medium text-gray-500 mb-1">输出：</p>
-            <pre
-              className={`rounded-md p-2 text-xs font-mono overflow-x-auto max-h-40 overflow-y-auto whitespace-pre-wrap break-words ${
-                ctx.isError ? "bg-red-50 text-red-800" : "bg-gray-100 text-gray-800"
-              }`}
-            >
-              {ctx.resultText}
-            </pre>
+            <p className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wide">参数</p>
+            <CodeBlock code={safeStringify(ctx.input)} language="json" />
           </div>
-        )}
-      </div>
-    </CollapsibleSection>
+          {ctx.resultText && (
+            <ToolOutput output={ctx.resultText} errorText={ctx.isError ? ctx.resultText : undefined} />
+          )}
+        </div>
+      </ToolContent>
+    </Tool>
   );
 }
 
-/** 工具名称到渲染函数的映射 */
+interface TodoItem {
+  content: string;
+  status: "pending" | "in_progress" | "completed";
+  activeForm?: string;
+}
+
+function statusIcon(status: string): React.ReactNode {
+  switch (status) {
+    case "completed":
+      return <CheckCircle2 className="size-4 shrink-0 text-green-500" />;
+    case "in_progress":
+      return <Loader2 className="size-4 shrink-0 text-blue-500 animate-spin" />;
+    default:
+      return <Circle className="size-4 shrink-0 text-muted-foreground" />;
+  }
+}
+
+/**
+ * 渲染 TodoWrite 工具（任务清单，带状态图标）
+ *
+ * @example
+ * ```tsx
+ * renderTodoWriteTool({ toolName: "TodoWrite", input: { todos: [{ content: "写测试", status: "completed", activeForm: "写测试中" }] }, resultText: undefined, isError: false });
+ * ```
+ */
+function renderTodoWriteTool(ctx: ToolContext): React.ReactNode {
+  const rawTodos = Array.isArray(ctx.input.todos) ? ctx.input.todos : [];
+  const todos = rawTodos.filter(
+    (t): t is TodoItem => typeof t === "object" && t !== null && typeof (t as TodoItem).content === "string",
+  );
+  const completedCount = todos.filter((t) => t.status === "completed").length;
+
+  return (
+    <Task defaultOpen>
+      <TaskTrigger title={`任务清单 (${completedCount}/${todos.length} 完成)`} />
+      <TaskContent>
+        {todos.length === 0 ? (
+          <TaskItem>
+            <span className="text-xs italic text-muted-foreground">空任务列表</span>
+          </TaskItem>
+        ) : (
+          todos.map((todo, i) => (
+            <TaskItem key={`${todo.content}-${String(i)}`}>
+              <div className="flex items-center gap-2">
+                {statusIcon(todo.status)}
+                <span
+                  className={cn(
+                    "text-sm",
+                    todo.status === "completed" && "line-through text-muted-foreground",
+                    todo.status === "in_progress" && "font-medium",
+                  )}
+                >
+                  {todo.status === "in_progress" && todo.activeForm ? todo.activeForm : todo.content}
+                </span>
+              </div>
+            </TaskItem>
+          ))
+        )}
+      </TaskContent>
+    </Task>
+  );
+}
+
+/**
+ * 渲染 ExitPlanMode 工具（实施计划卡片）
+ *
+ * @example
+ * ```tsx
+ * renderExitPlanModeTool({ toolName: "ExitPlanMode", input: { plan: "## Step 1\n..." }, resultText: undefined, isError: false });
+ * ```
+ */
+function renderExitPlanModeTool(ctx: ToolContext): React.ReactNode {
+  const planText = typeof ctx.input.plan === "string" ? ctx.input.plan : "";
+
+  return (
+    <Plan defaultOpen>
+      <PlanHeader>
+        <PlanTitle>实施计划</PlanTitle>
+        <PlanAction>
+          <PlanTrigger />
+        </PlanAction>
+      </PlanHeader>
+      {planText && (
+        <PlanContent>
+          <MessageResponse>{planText}</MessageResponse>
+        </PlanContent>
+      )}
+    </Plan>
+  );
+}
+
 const TOOL_RENDERERS: Record<string, (ctx: ToolContext) => React.ReactNode> = {
   Edit: renderDiffTool,
   Write: renderDiffTool,
@@ -220,32 +366,23 @@ const TOOL_RENDERERS: Record<string, (ctx: ToolContext) => React.ReactNode> = {
   Glob: renderFileSearchTool,
   Grep: renderFileSearchTool,
   Read: renderReadTool,
+  Task: renderAgentTool,
+  delegate: renderAgentTool,
+  spawn_agent: renderAgentTool,
+  TodoWrite: renderTodoWriteTool,
+  ExitPlanMode: renderExitPlanModeTool,
 };
 
 /**
  * 工具渲染分发器
  *
  * 根据 toolName 将工具调用消息分发到专门的渲染组件。
- * 支持 Edit、Write、Bash、Glob、Grep、Read 等工具的专用渲染，
- * 未知工具类型则以 JSON 形式展示输入/输出。
+ * 所有工具均使用 AI Elements Tool/ToolHeader/ToolContent 体系，
+ * 支持统一的折叠、状态徽章、Shiki 高亮和 ANSI 渲染能力。
  *
  * @example
  * ```tsx
- * import { ToolRenderer } from "./ToolRenderer";
- * import type { NormalizedMessage } from "@teamsland/types";
- *
- * const toolUse: NormalizedMessage = {
- *   id: "msg_001",
- *   sessionId: "sess_abc",
- *   timestamp: new Date().toISOString(),
- *   provider: "claude",
- *   kind: "tool_use",
- *   toolName: "Bash",
- *   toolInput: { command: "ls -la" },
- *   toolId: "tool_001",
- * };
- *
- * <ToolRenderer message={toolUse} />
+ * <ToolRenderer message={toolUse} result={toolResult} />
  * ```
  */
 export function ToolRenderer({ message, result }: ToolRendererProps) {

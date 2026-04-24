@@ -1,5 +1,7 @@
-import { Terminal } from "lucide-react";
-import { CollapsibleSection } from "./CollapsibleSection";
+import { Tool, ToolContent, ToolHeader } from "@teamsland/ui/elements/tool";
+import type { ToolState } from "@teamsland/ui/elements/types";
+import Ansi from "ansi-to-react";
+import { TerminalSquare } from "lucide-react";
 
 /**
  * Bash 命令输出组件属性
@@ -10,24 +12,19 @@ import { CollapsibleSection } from "./CollapsibleSection";
  * ```
  */
 export interface BashOutputProps {
-  /** 执行的命令 */
   command?: string;
-  /** 命令输出内容 */
   output?: string;
-  /** 命令是否执行出错 */
   isError?: boolean;
 }
 
 /**
- * Bash 命令输出可折叠组件
+ * Bash 命令输出组件（基于 AI Elements Tool 容器）
  *
- * 以终端风格显示 Bash 命令及其输出。标题栏展示命令文本，
- * 点击展开后显示完整输出内容，支持滚动查看长输出。
+ * 以终端风格展示命令及输出，支持 ANSI 颜色渲染。
+ * 使用 Tool/ToolHeader/ToolContent 提供一致的折叠/状态徽章体验。
  *
  * @example
  * ```tsx
- * import { BashOutput } from "./BashOutput";
- *
  * <BashOutput
  *   command="git status"
  *   output="On branch main\nnothing to commit"
@@ -39,25 +36,27 @@ export function BashOutput({ command, output, isError = false }: BashOutputProps
   const displayCommand = command ?? "bash";
   const truncatedCommand = displayCommand.length > 60 ? `${displayCommand.slice(0, 60)}...` : displayCommand;
 
+  const state: ToolState = isError ? "output-error" : output !== undefined ? "output-available" : "input-available";
+
   return (
-    <CollapsibleSection
-      title={truncatedCommand}
-      icon={<Terminal size={14} className="text-gray-500" />}
-      badge={isError ? "error" : undefined}
-      defaultOpen={false}
-    >
-      <div
-        className={`rounded-md p-3 font-mono text-xs overflow-x-auto max-h-80 overflow-y-auto ${
-          isError ? "bg-red-50 text-red-800 border border-red-200" : "bg-gray-900 text-gray-100"
-        }`}
-      >
-        <div className="mb-2 text-gray-400 select-none">$ {displayCommand}</div>
-        {output ? (
-          <pre className="whitespace-pre-wrap break-words">{output}</pre>
-        ) : (
-          <span className="text-gray-500 italic">（无输出）</span>
-        )}
-      </div>
-    </CollapsibleSection>
+    <Tool defaultOpen={false}>
+      <ToolHeader
+        type="tool-invocation"
+        state={state}
+        title={truncatedCommand}
+        icon={<TerminalSquare className="size-4 text-muted-foreground" />}
+      />
+      <ToolContent>
+        <div className="overflow-hidden rounded-md bg-muted">
+          <pre className="p-3 font-mono text-xs overflow-auto max-h-80 whitespace-pre-wrap break-words text-foreground">
+            <span className="text-muted-foreground select-none">
+              $ {displayCommand}
+              {"\n"}
+            </span>
+            {output ? <Ansi>{output}</Ansi> : <span className="text-muted-foreground italic">（无输出）</span>}
+          </pre>
+        </div>
+      </ToolContent>
+    </Tool>
   );
 }

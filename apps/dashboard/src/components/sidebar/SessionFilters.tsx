@@ -58,8 +58,8 @@ export interface SessionFiltersProps {
  */
 export function SessionFilters({ activeFilters, onToggleFilter }: SessionFiltersProps) {
   return (
-    <div className="flex items-center gap-1.5 px-3 py-2">
-      <Filter size={14} className="shrink-0 text-gray-400" />
+    <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
+      <Filter size={14} className="shrink-0 text-muted-foreground" />
       {FILTER_OPTIONS.map(({ key, label }) => {
         const isActive = key === "all" ? activeFilters.size === 0 : activeFilters.has(key);
 
@@ -69,7 +69,7 @@ export function SessionFilters({ activeFilters, onToggleFilter }: SessionFilters
             type="button"
             onClick={() => onToggleFilter(key)}
             className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${
-              isActive ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+              isActive ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground hover:bg-accent"
             }`}
           >
             {label}

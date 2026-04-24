@@ -81,10 +81,10 @@ export function Sidebar({ projects, selectedSessionId, onSelectSession, onNaviga
   }, []);
 
   return (
-    <aside className="flex h-full w-64 flex-col border-r border-gray-200 bg-white">
+    <aside className="flex h-full w-64 flex-col overflow-hidden border-r border-border bg-background">
       {/* 标题 */}
       <div className="shrink-0 border-b border-gray-200 px-4 py-3">
-        <h2 className="text-sm font-semibold text-gray-900">Teamsland</h2>
+        <h2 className="text-sm font-semibold text-foreground">Teamsland</h2>
         <p className="text-xs text-gray-400">会话浏览器</p>
       </div>
 
@@ -102,13 +102,13 @@ export function Sidebar({ projects, selectedSessionId, onSelectSession, onNaviga
       </div>
 
       {/* 底部导航 */}
-      <nav className="shrink-0 border-t border-gray-200 px-2 py-2 space-y-0.5">
+      <nav className="shrink-0 border-t border-border px-2 py-2 space-y-0.5">
         {NAV_LINKS.map(({ path, label, icon: Icon }) => (
           <button
             key={path}
             type="button"
             onClick={() => onNavigate(path)}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
           >
             <Icon size={16} className="shrink-0" />
             <span>{label}</span>

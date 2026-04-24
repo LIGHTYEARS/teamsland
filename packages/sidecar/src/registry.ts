@@ -164,6 +164,30 @@ export class SubagentRegistry {
   }
 
   /**
+   * 根据 Session ID 查找 Agent 记录
+   *
+   * 遍历注册表查找 `sessionId` 匹配的记录。
+   * Dashboard 使用 sessionId 标识会话，此方法用于从 sessionId 反查 AgentRecord。
+   *
+   * @param sessionId - Claude Session ID
+   * @returns 匹配的 Agent 记录，未找到时返回 undefined
+   *
+   * @example
+   * ```typescript
+   * const record = registry.findBySessionId("sess-abc123");
+   * if (record && record.status === "running") {
+   *   console.log("会话正在运行中");
+   * }
+   * ```
+   */
+  findBySessionId(sessionId: string): AgentRecord | undefined {
+    for (const record of this.map.values()) {
+      if (record.sessionId === sessionId) return record;
+    }
+    return undefined;
+  }
+
+  /**
    * 获取当前运行中的 Agent 数量
    *
    * @returns 内存注册表中的条目总数

@@ -7,9 +7,9 @@
  * 用法: bun run scripts/viking-init.ts
  */
 
-import { VikingMemoryClient } from "@teamsland/memory";
-import { createLogger } from "@teamsland/observability";
-import type { AppConfig } from "@teamsland/types";
+import { VikingMemoryClient } from "../packages/memory/src/viking-memory-client.js";
+import { createLogger } from "../packages/observability/src/index.js";
+import type { AppConfig } from "../packages/types/src/config.js";
 
 const logger = createLogger("scripts:viking-init");
 

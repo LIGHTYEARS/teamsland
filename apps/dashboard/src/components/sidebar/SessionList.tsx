@@ -14,7 +14,7 @@ const SESSION_TYPE_CONFIG: Record<string, { icon: typeof Brain; colorClass: stri
   coordinator: { icon: Brain, colorClass: "text-blue-500" },
   task_worker: { icon: Hammer, colorClass: "text-green-500" },
   observer_worker: { icon: Eye, colorClass: "text-purple-500" },
-  unknown: { icon: MessageSquare, colorClass: "text-gray-400" },
+  unknown: { icon: MessageSquare, colorClass: "text-muted-foreground" },
 };
 
 /**
@@ -114,7 +114,7 @@ export function SessionList({
       : sessions;
 
   if (filteredSessions.length === 0) {
-    return <p className="px-6 py-2 text-xs text-gray-400 italic">暂无会话</p>;
+    return <p className="px-6 py-2 text-xs text-muted-foreground italic">暂无会话</p>;
   }
 
   return (
@@ -131,13 +131,13 @@ export function SessionList({
             type="button"
             onClick={() => onSelectSession(projectName, session.id)}
             className={`flex w-full items-start gap-2 rounded-md px-6 py-2 text-left transition-colors ${
-              isSelected ? "bg-blue-50 text-blue-900" : "text-gray-700 hover:bg-gray-50"
+              isSelected ? "bg-primary/10 text-primary" : "text-foreground hover:bg-accent"
             }`}
           >
             <Icon size={14} className={`mt-0.5 shrink-0 ${config.colorClass}`} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{session.summary || `Session ${session.id.slice(0, 8)}`}</p>
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-muted-foreground">
                 {formatRelativeTime(session.lastActivity)}
                 {" · "}
                 {session.messageCount} 条消息

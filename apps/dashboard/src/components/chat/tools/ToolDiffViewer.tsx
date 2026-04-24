@@ -1,5 +1,8 @@
+import { CodeBlock } from "@teamsland/ui/elements/code-block";
+import { Tool, ToolContent, ToolHeader } from "@teamsland/ui/elements/tool";
+import type { ToolState } from "@teamsland/ui/elements/types";
 import { FileEdit, FilePlus } from "lucide-react";
-import { CollapsibleSection } from "./CollapsibleSection";
+import type { BundledLanguage } from "shiki";
 
 /**
  * 工具 Diff 查看器组件属性
@@ -13,23 +16,46 @@ import { CollapsibleSection } from "./CollapsibleSection";
  * ```
  */
 export interface ToolDiffViewerProps {
-  /** 工具名称（Edit 或 Write） */
   toolName: string;
-  /** 工具输入参数 */
   toolInput: Record<string, unknown>;
-  /** 工具执行结果文本 */
   result?: string;
 }
 
 /**
- * 提取字符串类型的字段值
+ * 从文件路径推断 Shiki 高亮语言
  *
  * @example
  * ```ts
- * extractString({ name: "test" }, "name"); // "test"
- * extractString({ count: 42 }, "count"); // undefined
+ * inferLanguage("/src/index.ts"); // "typescript"
+ * inferLanguage("/styles/app.css"); // "css"
  * ```
  */
+function inferLanguage(filePath: string): BundledLanguage {
+  const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
+  const langMap: Record<string, string> = {
+    ts: "typescript",
+    tsx: "tsx",
+    js: "javascript",
+    jsx: "jsx",
+    json: "json",
+    md: "markdown",
+    css: "css",
+    html: "html",
+    py: "python",
+    rs: "rust",
+    go: "go",
+    yaml: "yaml",
+    yml: "yaml",
+    sh: "bash",
+    bash: "bash",
+    toml: "toml",
+    sql: "sql",
+    xml: "xml",
+    svg: "xml",
+  };
+  return (langMap[ext] ?? "text") as BundledLanguage;
+}
+
 function extractString(obj: Record<string, unknown>, key: string): string | undefined {
   const value = obj[key];
   return typeof value === "string" ? value : undefined;
@@ -37,8 +63,6 @@ function extractString(obj: Record<string, unknown>, key: string): string | unde
 
 /**
  * 简易行级 diff 渲染
- *
- * 将删除行和新增行分别以红色和绿色背景高亮展示。
  *
  * @example
  * ```tsx
@@ -52,14 +76,14 @@ function InlineDiff({ oldText, newText }: { oldText: string; newText: string }) 
   return (
     <div className="font-mono text-xs overflow-x-auto">
       {oldLines.map((line, i) => (
-        <div key={`old-${i.toString()}`} className="bg-red-50 text-red-800 px-2 py-0.5">
-          <span className="select-none text-red-400 mr-2">-</span>
+        <div key={`old-${i.toString()}`} className="bg-destructive/10 text-destructive px-2 py-0.5">
+          <span className="select-none text-destructive/50 mr-2">-</span>
           {line}
         </div>
       ))}
       {newLines.map((line, i) => (
-        <div key={`new-${i.toString()}`} className="bg-green-50 text-green-800 px-2 py-0.5">
-          <span className="select-none text-green-400 mr-2">+</span>
+        <div key={`new-${i.toString()}`} className="bg-green-500/10 text-green-700 dark:text-green-400 px-2 py-0.5">
+          <span className="select-none text-green-500/50 mr-2">+</span>
           {line}
         </div>
       ))}
@@ -68,15 +92,13 @@ function InlineDiff({ oldText, newText }: { oldText: string; newText: string }) 
 }
 
 /**
- * Edit/Write 工具的 Diff 可视化组件
+ * Edit/Write 工具 Diff 可视化组件（基于 AI Elements Tool + CodeBlock）
  *
- * 对于 Edit 工具，以行级 diff 形式展示 old_string 到 new_string 的变更。
- * 对于 Write 工具，展示写入的文件内容预览。
+ * Edit 工具：行级 diff 展示 old_string → new_string 的变更。
+ * Write 工具：使用 CodeBlock 展示写入内容（带 Shiki 语法高亮）。
  *
  * @example
  * ```tsx
- * import { ToolDiffViewer } from "./ToolDiffViewer";
- *
  * <ToolDiffViewer
  *   toolName="Edit"
  *   toolInput={{
@@ -90,41 +112,37 @@ function InlineDiff({ oldText, newText }: { oldText: string; newText: string }) 
  */
 export function ToolDiffViewer({ toolName, toolInput, result }: ToolDiffViewerProps) {
   const filePath = extractString(toolInput, "file_path") ?? extractString(toolInput, "path") ?? "未知文件";
+  const state: ToolState = result ? "output-available" : "input-available";
 
   const isEdit = toolName === "Edit";
-  const icon = isEdit ? (
-    <FileEdit size={14} className="text-amber-600" />
-  ) : (
-    <FilePlus size={14} className="text-green-600" />
-  );
+  const icon = isEdit ? <FileEdit className="size-4 text-amber-600" /> : <FilePlus className="size-4 text-green-600" />;
 
   if (isEdit) {
     const oldString = extractString(toolInput, "old_string") ?? "";
     const newString = extractString(toolInput, "new_string") ?? "";
 
     return (
-      <CollapsibleSection title={`Edit: ${filePath}`} icon={icon} badge={result ? "完成" : undefined} defaultOpen>
-        <div className="rounded-md border border-gray-200 overflow-hidden">
-          <InlineDiff oldText={oldString} newText={newString} />
-        </div>
-      </CollapsibleSection>
+      <Tool defaultOpen>
+        <ToolHeader type="tool-invocation" state={state} title={`Edit: ${filePath}`} icon={icon} />
+        <ToolContent>
+          <div className="rounded-md border border-border overflow-hidden">
+            <InlineDiff oldText={oldString} newText={newString} />
+          </div>
+        </ToolContent>
+      </Tool>
     );
   }
 
-  // Write tool
   const content = extractString(toolInput, "content") ?? "";
   const preview = content.length > 500 ? `${content.slice(0, 500)}...(已截断)` : content;
+  const language = inferLanguage(filePath);
 
   return (
-    <CollapsibleSection
-      title={`Write: ${filePath}`}
-      icon={icon}
-      badge={result ? "完成" : undefined}
-      defaultOpen={false}
-    >
-      <pre className="rounded-md bg-gray-900 text-gray-100 p-3 text-xs font-mono overflow-x-auto max-h-60 overflow-y-auto whitespace-pre-wrap break-words">
-        {preview}
-      </pre>
-    </CollapsibleSection>
+    <Tool defaultOpen={false}>
+      <ToolHeader type="tool-invocation" state={state} title={`Write: ${filePath}`} icon={icon} />
+      <ToolContent>
+        <CodeBlock code={preview} language={language} showLineNumbers />
+      </ToolContent>
+    </Tool>
   );
 }

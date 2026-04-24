@@ -30,15 +30,14 @@ export function useAuth(): { status: AuthStatus; user: AuthUser | null; logout: 
     fetch("/auth/me")
       .then((res) => {
         if (res.ok) return res.json();
-        if (res.status === 404) {
-          // Auth endpoint not configured — skip auth
-          setStatus("authenticated");
-          return null;
-        }
         throw new Error("Unauthorized");
       })
-      .then((data: AuthUser | null) => {
-        if (data) setUser(data);
+      .then((data: (AuthUser & { authEnabled?: boolean }) | null) => {
+        if (!data || data.authEnabled === false) {
+          setStatus("authenticated");
+          return;
+        }
+        setUser(data as AuthUser);
         setStatus("authenticated");
       })
       .catch(() => {

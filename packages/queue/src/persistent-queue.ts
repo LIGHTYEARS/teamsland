@@ -111,6 +111,7 @@ export class PersistentQueue {
   private recoveryTimer: ReturnType<typeof setInterval> | null = null;
   private handler: ((msg: QueueMessage) => Promise<void>) | null = null;
   private processing = false;
+  private currentMessageId: string | null = null;
   private closed = false;
 
   constructor(config: QueueConfig) {
@@ -380,10 +381,13 @@ export class PersistentQueue {
       void this.pollOnce();
     }, this.config.pollIntervalMs);
 
-    // 超时恢复定时器：每 visibilityTimeout 周期检查一次
-    this.recoveryTimer = setInterval(() => {
-      this.recoverTimeouts();
-    }, this.config.visibilityTimeoutMs);
+    // 超时恢复定时器：每 visibilityTimeout/4 周期检查一次
+    this.recoveryTimer = setInterval(
+      () => {
+        this.recoverTimeouts();
+      },
+      Math.floor(this.config.visibilityTimeoutMs / 4),
+    );
 
     logger.info({ pollIntervalMs: this.config.pollIntervalMs }, "消费轮询已启动");
   }
@@ -406,31 +410,34 @@ export class PersistentQueue {
     const now = Date.now();
     const threshold = now - this.config.visibilityTimeoutMs;
 
-    const rows = this.db
-      .prepare("SELECT id, retry_count, max_retries FROM messages WHERE status = 'processing' AND processing_at <= ?")
-      .all(threshold) as Pick<RawMessageRow, "id" | "retry_count" | "max_retries">[];
+    const recovered = this.db.transaction(() => {
+      const rows = this.db
+        .prepare("SELECT id, retry_count, max_retries FROM messages WHERE status = 'processing' AND processing_at <= ?")
+        .all(threshold) as Pick<RawMessageRow, "id" | "retry_count" | "max_retries">[];
 
-    let recovered = 0;
-    for (const row of rows) {
-      const newRetryCount = row.retry_count + 1;
+      let count = 0;
+      for (const row of rows) {
+        const newRetryCount = row.retry_count + 1;
 
-      if (this.config.deadLetterEnabled && newRetryCount >= row.max_retries) {
-        this.db
-          .prepare(
-            "UPDATE messages SET status = 'dead', retry_count = ?, last_error = ?, updated_at = ?, processing_at = NULL WHERE id = ?",
-          )
-          .run(newRetryCount, "visibility timeout exceeded", now, row.id);
-        logger.warn({ id: row.id }, "超时消息进入死信队列");
-      } else {
-        this.db
-          .prepare(
-            "UPDATE messages SET status = 'pending', retry_count = ?, last_error = ?, updated_at = ?, processing_at = NULL WHERE id = ?",
-          )
-          .run(newRetryCount, "visibility timeout exceeded", now, row.id);
-        logger.info({ id: row.id }, "超时消息已恢复为 pending");
+        if (this.config.deadLetterEnabled && newRetryCount >= row.max_retries) {
+          this.db
+            .prepare(
+              "UPDATE messages SET status = 'dead', retry_count = ?, last_error = ?, updated_at = ?, processing_at = NULL WHERE id = ?",
+            )
+            .run(newRetryCount, "visibility timeout exceeded", now, row.id);
+          logger.warn({ id: row.id }, "超时消息进入死信队列");
+        } else {
+          this.db
+            .prepare(
+              "UPDATE messages SET status = 'pending', retry_count = ?, last_error = ?, updated_at = ?, processing_at = NULL WHERE id = ?",
+            )
+            .run(newRetryCount, "visibility timeout exceeded", now, row.id);
+          logger.info({ id: row.id }, "超时消息已恢复为 pending");
+        }
+        count++;
       }
-      recovered++;
-    }
+      return count;
+    })();
 
     if (recovered > 0) {
       logger.info({ recovered }, "超时恢复完成");
@@ -474,6 +481,43 @@ export class PersistentQueue {
     }
 
     return result;
+  }
+
+  /**
+   * 查询最近已完成的消息
+   *
+   * 按完成时间倒序返回指定类型的近期已完成消息，用于 Coordinator 上下文加载。
+   * 不指定 types 时返回所有类型的已完成消息。
+   *
+   * @param limit - 返回条数（默认 20）
+   * @param types - 可选的消息类型过滤列表
+   * @returns 按完成时间倒序的消息列表
+   *
+   * @example
+   * ```typescript
+   * const recent = queue.recentCompleted(10, ["lark_mention", "worker_completed"]);
+   * for (const msg of recent) {
+   *   console.log(msg.type, msg.payload);
+   * }
+   * ```
+   */
+  recentCompleted(limit = 20, types?: QueueMessageType[]): QueueMessage[] {
+    this.assertNotClosed();
+
+    if (types && types.length > 0) {
+      const placeholders = types.map(() => "?").join(",");
+      const rows = this.db
+        .prepare(
+          `SELECT * FROM messages WHERE status = 'completed' AND type IN (${placeholders}) ORDER BY updated_at DESC LIMIT ?`,
+        )
+        .all(...types, limit) as RawMessageRow[];
+      return rows.map((row) => this.mapRow(row));
+    }
+
+    const rows = this.db
+      .prepare("SELECT * FROM messages WHERE status = 'completed' ORDER BY updated_at DESC LIMIT ?")
+      .all(limit) as RawMessageRow[];
+    return rows.map((row) => this.mapRow(row));
   }
 
   /**
@@ -593,7 +637,7 @@ export class PersistentQueue {
   }
 
   /**
-   * 单次轮询：取出一条消息并交给 handler 处理
+   * 单次轮询：取出一条消息并交给 handler 处理（含超时保护）
    */
   private async pollOnce(): Promise<void> {
     if (this.processing || this.closed) return;
@@ -603,16 +647,77 @@ export class PersistentQueue {
       const msg = this.dequeue();
       if (!msg || !this.handler) return;
 
+      this.currentMessageId = msg.id;
+      const handlerTimeoutMs = Math.floor(this.config.visibilityTimeoutMs * 0.9);
+
       try {
-        await this.handler(msg);
-        this.ack(msg.id);
+        await this.withTimeout(this.handler(msg), handlerTimeoutMs);
+        this.safeAck(msg.id);
       } catch (err: unknown) {
         const errorMsg = err instanceof Error ? err.message : String(err);
-        this.nack(msg.id, errorMsg);
+        this.safeNack(msg.id, errorMsg);
       }
     } finally {
+      this.currentMessageId = null;
       this.processing = false;
     }
+  }
+
+  /**
+   * 为 Promise 添加超时保护
+   *
+   * @param promise - 目标 Promise
+   * @param timeoutMs - 超时毫秒数
+   * @returns 原始 Promise 的结果
+   *
+   * @example
+   * ```typescript
+   * await queue['withTimeout'](somePromise, 5000);
+   * ```
+   */
+  private withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`handler 超时（${timeoutMs}ms）`));
+      }, timeoutMs);
+
+      promise.then(
+        (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (err: unknown) => {
+          clearTimeout(timer);
+          reject(err);
+        },
+      );
+    });
+  }
+
+  /** 安全确认：仅当消息仍处于 processing 状态时才执行 ack */
+  private safeAck(messageId: string): void {
+    if (this.closed || this.currentMessageId !== messageId) return;
+    const row = this.db.prepare("SELECT status FROM messages WHERE id = ?").get(messageId) as {
+      status: string;
+    } | null;
+    if (row?.status !== "processing") {
+      logger.warn({ id: messageId, actualStatus: row?.status }, "safeAck 跳过：消息已不在 processing 状态");
+      return;
+    }
+    this.ack(messageId);
+  }
+
+  /** 安全否认：仅当消息仍处于 processing 状态时才执行 nack */
+  private safeNack(messageId: string, error: string): void {
+    if (this.closed || this.currentMessageId !== messageId) return;
+    const row = this.db.prepare("SELECT status FROM messages WHERE id = ?").get(messageId) as {
+      status: string;
+    } | null;
+    if (row?.status !== "processing") {
+      logger.warn({ id: messageId, actualStatus: row?.status }, "safeNack 跳过：消息已不在 processing 状态");
+      return;
+    }
+    this.nack(messageId, error);
   }
 
   /**

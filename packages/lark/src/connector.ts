@@ -143,7 +143,7 @@ export class LarkConnector {
   }
 
   private async consumeProcess(eventTypes: string, signal?: AbortSignal): Promise<void> {
-    const cmd = ["lark-cli", "event", "+subscribe", "--as", "bot", "--event-types", eventTypes, "--quiet"];
+    const cmd = ["lark-cli", "event", "+subscribe", "--as", "bot", "--event-types", eventTypes, "--quiet", "--force"];
 
     const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
     logger.info({ pid: proc.pid, eventTypes }, "lark-cli event +subscribe 已启动");

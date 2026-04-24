@@ -8,14 +8,14 @@ export type { Anomaly, AnomalyDetectorOpts, AnomalyType } from "./anomaly-detect
 export { AnomalyDetector } from "./anomaly-detector.js";
 export type { ClaudeMdContext } from "./claude-md-injector.js";
 export { ClaudeMdInjector } from "./claude-md-injector.js";
-export type { InterceptedTool, SidecarEventType } from "./data-plane.js";
+export type { InterceptedTool, RawEventListener, SidecarEventType } from "./data-plane.js";
 export { SidecarDataPlane } from "./data-plane.js";
 export type { InterruptRequest, InterruptResult } from "./interrupt-controller.js";
 export { InterruptController } from "./interrupt-controller.js";
 export { ObservableMessageBus } from "./message-bus.js";
 export type { ObserveRequest, ObserveResult } from "./observer-controller.js";
 export { buildObserverPrompt, ObserverController } from "./observer-controller.js";
-export type { SpawnParams, SpawnResult } from "./process-controller.js";
+export type { ResumeSpawnParams, SpawnParams, SpawnResult } from "./process-controller.js";
 export { ProcessController } from "./process-controller.js";
 export type { SubagentRegistryOpts } from "./registry.js";
 export { CapacityError, SubagentRegistry } from "./registry.js";

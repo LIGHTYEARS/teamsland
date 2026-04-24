@@ -82,7 +82,7 @@ export function ProjectList({ projects, selectedSessionId, onSelectSession, acti
   };
 
   if (projects.length === 0) {
-    return <div className="px-3 py-6 text-center text-sm text-gray-400">暂无发现的项目</div>;
+    return <div className="px-3 py-6 text-center text-sm text-muted-foreground">暂无发现的项目</div>;
   }
 
   return (
@@ -99,16 +99,16 @@ export function ProjectList({ projects, selectedSessionId, onSelectSession, acti
             <button
               type="button"
               onClick={() => toggleProject(project.name)}
-              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-gray-800 hover:bg-gray-100 transition-colors"
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-foreground hover:bg-accent transition-colors"
             >
               {isExpanded ? (
                 <ChevronDown size={14} className="shrink-0 text-gray-400" />
               ) : (
-                <ChevronRight size={14} className="shrink-0 text-gray-400" />
+                <ChevronRight size={14} className="shrink-0 text-muted-foreground" />
               )}
-              <Folder size={14} className="shrink-0 text-gray-500" />
+              <Folder size={14} className="shrink-0 text-muted-foreground" />
               <span className="truncate flex-1">{project.displayName}</span>
-              <span className="shrink-0 rounded-full bg-gray-200 px-1.5 py-0.5 text-xs text-gray-500">
+              <span className="shrink-0 rounded-full bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground">
                 {filteredCount}
               </span>
             </button>

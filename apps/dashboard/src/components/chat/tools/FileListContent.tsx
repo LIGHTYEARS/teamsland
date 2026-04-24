@@ -1,7 +1,6 @@
+import { Tool, ToolContent, ToolHeader } from "@teamsland/ui/elements/tool";
 import { File, FolderSearch } from "lucide-react";
-import { CollapsibleSection } from "./CollapsibleSection";
 
-/** 文件列表显示的最大条目数 */
 const MAX_DISPLAY_COUNT = 20;
 
 /**
@@ -13,22 +12,18 @@ const MAX_DISPLAY_COUNT = 20;
  * ```
  */
 export interface FileListContentProps {
-  /** 文件路径列表 */
   files: string[];
-  /** 工具名称（Glob 或 Grep） */
   toolName: string;
 }
 
 /**
- * 文件列表展示组件
+ * 文件列表展示组件（基于 AI Elements Tool 容器）
  *
- * 渲染 Glob/Grep 工具返回的文件路径列表。当文件数量超过阈值时
- * 自动截断并显示剩余数量提示。
+ * 渲染 Glob/Grep 工具返回的文件路径列表，
+ * 超过阈值时自动截断并显示剩余数量提示。
  *
  * @example
  * ```tsx
- * import { FileListContent } from "./FileListContent";
- *
  * <FileListContent
  *   files={["/src/index.ts", "/src/utils.ts", "/src/types.ts"]}
  *   toolName="Grep"
@@ -40,20 +35,24 @@ export function FileListContent({ files, toolName }: FileListContentProps) {
   const remaining = files.length - displayFiles.length;
 
   return (
-    <CollapsibleSection
-      title={`${toolName}: ${files.length} 个文件`}
-      icon={<FolderSearch size={14} className="text-gray-500" />}
-      defaultOpen={files.length <= 5}
-    >
-      <ul className="space-y-1">
-        {displayFiles.map((filePath) => (
-          <li key={filePath} className="flex items-center gap-2 text-xs font-mono text-gray-700">
-            <File size={12} className="shrink-0 text-gray-400" />
-            <span className="truncate">{filePath}</span>
-          </li>
-        ))}
-      </ul>
-      {remaining > 0 && <p className="mt-2 text-xs text-gray-500 italic">...及其他 {remaining} 个文件</p>}
-    </CollapsibleSection>
+    <Tool defaultOpen={files.length <= 5}>
+      <ToolHeader
+        type="tool-invocation"
+        state="output-available"
+        title={`${toolName}: ${files.length} 个文件`}
+        icon={<FolderSearch className="size-4 text-muted-foreground" />}
+      />
+      <ToolContent>
+        <ul className="space-y-1">
+          {displayFiles.map((filePath) => (
+            <li key={filePath} className="flex items-center gap-2 text-xs font-mono text-foreground">
+              <File size={12} className="shrink-0 text-muted-foreground" />
+              <span className="truncate">{filePath}</span>
+            </li>
+          ))}
+        </ul>
+        {remaining > 0 && <p className="mt-2 text-xs text-muted-foreground italic">...及其他 {remaining} 个文件</p>}
+      </ToolContent>
+    </Tool>
   );
 }

@@ -243,6 +243,7 @@ export async function loadSession(workspacePath: string): Promise<PersistedSessi
 export class CoordinatorSessionManager {
   private state: CoordinatorState = "idle";
   private activeSession: ActiveSession | null = null;
+  private pendingProcess: SpawnedProcess | null = null;
   private recoveryCount = 0;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -397,17 +398,22 @@ export class CoordinatorSessionManager {
       },
     );
 
-    // 写入提示词并关闭 stdin（Bun FileSink API）
+    this.pendingProcess = proc;
+
     proc.stdin.write(new TextEncoder().encode(prompt));
     proc.stdin.flush();
     proc.stdin.end();
 
-    // 收集输出（含超时）
-    const output = await this.collectOutput(proc);
+    let sessionId: string;
+    try {
+      sessionId = await this.extractSessionIdFromStream(proc.stdout);
+    } catch (err: unknown) {
+      this.pendingProcess = null;
+      this.killProcess(proc.pid);
+      throw err;
+    }
 
-    // 从 stream-json 输出中提取 session_id
-    const sessionId = this.extractSessionId(output);
-
+    this.pendingProcess = null;
     const chatId = typeof event.payload.chatId === "string" ? event.payload.chatId : undefined;
 
     this.activeSession = {
@@ -421,13 +427,8 @@ export class CoordinatorSessionManager {
 
     this.state = "running";
     this.scheduleIdleTimeout();
-
-    await persistSession(this.config.workspacePath, {
-      sessionId: this.activeSession.sessionId,
-      chatId: this.activeSession.chatId,
-      startedAt: this.activeSession.startedAt,
-      processedEvents: this.activeSession.processedEvents,
-    });
+    this.registerProcessCleanup(proc, sessionId);
+    await this.persistCurrentSession();
 
     logger.info({ sessionId, pid: proc.pid, eventId: event.id }, "Coordinator session 已启动");
   }
@@ -464,22 +465,27 @@ export class CoordinatorSessionManager {
       },
     );
 
+    this.pendingProcess = proc;
+
     proc.stdin.write(new TextEncoder().encode(prompt));
     proc.stdin.flush();
     proc.stdin.end();
 
-    await this.collectOutput(proc);
+    try {
+      await this.extractSessionIdFromStream(proc.stdout);
+    } catch (err: unknown) {
+      this.pendingProcess = null;
+      this.killProcess(proc.pid);
+      throw err;
+    }
+
+    this.pendingProcess = null;
 
     this.activeSession.lastActivityAt = Date.now();
     this.activeSession.processedEvents.push(event.id);
     this.scheduleIdleTimeout();
-
-    await persistSession(this.config.workspacePath, {
-      sessionId: this.activeSession.sessionId,
-      chatId: this.activeSession.chatId,
-      startedAt: this.activeSession.startedAt,
-      processedEvents: this.activeSession.processedEvents,
-    });
+    this.registerProcessCleanup(proc, sessionId);
+    await this.persistCurrentSession();
 
     logger.info(
       { sessionId, eventId: event.id, processedCount: this.activeSession.processedEvents.length },
@@ -487,67 +493,69 @@ export class CoordinatorSessionManager {
     );
   }
 
-  // ─── Private: 输出收集 ───
+  // ─── Private: Session ID 流式提取 ───
 
   /**
-   * 读取子进程 stdout，应用推理超时
+   * 从子进程 stdout 流中提取 session_id
+   *
+   * 仅读取到包含 session_id 的 init 行为止，然后释放 reader。
+   * 不收集完整输出——子进程在后台继续运行直到自行退出。
    */
-  private async collectOutput(proc: { stdout: ReadableStream<Uint8Array>; exited: Promise<number> }): Promise<string> {
-    const abortController = new AbortController();
-    const timeout = setTimeout(() => {
-      abortController.abort();
-    }, this.config.inferenceTimeoutMs);
+  private async extractSessionIdFromStream(stdout: ReadableStream<Uint8Array>): Promise<string> {
+    const reader = stdout.getReader();
 
-    try {
-      const reader = proc.stdout.getReader();
-      const chunks: Uint8Array[] = [];
+    const readSessionId = async (): Promise<string> => {
       const decoder = new TextDecoder();
-
-      const readAll = async (): Promise<string> => {
+      let buffer = "";
+      try {
         for (;;) {
           const { done, value } = await reader.read();
           if (done) break;
-          if (value) chunks.push(value);
+          buffer += decoder.decode(value, { stream: true });
+          const result = this.scanBufferForSessionId(buffer);
+          if (result.sessionId) return result.sessionId;
+          buffer = result.remainder;
         }
-        return decoder.decode(Buffer.concat(chunks));
-      };
+      } finally {
+        reader.releaseLock();
+      }
+      const fallbackId = `coord-${Date.now()}`;
+      logger.warn({ fallbackId }, "stdout 已关闭但未找到 session_id，使用回退 ID");
+      return fallbackId;
+    };
 
-      const abortPromise = new Promise<never>((_resolve, reject) => {
-        abortController.signal.addEventListener("abort", () => {
-          reject(new Error("Coordinator 推理超时"));
-        });
-      });
+    const timeoutPromise = new Promise<never>((_resolve, reject) => {
+      setTimeout(() => {
+        reject(new Error("Coordinator 推理超时：未能在规定时间内获取 session_id"));
+      }, this.config.inferenceTimeoutMs);
+    });
 
-      const result = await Promise.race([readAll(), abortPromise]);
-      return result;
-    } finally {
-      clearTimeout(timeout);
-    }
+    return Promise.race([readSessionId(), timeoutPromise]);
   }
 
-  /**
-   * 从 stream-json 输出中提取 session_id
-   *
-   * 逐行扫描输出，查找 `{"type":"system","subtype":"init",...,"session_id":"..."}` 格式的行。
-   */
-  private extractSessionId(output: string): string {
-    const lines = output.split("\n");
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      try {
-        const parsed = JSON.parse(trimmed) as StreamJsonInit;
-        if (parsed.type === "system" && parsed.subtype === "init" && parsed.session_id) {
-          return parsed.session_id;
-        }
-      } catch {
-        // 非 JSON 行，跳过
-      }
+  /** 扫描 buffer 中的完整行，查找 session_id */
+  private scanBufferForSessionId(buffer: string): { sessionId?: string; remainder: string } {
+    const lines = buffer.split("\n");
+    const remainder = lines[lines.length - 1] ?? "";
+    for (let i = 0; i < lines.length - 1; i++) {
+      const sessionId = this.parseSessionId((lines[i] ?? "").trim());
+      if (sessionId) return { sessionId, remainder: "" };
     }
-    // 回退：使用时间戳作为 session ID
-    const fallbackId = `coord-${Date.now()}`;
-    logger.warn({ fallbackId }, "未能从 stream-json 提取 session_id，使用回退 ID");
-    return fallbackId;
+    return { remainder };
+  }
+
+  /** 从单行 NDJSON 解析 session_id */
+  private parseSessionId(line: string): string | undefined {
+    if (!line) return undefined;
+    try {
+      const parsed = JSON.parse(line) as StreamJsonInit;
+      if (parsed.type === "system" && parsed.subtype === "init" && parsed.session_id) {
+        return parsed.session_id;
+      }
+    } catch {
+      // 非 JSON 行，跳过
+    }
+    return undefined;
   }
 
   // ─── Private: 错误处理 ───
@@ -590,7 +598,7 @@ export class CoordinatorSessionManager {
   /**
    * 销毁当前活跃 session
    *
-   * 杀死进程、清除空闲定时器、置空 activeSession。
+   * 杀死进程（包括 pending 进程）、清除空闲定时器、置空 activeSession。
    */
   private destroySession(): void {
     if (this.idleTimer) {
@@ -598,12 +606,13 @@ export class CoordinatorSessionManager {
       this.idleTimer = null;
     }
 
+    if (this.pendingProcess) {
+      this.killProcess(this.pendingProcess.pid);
+      this.pendingProcess = null;
+    }
+
     if (this.activeSession) {
-      try {
-        process.kill(this.activeSession.pid, "SIGTERM");
-      } catch {
-        // 进程可能已退出
-      }
+      this.killProcess(this.activeSession.pid);
       logger.info(
         { sessionId: this.activeSession.sessionId, pid: this.activeSession.pid },
         "Coordinator session 已销毁",
@@ -613,6 +622,37 @@ export class CoordinatorSessionManager {
         logger.warn({ err }, "清除持久化 session 失败");
       });
     }
+  }
+
+  /** 安全终止进程 */
+  private killProcess(pid: number): void {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      // 进程可能已退出
+    }
+  }
+
+  /** 注册子进程退出后的清理回调 */
+  private registerProcessCleanup(proc: SpawnedProcess, sessionId: string): void {
+    proc.exited
+      .then((code) => {
+        logger.info({ sessionId, pid: proc.pid, exitCode: code }, "Coordinator 子进程已退出");
+      })
+      .catch((err: unknown) => {
+        logger.warn({ sessionId, pid: proc.pid, err }, "Coordinator 子进程退出异常");
+      });
+  }
+
+  /** 持久化当前 session 到磁盘 */
+  private async persistCurrentSession(): Promise<void> {
+    if (!this.activeSession) return;
+    await persistSession(this.config.workspacePath, {
+      sessionId: this.activeSession.sessionId,
+      chatId: this.activeSession.chatId,
+      startedAt: this.activeSession.startedAt,
+      processedEvents: this.activeSession.processedEvents,
+    });
   }
 
   // ─── Private: 空闲超时调度 ───

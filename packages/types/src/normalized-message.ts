@@ -135,6 +135,10 @@ export interface NormalizedMessage {
   exitCode?: number;
   /** 完成摘要 */
   summary?: string;
+  /** 请求耗费（美元） */
+  cost?: number;
+  /** 请求耗时（毫秒） */
+  durationMs?: number;
 
   // Sub-agent
   /** 父级工具调用 ID，用于子代理场景 */

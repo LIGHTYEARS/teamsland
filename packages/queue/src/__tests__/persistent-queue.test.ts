@@ -479,6 +479,85 @@ describe("PersistentQueue", () => {
     });
   });
 
+  // ── recentCompleted ──
+
+  describe("recentCompleted", () => {
+    it("无已完成消息时应返回空数组", () => {
+      const result = queue.recentCompleted();
+      expect(result).toEqual([]);
+    });
+
+    it("应按 updated_at 倒序返回最近完成的消息", () => {
+      const id1 = queue.enqueue({ type: "meego_issue_created", payload: makeMeegoPayload() });
+      const id2 = queue.enqueue({ type: "meego_issue_created", payload: makeMeegoPayload() });
+      const id3 = queue.enqueue({ type: "meego_issue_created", payload: makeMeegoPayload() });
+
+      for (let i = 0; i < 3; i++) {
+        const msg = queue.dequeue();
+        if (msg) queue.ack(msg.id);
+      }
+
+      const now = Date.now();
+      const db = new Database(config.dbPath);
+      db.prepare("UPDATE messages SET updated_at = ? WHERE id = ?").run(now - 2000, id1);
+      db.prepare("UPDATE messages SET updated_at = ? WHERE id = ?").run(now - 1000, id2);
+      db.prepare("UPDATE messages SET updated_at = ? WHERE id = ?").run(now, id3);
+      db.close();
+
+      const recent = queue.recentCompleted();
+      expect(recent).toHaveLength(3);
+      expect(recent[0].id).toBe(id3);
+      expect(recent[1].id).toBe(id2);
+      expect(recent[2].id).toBe(id1);
+    });
+
+    it("指定 types 参数时应按类型过滤", () => {
+      queue.enqueue({ type: "meego_issue_created", payload: makeMeegoPayload() });
+      queue.enqueue({ type: "lark_mention", payload: makeLarkPayload() });
+      queue.enqueue({
+        type: "worker_completed",
+        payload: { workerId: "w1", sessionId: "s1", issueId: "I1", resultSummary: "done" },
+      });
+
+      for (let i = 0; i < 3; i++) {
+        const msg = queue.dequeue();
+        if (msg) queue.ack(msg.id);
+      }
+
+      const larkOnly = queue.recentCompleted(20, ["lark_mention"]);
+      expect(larkOnly).toHaveLength(1);
+      expect(larkOnly[0].type).toBe("lark_mention");
+
+      const mixed = queue.recentCompleted(20, ["lark_mention", "worker_completed"]);
+      expect(mixed).toHaveLength(2);
+      for (const msg of mixed) {
+        expect(["lark_mention", "worker_completed"]).toContain(msg.type);
+      }
+    });
+
+    it("应遵循 limit 参数限制返回数量", () => {
+      for (let i = 0; i < 5; i++) {
+        queue.enqueue({ type: "meego_issue_created", payload: makeMeegoPayload() });
+      }
+
+      for (let i = 0; i < 5; i++) {
+        const msg = queue.dequeue();
+        if (msg) queue.ack(msg.id);
+      }
+
+      const limited = queue.recentCompleted(3);
+      expect(limited).toHaveLength(3);
+
+      const all = queue.recentCompleted(10);
+      expect(all).toHaveLength(5);
+    });
+
+    it("关闭后调用应抛异常", () => {
+      queue.close();
+      expect(() => queue.recentCompleted()).toThrow("已关闭");
+    });
+  });
+
   // ── purgeCompleted ──
 
   describe("purgeCompleted", () => {

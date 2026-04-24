@@ -1,5 +1,6 @@
 import { Check, FileQuestion, GitBranch, GitCommit, Minus, Plus, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { CommitHistory } from "./CommitHistory";
 
 /**
  * Git 文件状态信息
@@ -14,11 +15,8 @@ import { useCallback, useEffect, useState } from "react";
  * ```
  */
 interface GitFileStatus {
-  /** 文件路径 */
   path: string;
-  /** Git 状态码: "M"=modified, "A"=added, "D"=deleted, "??"=untracked */
   status: string;
-  /** 是否已暂存 */
   staged: boolean;
 }
 
@@ -34,9 +32,7 @@ interface GitFileStatus {
  * ```
  */
 interface GitStatus {
-  /** 当前分支名 */
   branch: string;
-  /** 变更文件列表 */
   files: GitFileStatus[];
 }
 
@@ -49,23 +45,21 @@ interface GitStatus {
  * ```
  */
 interface GitPanelProps {
-  /** 项目根目录路径 */
   projectPath: string;
 }
 
-/** 状态码对应的显示文本和样式 */
 const STATUS_CONFIG: Record<string, { label: string; colorClass: string }> = {
   M: { label: "修改", colorClass: "text-yellow-400" },
   A: { label: "新增", colorClass: "text-green-400" },
   D: { label: "删除", colorClass: "text-red-400" },
-  "??": { label: "未跟踪", colorClass: "text-gray-500" },
-  R: { label: "重命名", colorClass: "text-blue-400" },
-  C: { label: "复制", colorClass: "text-blue-400" },
+  "??": { label: "未跟踪", colorClass: "text-muted-foreground" },
+  R: { label: "重命名", colorClass: "text-primary" },
+  C: { label: "复制", colorClass: "text-primary" },
 };
 
 /** 根据状态码获取对应图标 */
 function StatusIcon({ status }: { status: string }) {
-  const colorClass = STATUS_CONFIG[status]?.colorClass ?? "text-gray-400";
+  const colorClass = STATUS_CONFIG[status]?.colorClass ?? "text-muted-foreground";
   switch (status) {
     case "M":
       return <span className={`font-mono font-bold text-xs ${colorClass}`}>M</span>;
@@ -135,8 +129,9 @@ export function GitPanel({ projectPath }: GitPanelProps) {
       const response = await fetch(`/api/git/branches?path=${encodeURIComponent(projectPath)}`);
       if (!response.ok) return;
       const data: unknown = await response.json();
-      if (Array.isArray(data)) {
-        setBranches(data as string[]);
+      const resp = data as { branches?: string[]; currentBranch?: string };
+      if (Array.isArray(resp.branches)) {
+        setBranches(resp.branches);
       }
     } catch {
       // 分支列表获取失败不阻塞主流程
@@ -152,13 +147,13 @@ export function GitPanel({ projectPath }: GitPanelProps) {
   const handleStageToggle = useCallback(
     async (filePath: string, currentlyStaged: boolean) => {
       try {
-        const response = await fetch("/api/git/stage", {
+        const endpoint = currentlyStaged ? "/api/git/unstage" : "/api/git/stage";
+        const response = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             path: projectPath,
-            filePath,
-            action: currentlyStaged ? "unstage" : "stage",
+            files: [filePath],
           }),
         });
         if (!response.ok) {
@@ -233,17 +228,17 @@ export function GitPanel({ projectPath }: GitPanelProps) {
   );
 
   if (loading && !gitStatus) {
-    return <div className="flex items-center justify-center py-8 text-gray-500 text-sm">加载 Git 状态...</div>;
+    return <div className="flex items-center justify-center py-8 text-muted-foreground text-sm">加载 Git 状态...</div>;
   }
 
   if (error && !gitStatus) {
     return (
       <div className="p-4">
-        <p className="text-red-400 text-sm mb-2">{error}</p>
+        <p className="text-destructive text-sm mb-2">{error}</p>
         <button
           type="button"
           onClick={() => void fetchStatus()}
-          className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+          className="text-xs text-primary hover:text-primary/80 transition-colors"
         >
           重试
         </button>
@@ -255,28 +250,26 @@ export function GitPanel({ projectPath }: GitPanelProps) {
   const unstagedFiles = gitStatus?.files.filter((f) => !f.staged) ?? [];
 
   return (
-    <div className="flex flex-col h-full bg-[#1e1e1e] text-gray-300">
-      {/* 头部：分支信息和刷新 */}
-      <div className="flex items-center justify-between p-3 border-b border-gray-700">
+    <div className="flex flex-col h-full bg-background text-foreground">
+      <div className="flex items-center justify-between p-3 border-b border-border">
         <div className="relative">
           <button
             type="button"
             onClick={() => setShowBranchSelector((prev) => !prev)}
-            className="flex items-center gap-1.5 text-sm hover:text-white transition-colors"
+            className="flex items-center gap-1.5 text-sm hover:text-foreground transition-colors"
           >
-            <GitBranch className="h-4 w-4 text-blue-400" />
+            <GitBranch className="h-4 w-4 text-primary" />
             <span className="font-mono">{gitStatus?.branch ?? "—"}</span>
           </button>
-          {/* 分支选择下拉 */}
           {showBranchSelector && branches.length > 0 && (
-            <div className="absolute top-full left-0 mt-1 w-48 bg-gray-800 border border-gray-700 rounded shadow-lg z-10 max-h-48 overflow-y-auto">
+            <div className="absolute top-full left-0 mt-1 w-48 bg-popover border border-border rounded-md shadow-lg z-10 max-h-48 overflow-y-auto">
               {branches.map((branch) => (
                 <button
                   key={branch}
                   type="button"
                   onClick={() => void checkoutBranch(branch)}
-                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-700 transition-colors ${
-                    branch === gitStatus?.branch ? "text-blue-400" : "text-gray-300"
+                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-accent transition-colors ${
+                    branch === gitStatus?.branch ? "text-primary" : "text-popover-foreground"
                   }`}
                 >
                   {branch}
@@ -289,22 +282,23 @@ export function GitPanel({ projectPath }: GitPanelProps) {
           type="button"
           onClick={() => void fetchStatus()}
           disabled={loading}
-          className="p-1 hover:bg-gray-700 rounded transition-colors disabled:opacity-50"
+          className="p-1 hover:bg-accent rounded transition-colors disabled:opacity-50"
           title="刷新"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
         </button>
       </div>
 
-      {/* 错误提示 */}
-      {error && <div className="px-3 py-2 bg-red-900/30 border-b border-red-800 text-red-300 text-xs">{error}</div>}
+      {error && (
+        <div className="px-3 py-2 bg-destructive/10 border-b border-destructive/30 text-destructive text-xs">
+          {error}
+        </div>
+      )}
 
-      {/* 文件变更列表 */}
       <div className="flex-1 overflow-y-auto">
-        {/* 已暂存文件 */}
         {stagedFiles.length > 0 && (
           <div>
-            <div className="px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">
+            <div className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
               已暂存 ({stagedFiles.length})
             </div>
             {stagedFiles.map((file) => (
@@ -312,22 +306,21 @@ export function GitPanel({ projectPath }: GitPanelProps) {
                 key={`staged-${file.path}`}
                 type="button"
                 onClick={() => void handleStageToggle(file.path, true)}
-                className="flex items-center gap-2 w-full text-left px-3 py-1 text-sm hover:bg-gray-700/50 transition-colors group"
+                className="flex items-center gap-2 w-full min-w-0 text-left px-3 py-1 text-sm hover:bg-accent/50 transition-colors group"
                 title="点击取消暂存"
               >
                 <Check className="h-3.5 w-3.5 text-green-400 shrink-0" />
                 <StatusIcon status={file.status} />
-                <span className="truncate flex-1 text-gray-300">{file.path}</span>
-                <Minus className="h-3 w-3 text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                <span className="truncate flex-1 min-w-0 text-foreground">{file.path}</span>
+                <Minus className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
               </button>
             ))}
           </div>
         )}
 
-        {/* 未暂存文件 */}
         {unstagedFiles.length > 0 && (
           <div>
-            <div className="px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">
+            <div className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
               未暂存 ({unstagedFiles.length})
             </div>
             {unstagedFiles.map((file) => (
@@ -335,38 +328,41 @@ export function GitPanel({ projectPath }: GitPanelProps) {
                 key={`unstaged-${file.path}`}
                 type="button"
                 onClick={() => void handleStageToggle(file.path, false)}
-                className="flex items-center gap-2 w-full text-left px-3 py-1 text-sm hover:bg-gray-700/50 transition-colors group"
+                className="flex items-center gap-2 w-full min-w-0 text-left px-3 py-1 text-sm hover:bg-accent/50 transition-colors group"
                 title="点击暂存"
               >
                 <StatusIcon status={file.status} />
-                <span className="truncate flex-1 text-gray-300">{file.path}</span>
-                <Plus className="h-3 w-3 text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                <span className="truncate flex-1 min-w-0 text-foreground">{file.path}</span>
+                <Plus className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
               </button>
             ))}
           </div>
         )}
 
-        {/* 无变更 */}
         {stagedFiles.length === 0 && unstagedFiles.length === 0 && (
-          <div className="text-center py-8 text-gray-500 text-sm">工作区无变更</div>
+          <div className="text-center py-8 text-muted-foreground text-sm">工作区无变更</div>
         )}
+
+        <div className="px-3 py-2">
+          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">提交历史</div>
+          <CommitHistory projectPath={projectPath} />
+        </div>
       </div>
 
-      {/* 提交区域 */}
-      <div className="border-t border-gray-700 p-3">
+      <div className="border-t border-border p-3">
         <textarea
           value={commitMessage}
           onChange={(e) => setCommitMessage(e.target.value)}
           onKeyDown={handleCommitKeyDown}
           placeholder="提交信息..."
           rows={3}
-          className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-300 placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors resize-none"
+          className="w-full bg-muted border border-border rounded-md px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-ring transition-colors resize-none"
         />
         <button
           type="button"
           onClick={() => void handleCommit()}
           disabled={committing || !commitMessage.trim() || stagedFiles.length === 0}
-          className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm rounded transition-colors"
+          className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground text-primary-foreground text-sm rounded-md transition-colors"
         >
           <GitCommit className="h-4 w-4" />
           <span>{committing ? "提交中..." : "提交"}</span>

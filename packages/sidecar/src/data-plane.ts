@@ -31,6 +31,23 @@ export type SidecarEventType = "tool_use" | "result" | "error" | "system" | "ass
  */
 export type InterceptedTool = "delegate" | "spawn_agent" | "memory_write";
 
+/**
+ * 原始 NDJSON 事件监听器
+ *
+ * 在 `routeEvent` 解析成功后触发，将原始 NDJSON 行及 agentId 传递给外部。
+ * Dashboard 层可通过此回调将事件 normalize 后广播到 WebSocket 客户端。
+ *
+ * @example
+ * ```typescript
+ * import type { RawEventListener } from "@teamsland/sidecar";
+ *
+ * const listener: RawEventListener = (agentId, line) => {
+ *   console.log(`Agent ${agentId} 产生事件:`, line);
+ * };
+ * ```
+ */
+export type RawEventListener = (agentId: string, line: string) => void;
+
 const INTERCEPTED_TOOLS: Set<string> = new Set(["delegate", "spawn_agent", "memory_write"]);
 
 /**
@@ -62,6 +79,7 @@ export class SidecarDataPlane {
   private readonly sessionDb: SessionDB;
   private readonly logger: Logger;
   private readonly messageBus: ObservableMessageBus | null;
+  private rawEventListener: RawEventListener | null = null;
 
   constructor(opts: {
     registry: SubagentRegistry;
@@ -73,6 +91,26 @@ export class SidecarDataPlane {
     this.sessionDb = opts.sessionDb;
     this.logger = opts.logger;
     this.messageBus = opts.messageBus ?? null;
+  }
+
+  /**
+   * 设置原始 NDJSON 事件监听器
+   *
+   * 每次 `routeEvent` 成功解析一行 NDJSON 后，会调用此回调将原始行文本和 agentId 传出。
+   * Dashboard 层通过此机制将事件 normalize 后广播到 WebSocket 客户端。
+   *
+   * @param listener - 事件监听器，传 null 取消监听
+   *
+   * @example
+   * ```typescript
+   * dataPlane.setRawEventListener((agentId, line) => {
+   *   const messages = normalizeJsonlEntry(line, sessionId);
+   *   for (const msg of messages) broadcast(clients, msg);
+   * });
+   * ```
+   */
+  setRawEventListener(listener: RawEventListener | null): void {
+    this.rawEventListener = listener;
   }
 
   /**
@@ -139,6 +177,9 @@ export class SidecarDataPlane {
       this.logger.warn({ agentId, line }, "NDJSON 行解析失败，跳过");
       return;
     }
+
+    // 通知外部监听器（dashboard 层用于实时广播 NormalizedMessage）
+    this.rawEventListener?.(agentId, line);
 
     const type = event.type as string | undefined;
 

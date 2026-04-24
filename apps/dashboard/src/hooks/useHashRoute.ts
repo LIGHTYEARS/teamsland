@@ -28,8 +28,10 @@ function parseHashPath(hash: string): string {
  * 将路径按 `/` 分割后，每两段作为一对 key-value 解析。
  * 例如 `/session/abc/page/2` 解析为 `{ session: "abc", page: "2" }`。
  *
+ * 返回 `Partial<Record>` 以表达任意 key 在运行时可能不存在。
+ *
  * @param path - 标准化路径
- * @returns 解析出的参数键值对
+ * @returns 解析出的参数键值对，未匹配的 key 为 `undefined`
  *
  * @example
  * ```ts
@@ -38,7 +40,7 @@ function parseHashPath(hash: string): string {
  * extractParams("/");                  // => {}
  * ```
  */
-function extractParams(path: string): Record<string, string> {
+function extractParams(path: string): Partial<Record<string, string>> {
   const segments = path.split("/").filter(Boolean);
   const params: Record<string, string> = {};
   for (let i = 0; i < segments.length - 1; i += 2) {
@@ -83,7 +85,7 @@ function extractParams(path: string): Record<string, string> {
 export function useHashRoute(): {
   path: string;
   navigate: (path: string) => void;
-  params: Record<string, string>;
+  params: Partial<Record<string, string>>;
 } {
   const [path, setPath] = useState<string>(() => parseHashPath(window.location.hash));
 

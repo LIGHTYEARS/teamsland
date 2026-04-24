@@ -27,7 +27,7 @@ afterEach(() => {
 });
 
 describe("ProcessController", () => {
-  it("spawn: 向 stdin 写入 JSON 信封后关闭", async () => {
+  it("spawn: 向 stdin 写入纯文本提示词后关闭", async () => {
     const writtenData: string[] = [];
     const fakeProc = {
       pid: 12345,
@@ -50,7 +50,7 @@ describe("ProcessController", () => {
     expect(result.pid).toBe(12345);
     expect(result.sessionId).toBe("sess-abc");
     expect(fakeProc.stdin.end).toHaveBeenCalledOnce();
-    expect(JSON.parse(writtenData[0])).toMatchObject({ prompt: "hello" });
+    expect(writtenData[0]).toBe("hello\n");
   });
 
   it("spawn: 返回的 stdout 是 ReadableStream", async () => {

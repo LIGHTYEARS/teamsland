@@ -171,9 +171,11 @@ export function TopologyView({ graph, onNodeClick }: TopologyViewProps) {
   const hasNodes = graph.nodes.length > 0;
 
   return (
-    <div ref={containerRef} className="relative w-full min-h-[300px] bg-gray-900 rounded-lg border border-gray-800 p-6">
+    <div ref={containerRef} className="relative w-full min-h-[300px] bg-muted rounded-lg border border-border p-6">
       {/* 无节点状态 */}
-      {!hasNodes && <div className="flex items-center justify-center h-64 text-gray-500 text-sm">暂无拓扑节点</div>}
+      {!hasNodes && (
+        <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">暂无拓扑节点</div>
+      )}
 
       {/* 三层布局 */}
       {hasNodes && (
@@ -184,7 +186,7 @@ export function TopologyView({ graph, onNodeClick }: TopologyViewProps) {
             return (
               <div key={layerType}>
                 {/* 层级标题 */}
-                <div className="text-xs text-gray-500 mb-3 uppercase tracking-wide font-medium">
+                <div className="text-xs text-muted-foreground mb-3 uppercase tracking-wide font-medium">
                   {LAYER_LABELS[layerType]}
                 </div>
                 {/* 节点行 */}

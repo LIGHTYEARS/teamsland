@@ -188,7 +188,7 @@ async function handleTreeRoute(url: URL): Promise<Response> {
 
   try {
     const tree = await buildTree(safePath, depth);
-    return jsonResponse(tree);
+    return jsonResponse(tree.children ?? []);
   } catch (err: unknown) {
     logger.error({ err, path: safePath }, "目录树构建失败");
     return jsonResponse({ error: "tree_failed", message: "目录读取失败" }, 500);

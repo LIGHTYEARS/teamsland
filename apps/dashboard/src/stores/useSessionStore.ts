@@ -1,4 +1,5 @@
 import type { NormalizedMessage } from "@teamsland/types";
+import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useWebSocket } from "../contexts/WebSocketContext.js";
 
@@ -58,11 +59,81 @@ function matchSessionMessage(data: unknown, targetSessionId: string): Normalized
  * ```
  */
 function updateStreamingStatus(kind: string, setIsStreaming: (value: boolean) => void): void {
-  if (kind === "stream_delta") {
-    setIsStreaming(true);
-  } else if (kind === "stream_end" || kind === "complete") {
+  if (kind === "complete" || kind === "stream_end") {
     setIsStreaming(false);
+  } else if (kind === "stream_delta" || kind === "text" || kind === "tool_use" || kind === "thinking") {
+    setIsStreaming(true);
   }
+}
+
+/** stream_end 到达时：将最后一条累积 delta 定型为 text */
+function finalizeStreamDelta(setMessages: Dispatch<SetStateAction<NormalizedMessage[]>>): void {
+  setMessages((prev) => {
+    if (prev.length === 0) return prev;
+    const last = prev[prev.length - 1];
+    if (last.kind !== "stream_delta") return prev;
+    const updated = [...prev];
+    updated[prev.length - 1] = { ...last, kind: "text" };
+    return updated;
+  });
+}
+
+/** 将 stream_delta 合并到最后一条 assistant 消息 */
+function accumulateDelta(
+  normalized: NormalizedMessage,
+  isAccumulatingRef: MutableRefObject<boolean>,
+  setMessages: Dispatch<SetStateAction<NormalizedMessage[]>>,
+): void {
+  setMessages((prev) => {
+    if (isAccumulatingRef.current && prev.length > 0) {
+      const last = prev[prev.length - 1];
+      if (last.kind === "stream_delta" && last.role === "assistant") {
+        const updated = [...prev];
+        updated[prev.length - 1] = {
+          ...last,
+          content: (last.content ?? "") + (normalized.content ?? ""),
+        };
+        return updated;
+      }
+    }
+    isAccumulatingRef.current = true;
+    return [...prev, normalized];
+  });
+}
+
+/** 处理单条实时 WS 消息 */
+function handleRealtimeMessage(
+  normalized: NormalizedMessage,
+  isAccumulatingRef: MutableRefObject<boolean>,
+  seenIdsRef: MutableRefObject<Set<string>>,
+  setIsStreaming: (value: boolean) => void,
+  setMessages: Dispatch<SetStateAction<NormalizedMessage[]>>,
+): void {
+  updateStreamingStatus(normalized.kind, setIsStreaming);
+
+  if (normalized.kind === "stream_end" || normalized.kind === "complete") {
+    if (isAccumulatingRef.current) {
+      isAccumulatingRef.current = false;
+      if (normalized.kind === "stream_end") {
+        finalizeStreamDelta(setMessages);
+        return;
+      }
+    }
+  }
+
+  if (normalized.kind === "stream_delta" && normalized.role === "assistant") {
+    accumulateDelta(normalized, isAccumulatingRef, setMessages);
+    return;
+  }
+
+  if (isAccumulatingRef.current && normalized.kind !== "stream_delta") {
+    isAccumulatingRef.current = false;
+  }
+
+  if (seenIdsRef.current.has(normalized.id)) return;
+  seenIdsRef.current.add(normalized.id);
+
+  setMessages((prev) => [...prev, normalized]);
 }
 
 /**
@@ -98,6 +169,8 @@ export function useSessionStore(sessionId: string | null): SessionState & { refr
   const { subscribe } = useWebSocket();
   const seenIdsRef = useRef<Set<string>>(new Set());
   const fetchVersionRef = useRef(0);
+  /** 标记当前是否正在累积流式 delta */
+  const isAccumulatingRef = useRef(false);
 
   const fetchMessages = useCallback((sid: string) => {
     const version = ++fetchVersionRef.current;
@@ -137,6 +210,7 @@ export function useSessionStore(sessionId: string | null): SessionState & { refr
       setMessages([]);
       setIsStreaming(false);
       seenIdsRef.current = new Set();
+      isAccumulatingRef.current = false;
       return;
     }
     fetchMessages(sessionId);
@@ -149,14 +223,7 @@ export function useSessionStore(sessionId: string | null): SessionState & { refr
     return subscribe((data) => {
       const normalized = matchSessionMessage(data, sessionId);
       if (!normalized) return;
-
-      updateStreamingStatus(normalized.kind, setIsStreaming);
-
-      // 去重：跳过已存在的消息
-      if (seenIdsRef.current.has(normalized.id)) return;
-      seenIdsRef.current.add(normalized.id);
-
-      setMessages((prev) => [...prev, normalized]);
+      handleRealtimeMessage(normalized, isAccumulatingRef, seenIdsRef, setIsStreaming, setMessages);
     });
   }, [sessionId, subscribe]);
 

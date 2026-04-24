@@ -28,6 +28,33 @@ export interface SpawnParams {
 }
 
 /**
+ * 续写会话的启动参数
+ *
+ * 通过 `claude -p --resume <sessionId>` 为已有 Session 启动新进程续写对话。
+ *
+ * @example
+ * ```typescript
+ * import type { ResumeSpawnParams } from "@teamsland/sidecar";
+ *
+ * const params: ResumeSpawnParams = {
+ *   sessionId: "sess-abc123",
+ *   worktreePath: "/Users/dev/workspace/project",
+ *   prompt: "请继续完善上次的实现",
+ * };
+ * ```
+ */
+export interface ResumeSpawnParams {
+  /** 要续写的 Claude Session ID */
+  sessionId: string;
+  /** 工作目录（从 AgentRecord.worktreePath 或 DiscoveredSession.cwd 获取） */
+  worktreePath: string;
+  /** 用户的后续消息 */
+  prompt: string;
+  /** 额外传递给子进程的环境变量（可选） */
+  env?: Record<string, string>;
+}
+
+/**
  * 进程启动结果
  *
  * @example
@@ -114,43 +141,81 @@ export class ProcessController {
       span.setAttribute("issue.id", params.issueId);
       span.setAttribute("worktree.path", params.worktreePath);
 
-      const proc = Bun.spawn(
-        [
-          "claude",
-          "-p",
-          "--output-format",
-          "stream-json",
-          "--input-format",
-          "stream-json",
-          "--verbose",
-          "--permission-mode",
-          "bypassPermissions",
-        ],
-        {
-          cwd: params.worktreePath,
-          stdin: "pipe",
-          stdout: "pipe",
-          stderr: "pipe",
-          env: params.env ? { ...process.env, ...params.env } : undefined,
-        },
-      );
+      const baseArgs = [
+        "claude",
+        "-p",
+        "--output-format",
+        "stream-json",
+        "--include-partial-messages",
+        "--verbose",
+        "--permission-mode",
+        "bypassPermissions",
+      ];
 
-      const envelope = JSON.stringify({ prompt: params.initialPrompt });
-      proc.stdin.write(`${envelope}\n`);
-      proc.stdin.end();
+      const result = await this.spawnInternal({
+        args: baseArgs,
+        cwd: params.worktreePath,
+        prompt: params.initialPrompt,
+        debugPath: `/tmp/req-${params.issueId}.jsonl`,
+        env: params.env,
+      });
 
-      span.setAttribute("process.pid", proc.pid);
-      this.logger.info({ pid: proc.pid, issueId: params.issueId }, "Claude CLI 子进程已启动");
+      span.setAttribute("process.pid", result.pid);
+      span.setAttribute("session.id", result.sessionId);
+      this.logger.info({ pid: result.pid, issueId: params.issueId }, "Claude CLI 子进程已启动");
 
-      const { sessionId, bufferedChunks } = await this.readFirstLine(proc.stdout);
-      span.setAttribute("session.id", sessionId);
+      return result;
+    });
+  }
 
-      const stdout = this.buildCombinedStream(bufferedChunks, proc.stdout);
-      const [streamForConsumer, streamForDebug] = stdout.tee();
+  /**
+   * 续写已有 Session 的 Claude Code 子进程
+   *
+   * 通过 `claude -p --resume <sessionId>` 启动新进程，在已有 Session 上继续对话。
+   * 行为与 `spawn()` 一致，仅增加 `--resume` 参数。
+   *
+   * @param params - 续写启动参数
+   * @returns 进程启动结果
+   *
+   * @example
+   * ```typescript
+   * const { pid, sessionId, stdout } = await controller.spawnResume({
+   *   sessionId: "sess-abc123",
+   *   worktreePath: "/Users/dev/workspace/project",
+   *   prompt: "请继续完善上次的实现",
+   * });
+   * ```
+   */
+  async spawnResume(params: ResumeSpawnParams): Promise<SpawnResult> {
+    return withSpan("sidecar:process-controller", "ProcessController.spawnResume", async (span) => {
+      span.setAttribute("session.id", params.sessionId);
+      span.setAttribute("worktree.path", params.worktreePath);
 
-      this.scheduleDebugWrite(`/tmp/req-${params.issueId}.jsonl`, streamForDebug);
+      const args = [
+        "claude",
+        "-p",
+        "--output-format",
+        "stream-json",
+        "--include-partial-messages",
+        "--verbose",
+        "--permission-mode",
+        "bypassPermissions",
+        "--resume",
+        params.sessionId,
+      ];
 
-      return { pid: proc.pid, sessionId, stdout: streamForConsumer };
+      const result = await this.spawnInternal({
+        args,
+        cwd: params.worktreePath,
+        prompt: params.prompt,
+        debugPath: `/tmp/resume-${params.sessionId}.jsonl`,
+        env: params.env,
+      });
+
+      span.setAttribute("process.pid", result.pid);
+      this.logger.info({ pid: result.pid, sessionId: params.sessionId }, "Claude CLI 续写子进程已启动");
+
+      return result;
     });
   }
 
@@ -201,6 +266,35 @@ export class ProcessController {
     } catch {
       return false;
     }
+  }
+
+  /** 共用的子进程启动逻辑 */
+  private async spawnInternal(opts: {
+    args: string[];
+    cwd: string;
+    prompt: string;
+    debugPath: string;
+    env?: Record<string, string>;
+  }): Promise<SpawnResult> {
+    const proc = Bun.spawn(opts.args, {
+      cwd: opts.cwd,
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+      env: opts.env ? { ...process.env, ...opts.env } : undefined,
+    });
+
+    const envelope = opts.prompt;
+    proc.stdin.write(`${envelope}\n`);
+    proc.stdin.end();
+
+    const { sessionId, bufferedChunks } = await this.readFirstLine(proc.stdout);
+    const stdout = this.buildCombinedStream(bufferedChunks, proc.stdout);
+    const [streamForConsumer, streamForDebug] = stdout.tee();
+
+    this.scheduleDebugWrite(opts.debugPath, streamForDebug);
+
+    return { pid: proc.pid, sessionId, stdout: streamForConsumer };
   }
 
   /** 从 stdout 读取首行，提取 sessionId 并收集已读 chunks */

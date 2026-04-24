@@ -237,4 +237,149 @@ describe("CoordinatorSessionManager", () => {
       expect(manager.getActiveSession()).toBeNull();
     });
   });
+
+  // ─── 流式 session_id 提取（Fix 1 新增） ───
+
+  describe("流式 session_id 提取", () => {
+    it("应在获取 session_id 后立即返回，无需等待进程退出", async () => {
+      // stdout 发出 init 行后永远不关闭 — 模拟长时间运行的 Claude 进程
+      const initLine = JSON.stringify({
+        type: "system",
+        subtype: "init",
+        session_id: "stream-session-001",
+      });
+
+      const neverClosingSpawnFn: SpawnFn = vi.fn().mockImplementation(
+        (): SpawnedProcess => ({
+          pid: 99999,
+          stdin: { write: vi.fn().mockReturnValue(0), flush: vi.fn(), end: vi.fn() },
+          stdout: new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode(`${initLine}\n`));
+              // 不调用 controller.close() — 进程持续运行
+            },
+          }),
+          stderr: new ReadableStream({
+            start(c) {
+              c.close();
+            },
+          }),
+          exited: new Promise(() => {}), // 进程永远不退出
+        }),
+      );
+
+      manager = new CoordinatorSessionManager({
+        config: DEFAULT_CONFIG,
+        contextLoader: makeContextLoader(),
+        promptBuilder: makePromptBuilder(),
+        spawnFn: neverClosingSpawnFn,
+      });
+
+      // processEvent 应快速返回，而非挂住等待进程退出
+      await manager.processEvent(makeEvent({ id: "evt-stream-1" }));
+
+      expect(manager.getState()).toBe("running");
+      expect(manager.getActiveSession()?.sessionId).toBe("stream-session-001");
+    });
+
+    it("应在超时后杀死进程并抛出错误", async () => {
+      // stdout 永远不发出任何数据
+      const killedPids: number[] = [];
+
+      const silentSpawnFn: SpawnFn = vi.fn().mockImplementation(
+        (): SpawnedProcess => ({
+          pid: 88888,
+          stdin: { write: vi.fn().mockReturnValue(0), flush: vi.fn(), end: vi.fn() },
+          stdout: new ReadableStream({
+            start() {
+              // 永远不 enqueue 也不 close
+            },
+          }),
+          stderr: new ReadableStream({
+            start(c) {
+              c.close();
+            },
+          }),
+          exited: new Promise(() => {}),
+        }),
+      );
+
+      manager = new CoordinatorSessionManager({
+        config: { ...DEFAULT_CONFIG, inferenceTimeoutMs: 200, maxRecoveryRetries: 0 },
+        contextLoader: makeContextLoader(),
+        promptBuilder: makePromptBuilder(),
+        spawnFn: silentSpawnFn,
+      });
+
+      // 追踪 process.kill 调用
+      vi.spyOn(process, "kill").mockImplementation((pid: number) => {
+        killedPids.push(pid);
+        return true;
+      });
+
+      await manager.processEvent(makeEvent({ id: "evt-timeout-1" }));
+
+      // 超时应导致进入 failed 状态（maxRecoveryRetries: 0）
+      expect(manager.getState()).toBe("failed");
+      // 应该尝试杀死进程
+      expect(killedPids).toContain(88888);
+
+      vi.mocked(process.kill).mockRestore();
+    });
+
+    it("应在 destroySession 时杀死 pending 进程", async () => {
+      vi.useRealTimers(); // 此测试需要真实定时器
+
+      const killedPids: number[] = [];
+
+      const hangingSpawnFn: SpawnFn = vi.fn().mockImplementation(
+        (): SpawnedProcess => ({
+          pid: 77777,
+          stdin: { write: vi.fn().mockReturnValue(0), flush: vi.fn(), end: vi.fn() },
+          stdout: new ReadableStream({
+            pull() {
+              // 永远挂起 — 模拟 pending 状态
+              return new Promise<void>(() => {});
+            },
+          }),
+          stderr: new ReadableStream({
+            start(c) {
+              c.close();
+            },
+          }),
+          exited: new Promise(() => {}),
+        }),
+      );
+
+      vi.spyOn(process, "kill").mockImplementation((pid: number) => {
+        killedPids.push(pid);
+        return true;
+      });
+
+      manager = new CoordinatorSessionManager({
+        config: { ...DEFAULT_CONFIG, inferenceTimeoutMs: 2_000 },
+        contextLoader: makeContextLoader(),
+        promptBuilder: makePromptBuilder(),
+        spawnFn: hangingSpawnFn,
+      });
+
+      // 启动 processEvent 但不 await — 它会挂在 extractSessionIdFromStream
+      const processPromise = manager.processEvent(makeEvent({ id: "evt-pending-1" }));
+
+      // 给微任务一些时间让 pendingProcess 被设置
+      await new Promise((r) => setTimeout(r, 50));
+
+      // 在流式读取期间 reset（触发 destroySession）
+      manager.reset();
+
+      // 应该已杀死 pendingProcess
+      expect(killedPids).toContain(77777);
+
+      // 忽略 processEvent 的错误（超时或被杀）
+      await processPromise.catch(() => {});
+
+      vi.mocked(process.kill).mockRestore();
+      vi.useFakeTimers({ shouldAdvanceTime: true }); // 恢复 fake timers
+    }, 10_000);
+  });
 });

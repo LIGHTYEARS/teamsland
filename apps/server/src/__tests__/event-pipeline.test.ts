@@ -132,6 +132,7 @@ describe("事件管线端到端", () => {
       extractLoop: null,
       memoryUpdater: null,
       confirmationWatcher: { watch: vi.fn().mockResolvedValue("approved") } as never,
+      coordinatorManager: null,
     });
 
     // 启动 webhook
@@ -344,6 +345,7 @@ describe("PersistentQueue 消费者端到端", () => {
       extractLoop: null,
       memoryUpdater: null,
       confirmationWatcher: { watch: vi.fn().mockResolvedValue("approved") } as never,
+      coordinatorManager: null,
     });
   });
 

@@ -51,11 +51,11 @@ export function useProjectStore(): {
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`);
         }
-        return res.json() as Promise<DiscoveredProject[]>;
+        return res.json() as Promise<{ projects: DiscoveredProject[]; total: number }>;
       })
       .then((data) => {
         if (version !== fetchVersionRef.current) return;
-        setProjects(data);
+        setProjects(data.projects);
       })
       .catch(() => {
         if (version !== fetchVersionRef.current) return;

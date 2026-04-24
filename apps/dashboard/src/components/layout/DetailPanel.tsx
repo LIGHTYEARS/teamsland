@@ -99,9 +99,9 @@ export function DetailPanel({ sessionId: _sessionId, projectPath }: DetailPanelP
   }, [editingFile, loadFileContent]);
 
   return (
-    <div className="flex h-full flex-col bg-white">
+    <div className="flex h-full flex-col bg-background">
       {/* 标签栏 */}
-      <div className="flex items-center border-b border-gray-200 px-2">
+      <div className="flex items-center border-b border-border px-2">
         {TABS.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -111,7 +111,9 @@ export function DetailPanel({ sessionId: _sessionId, projectPath }: DetailPanelP
               setEditingFile(null);
             }}
             className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors ${
-              activeTab === id ? "border-b-2 border-blue-500 text-blue-600" : "text-gray-500 hover:text-gray-700"
+              activeTab === id
+                ? "border-b-2 border-primary text-primary"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <Icon size={12} />
@@ -128,12 +130,12 @@ export function DetailPanel({ sessionId: _sessionId, projectPath }: DetailPanelP
 
         {activeTab === "files" && editingFile && (
           <div className="flex h-full flex-col">
-            <div className="flex items-center justify-between border-b border-gray-200 px-3 py-1.5">
-              <span className="truncate text-xs text-gray-600">{editingFile}</span>
+            <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
+              <span className="truncate text-xs text-muted-foreground">{editingFile}</span>
               <button
                 type="button"
                 onClick={() => setEditingFile(null)}
-                className="rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 <X size={14} />
               </button>
@@ -163,7 +165,7 @@ export function DetailPanel({ sessionId: _sessionId, projectPath }: DetailPanelP
         )}
 
         {activeTab === "topology" && !graph && (
-          <div className="flex h-full items-center justify-center text-sm text-gray-400">暂无拓扑数据</div>
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">暂无拓扑数据</div>
         )}
       </div>
     </div>
