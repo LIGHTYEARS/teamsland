@@ -202,32 +202,53 @@ export class LarkConnector {
       return;
     }
 
-    const mention = extractBotMention(raw);
+    const mention = extractBotMention(raw) ?? extractDirectMessage(raw);
     if (!mention) return;
 
+    const logLabel = mention.chatType === "p2p" ? "私聊" : "群聊 @机器人";
     logger.info(
-      { eventId: mention.eventId, chatId: mention.chatId, senderId: mention.senderId, messageId: mention.messageId },
-      "收到群聊 @机器人 消息",
+      {
+        eventId: mention.eventId,
+        chatId: mention.chatId,
+        senderId: mention.senderId,
+        messageId: mention.messageId,
+        chatType: mention.chatType,
+      },
+      `收到${logLabel}消息`,
     );
 
     const event = await this.buildBridgeEvent(mention);
     if (!event) return;
 
+    const queueType = mention.chatType === "p2p" ? "lark_dm" : "lark_mention";
+
     try {
       this.enqueue({
-        type: "lark_mention",
+        type: queueType,
         payload: {
           event,
           chatId: mention.chatId,
           senderId: mention.senderId,
+          senderName: (event.payload as Record<string, unknown>).senderName ?? "",
+          senderDepartment: (event.payload as Record<string, unknown>).senderDepartment ?? "",
           messageId: mention.messageId,
         },
         priority: "high",
         traceId: event.eventId,
       });
-      logger.info({ eventId: event.eventId, issueId: event.issueId }, "Lark 消息已入队到 PersistentQueue");
+      logger.info({ eventId: event.eventId, type: queueType }, "Lark 消息已入队到 PersistentQueue");
     } catch (err: unknown) {
       logger.error({ err, eventId: event.eventId }, "消息入队失败");
+    }
+  }
+
+  private async enrichSenderInfo(senderId: string): Promise<{ senderName: string; senderDepartment: string }> {
+    try {
+      const contact = await this.larkCli.getUserInfo(senderId);
+      return { senderName: contact.name, senderDepartment: contact.department };
+    } catch (err: unknown) {
+      logger.warn({ err, senderId }, "查询发送者信息失败，使用裸 ID");
+      return { senderName: "", senderDepartment: "" };
     }
   }
 
@@ -238,14 +259,21 @@ export class LarkConnector {
       return null;
     }
 
-    const projectKey = this.config.chatProjectMapping[mention.chatId];
-    if (!projectKey) {
-      logger.warn(
-        { chatId: mention.chatId, eventId: mention.eventId },
-        "群聊未配置项目映射（chatProjectMapping），跳过",
-      );
-      return null;
+    let projectKey = "";
+    if (mention.chatType === "group") {
+      const mapped = this.config.chatProjectMapping[mention.chatId];
+      if (!mapped) {
+        logger.warn(
+          { chatId: mention.chatId, eventId: mention.eventId },
+          "群聊未配置项目映射（chatProjectMapping），跳过",
+        );
+        return null;
+      }
+      projectKey = mapped;
     }
+    // p2p: projectKey remains "" — coordinator infers project from context
+
+    const senderInfo = await this.enrichSenderInfo(mention.senderId);
 
     let historyContext = "";
     try {
@@ -266,7 +294,9 @@ export class LarkConnector {
         chatId: mention.chatId,
         messageId: mention.messageId,
         senderId: mention.senderId,
-        source: "lark_mention",
+        senderName: senderInfo.senderName,
+        senderDepartment: senderInfo.senderDepartment,
+        source: mention.chatType === "p2p" ? "lark_dm" : "lark_mention",
       },
       timestamp: mention.timestamp,
     };
@@ -282,6 +312,7 @@ interface BotMention {
   content: string | undefined;
   messageType: string | undefined;
   timestamp: number;
+  chatType: "group" | "p2p";
 }
 
 /**
@@ -313,6 +344,31 @@ function extractBotMention(raw: LarkRawEvent): BotMention | null {
     content: msg.content,
     messageType: msg.message_type,
     timestamp: msg.create_time ? Number(msg.create_time) : Date.now(),
+    chatType: "group",
+  };
+}
+
+/**
+ * 从原始飞书事件中提取私聊消息
+ *
+ * 过滤条件：必须是 im.message.receive_v1、私聊消息（p2p）。
+ * 私聊不要求 @mention——发给 bot 的消息天然就是对 bot 说的。
+ */
+function extractDirectMessage(raw: LarkRawEvent): BotMention | null {
+  if (raw.header?.event_type !== "im.message.receive_v1") return null;
+
+  const msg = raw.event?.message;
+  if (!msg || msg.chat_type !== "p2p") return null;
+
+  return {
+    eventId: raw.header?.event_id ?? msg.message_id ?? `lark-${Date.now()}`,
+    chatId: msg.chat_id ?? "",
+    senderId: raw.event?.sender?.sender_id?.open_id ?? "",
+    messageId: msg.message_id ?? `lark-msg-${Date.now()}`,
+    content: msg.content,
+    messageType: msg.message_type,
+    timestamp: msg.create_time ? Number(msg.create_time) : Date.now(),
+    chatType: "p2p",
   };
 }
 
