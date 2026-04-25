@@ -37,6 +37,52 @@ describe("LarkCli", () => {
     });
   });
 
+  describe("getUserInfo", () => {
+    it("构造正确的 lark-cli contact +get-user 命令", async () => {
+      const userResponse = { ok: true, data: { user: { name: "张三", department_ids: ["dept_001"] } } };
+      const runner = createMockRunner({ exitCode: 0, stdout: JSON.stringify(userResponse), stderr: "" });
+      const cli = new LarkCli(testConfig, runner);
+
+      const result = await cli.getUserInfo("ou_user001");
+
+      expect(runner.run).toHaveBeenCalledWith([
+        "lark-cli",
+        "contact",
+        "+get-user",
+        "--as",
+        "bot",
+        "--user-id",
+        "ou_user001",
+        "--user-id-type",
+        "open_id",
+        "--format",
+        "json",
+      ]);
+      expect(result).toEqual({ userId: "ou_user001", name: "张三", department: "" });
+    });
+
+    it("解析包含 department 的响应", async () => {
+      const userResponse = {
+        ok: true,
+        data: { user: { name: "李四", department_ids: ["dept_002"] } },
+        department_name: "工程部",
+      };
+      const runner = createMockRunner({ exitCode: 0, stdout: JSON.stringify(userResponse), stderr: "" });
+      const cli = new LarkCli(testConfig, runner);
+
+      const result = await cli.getUserInfo("ou_user002");
+
+      expect(result.name).toBe("李四");
+    });
+
+    it("命令失败时抛出 LarkCliError", async () => {
+      const runner = createMockRunner({ exitCode: 1, stdout: "", stderr: "not found" });
+      const cli = new LarkCli(testConfig, runner);
+
+      await expect(cli.getUserInfo("ou_unknown")).rejects.toThrow(LarkCliError);
+    });
+  });
+
   describe("sendGroupMessage", () => {
     it("构造正确的群消息命令", async () => {
       const runner = createMockRunner({ exitCode: 0, stdout: "", stderr: "" });

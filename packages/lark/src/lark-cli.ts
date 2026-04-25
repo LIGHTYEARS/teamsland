@@ -103,6 +103,38 @@ export class LarkCli {
   }
 
   /**
+   * 查询用户信息
+   *
+   * @param userId - 用户的 open_id
+   * @returns 用户联系人信息
+   */
+  async getUserInfo(userId: string): Promise<LarkContact> {
+    const cmd = [
+      "lark-cli",
+      "contact",
+      "+get-user",
+      "--as",
+      "bot",
+      "--user-id",
+      userId,
+      "--user-id-type",
+      "open_id",
+      "--format",
+      "json",
+    ];
+    const result = await this.exec(cmd);
+    const raw = this.parseJson<{ ok?: boolean; data?: { user?: { name?: string } }; department_name?: string }>(
+      result.stdout,
+      cmd,
+    );
+    return {
+      userId,
+      name: raw.data?.user?.name ?? "",
+      department: raw.department_name ?? "",
+    };
+  }
+
+  /**
    * 发送群消息
    *
    * @param chatId - 群聊 ID
