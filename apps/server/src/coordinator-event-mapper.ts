@@ -13,6 +13,7 @@ import type { CoordinatorEvent, CoordinatorEventType } from "@teamsland/types";
  */
 const TYPE_MAP: Record<string, CoordinatorEventType> = {
   lark_mention: "lark_mention",
+  lark_dm: "lark_dm",
   meego_issue_created: "meego_issue_created",
   meego_issue_assigned: "meego_issue_assigned",
   meego_issue_status_changed: "meego_issue_status_changed",
@@ -37,6 +38,7 @@ const TYPE_MAP: Record<string, CoordinatorEventType> = {
 const PRIORITY_MAP: Record<string, number> = {
   worker_anomaly: 0,
   lark_mention: 1,
+  lark_dm: 1,
   worker_interrupted: 1,
   worker_completed: 2,
   worker_resumed: 2,
@@ -53,6 +55,130 @@ const DEFAULT_PRIORITY = 4;
 /** 默认事件类型（未知消息类型回退） */
 const DEFAULT_EVENT_TYPE: CoordinatorEventType = "user_query";
 
+// ---------------------------------------------------------------------------
+// Per-type payload extractors
+// ---------------------------------------------------------------------------
+
+type LarkChatPayload = {
+  event: { issueId: string; projectKey: string; payload: Record<string, unknown> };
+  chatId: string;
+  senderId: string;
+  messageId: string;
+};
+
+type MeegoEventPayload = {
+  event: { issueId: string; projectKey: string; payload: Record<string, unknown> };
+};
+
+/** 从 event.payload 中提取消息文本（优先 title，次选 description） */
+function extractMessage(eventPayload: Record<string, unknown>): string | undefined {
+  if (typeof eventPayload.title === "string") return eventPayload.title;
+  if (typeof eventPayload.description === "string") return eventPayload.description;
+  return undefined;
+}
+
+/** 从 event.payload 中提取聊天上下文（仅当 description 为字符串时） */
+function extractChatContext(eventPayload: Record<string, unknown>): string | undefined {
+  return typeof eventPayload.description === "string" ? eventPayload.description : undefined;
+}
+
+const PAYLOAD_EXTRACTORS: Record<string, (payload: unknown) => Record<string, unknown>> = {
+  lark_mention(payload) {
+    const p = payload as LarkChatPayload & { event: { issueId: string; projectKey: string } };
+    const ep = p.event.payload;
+    return {
+      chatId: p.chatId,
+      senderId: p.senderId,
+      messageId: p.messageId,
+      message: extractMessage(ep),
+      chatContext: extractChatContext(ep),
+      issueId: p.event.issueId,
+      projectKey: p.event.projectKey,
+    };
+  },
+
+  lark_dm(payload) {
+    const p = payload as LarkChatPayload & {
+      senderName: string;
+      senderDepartment: string;
+    };
+    const ep = p.event.payload;
+    return {
+      chatId: p.chatId,
+      senderId: p.senderId,
+      senderName: p.senderName,
+      senderDepartment: p.senderDepartment,
+      messageId: p.messageId,
+      message: extractMessage(ep),
+      chatContext: extractChatContext(ep),
+      chatType: "p2p",
+    };
+  },
+
+  meego_issue_created(payload) {
+    const p = payload as MeegoEventPayload;
+    return {
+      issueId: p.event.issueId,
+      projectKey: p.event.projectKey,
+      title: p.event.payload.title,
+      description: p.event.payload.description,
+    };
+  },
+
+  meego_issue_assigned(payload) {
+    const p = payload as MeegoEventPayload;
+    return {
+      issueId: p.event.issueId,
+      projectKey: p.event.projectKey,
+      assigneeId: p.event.payload.assigneeId,
+    };
+  },
+
+  meego_issue_status_changed(payload) {
+    const p = payload as MeegoEventPayload;
+    return {
+      issueId: p.event.issueId,
+      projectKey: p.event.projectKey,
+      status: p.event.payload.status,
+      previousStatus: p.event.payload.previousStatus,
+    };
+  },
+
+  meego_sprint_started(payload) {
+    const p = payload as MeegoEventPayload;
+    return {
+      issueId: p.event.issueId,
+      projectKey: p.event.projectKey,
+      sprintName: p.event.payload.sprintName,
+    };
+  },
+
+  worker_completed(payload) {
+    const p = payload as { workerId: string; sessionId: string; issueId: string; resultSummary: string };
+    return { workerId: p.workerId, sessionId: p.sessionId, issueId: p.issueId, resultSummary: p.resultSummary };
+  },
+
+  worker_anomaly(payload) {
+    const p = payload as { workerId: string; anomalyType: string; details: string };
+    return { workerId: p.workerId, anomalyType: p.anomalyType, details: p.details };
+  },
+
+  diagnosis_ready(payload) {
+    const p = payload as { targetWorkerId: string; observerWorkerId: string; report: string };
+    return { targetWorkerId: p.targetWorkerId, observerWorkerId: p.observerWorkerId, report: p.report };
+  },
+
+  worker_interrupted(payload) {
+    const p = payload as { workerId: string; reason: string };
+    return { workerId: p.workerId, reason: p.reason };
+  },
+
+  worker_resumed(payload) {
+    const p = payload as { workerId: string; predecessorId: string };
+    return { workerId: p.workerId, predecessorId: p.predecessorId };
+  },
+};
+
 /**
  * 将 QueueMessage 扁平化负载为 Record<string, unknown>
  *
@@ -68,163 +194,15 @@ const DEFAULT_EVENT_TYPE: CoordinatorEventType = "user_query";
  * ```
  */
 function flattenPayload(message: QueueMessage): Record<string, unknown> {
-  const { type, payload } = message;
-
-  switch (type) {
-    case "lark_mention": {
-      const p = payload as {
-        chatId: string;
-        senderId: string;
-        messageId: string;
-        event: {
-          issueId: string;
-          projectKey: string;
-          payload: Record<string, unknown>;
-        };
-      };
-      // LarkConnector 将消息文本放入 event.payload.title，
-      // 将聊天历史上下文放入 event.payload.description
-      const eventPayload = p.event.payload;
-      const message =
-        typeof eventPayload.title === "string"
-          ? eventPayload.title
-          : typeof eventPayload.description === "string"
-            ? eventPayload.description
-            : undefined;
-      return {
-        chatId: p.chatId,
-        senderId: p.senderId,
-        messageId: p.messageId,
-        message,
-        chatContext: typeof eventPayload.description === "string" ? eventPayload.description : undefined,
-        issueId: p.event.issueId,
-        projectKey: p.event.projectKey,
-      };
-    }
-    case "meego_issue_created": {
-      const p = payload as {
-        event: {
-          issueId: string;
-          projectKey: string;
-          payload: Record<string, unknown>;
-        };
-      };
-      return {
-        issueId: p.event.issueId,
-        projectKey: p.event.projectKey,
-        title: p.event.payload.title,
-        description: p.event.payload.description,
-      };
-    }
-    case "meego_issue_assigned": {
-      const p = payload as {
-        event: {
-          issueId: string;
-          projectKey: string;
-          payload: Record<string, unknown>;
-        };
-      };
-      return {
-        issueId: p.event.issueId,
-        projectKey: p.event.projectKey,
-        assigneeId: p.event.payload.assigneeId,
-      };
-    }
-    case "meego_issue_status_changed": {
-      const p = payload as {
-        event: {
-          issueId: string;
-          projectKey: string;
-          payload: Record<string, unknown>;
-        };
-      };
-      return {
-        issueId: p.event.issueId,
-        projectKey: p.event.projectKey,
-        status: p.event.payload.status,
-        previousStatus: p.event.payload.previousStatus,
-      };
-    }
-    case "meego_sprint_started": {
-      const p = payload as {
-        event: {
-          issueId: string;
-          projectKey: string;
-          payload: Record<string, unknown>;
-        };
-      };
-      return {
-        issueId: p.event.issueId,
-        projectKey: p.event.projectKey,
-        sprintName: p.event.payload.sprintName,
-      };
-    }
-    case "worker_completed": {
-      const p = payload as {
-        workerId: string;
-        sessionId: string;
-        issueId: string;
-        resultSummary: string;
-      };
-      return {
-        workerId: p.workerId,
-        sessionId: p.sessionId,
-        issueId: p.issueId,
-        resultSummary: p.resultSummary,
-      };
-    }
-    case "worker_anomaly": {
-      const p = payload as {
-        workerId: string;
-        anomalyType: string;
-        details: string;
-      };
-      return {
-        workerId: p.workerId,
-        anomalyType: p.anomalyType,
-        details: p.details,
-      };
-    }
-    case "diagnosis_ready": {
-      const p = payload as {
-        targetWorkerId: string;
-        observerWorkerId: string;
-        report: string;
-      };
-      return {
-        targetWorkerId: p.targetWorkerId,
-        observerWorkerId: p.observerWorkerId,
-        report: p.report,
-      };
-    }
-    case "worker_interrupted": {
-      const p = payload as {
-        workerId: string;
-        reason: string;
-      };
-      return {
-        workerId: p.workerId,
-        reason: p.reason,
-      };
-    }
-    case "worker_resumed": {
-      const p = payload as {
-        workerId: string;
-        predecessorId: string;
-      };
-      return {
-        workerId: p.workerId,
-        predecessorId: p.predecessorId,
-      };
-    }
-    default: {
-      // 未知类型：尝试将整个 payload 作为 Record 返回
-      if (typeof payload === "object" && payload !== null) {
-        return { ...payload } as Record<string, unknown>;
-      }
-      return {};
-    }
+  const extractor = PAYLOAD_EXTRACTORS[message.type];
+  if (extractor) {
+    return extractor(message.payload);
   }
+  // 未知类型：尝试将整个 payload 作为 Record 返回
+  if (typeof message.payload === "object" && message.payload !== null) {
+    return { ...message.payload } as Record<string, unknown>;
+  }
+  return {};
 }
 
 /**

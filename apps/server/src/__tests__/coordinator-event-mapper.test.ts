@@ -123,6 +123,19 @@ describe("coordinator-event-mapper", () => {
       const event = toCoordinatorEvent(msg);
       expect(event.type).toBe("diagnosis_ready");
     });
+
+    it("lark_dm 映射为 lark_dm", () => {
+      const msg = makeMessage("lark_dm", {
+        event: { eventId: "e1", issueId: "msg_dm", projectKey: "", type: "issue.created", payload: {}, timestamp: 0 },
+        chatId: "oc_p2p_xxx",
+        senderId: "ou_xxx",
+        senderName: "张三",
+        senderDepartment: "工程部",
+        messageId: "msg_dm",
+      });
+      const event = toCoordinatorEvent(msg);
+      expect(event.type).toBe("lark_dm");
+    });
   });
 
   describe("优先级映射", () => {
@@ -141,6 +154,18 @@ describe("coordinator-event-mapper", () => {
         chatId: "oc_xxx",
         senderId: "ou_xxx",
         messageId: "msg_xxx",
+      });
+      expect(toCoordinatorEvent(msg).priority).toBe(1);
+    });
+
+    it("lark_dm 优先级为 1", () => {
+      const msg = makeMessage("lark_dm", {
+        event: { eventId: "e1", issueId: "msg_dm", projectKey: "", type: "issue.created", payload: {}, timestamp: 0 },
+        chatId: "oc_p2p_xxx",
+        senderId: "ou_xxx",
+        senderName: "张三",
+        senderDepartment: "工程部",
+        messageId: "msg_dm",
       });
       expect(toCoordinatorEvent(msg).priority).toBe(1);
     });
@@ -246,6 +271,35 @@ describe("coordinator-event-mapper", () => {
       expect(event.payload.senderId).toBe("ou_xxx");
       expect(event.payload.messageId).toBe("msg_xxx");
       expect(event.payload.message).toBeUndefined();
+    });
+
+    it("lark_dm 提取 chatId、senderId、senderName、senderDepartment、message、chatType", () => {
+      const msg = makeMessage("lark_dm", {
+        event: {
+          eventId: "e1",
+          issueId: "msg_dm",
+          projectKey: "",
+          type: "issue.created",
+          payload: { title: "帮我查个问题" },
+          timestamp: 0,
+        },
+        chatId: "oc_p2p_xxx",
+        senderId: "ou_xxx",
+        senderName: "张三",
+        senderDepartment: "工程部",
+        messageId: "msg_dm",
+      });
+      const event = toCoordinatorEvent(msg);
+      expect(event.payload).toEqual({
+        chatId: "oc_p2p_xxx",
+        senderId: "ou_xxx",
+        senderName: "张三",
+        senderDepartment: "工程部",
+        messageId: "msg_dm",
+        message: "帮我查个问题",
+        chatContext: undefined,
+        chatType: "p2p",
+      });
     });
 
     it("meego_issue_created 提取 issueId、projectKey、title、description", () => {
