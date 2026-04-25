@@ -19,10 +19,10 @@ const WORKSPACE_DIRS = {
   claude: ".claude",
   skills: ".claude/skills",
   teamslandSpawn: ".claude/skills/teamsland-spawn",
-  larkMessage: ".claude/skills/lark-message",
-  larkDocs: ".claude/skills/lark-docs",
   meegoQuery: ".claude/skills/meego-query",
   selfEvolve: ".claude/skills/self-evolve",
+  feishuCard: ".claude/skills/feishu-card",
+  feishuCardTemplates: ".claude/skills/feishu-card/templates",
 } as const;
 
 /**
@@ -104,20 +104,36 @@ async function writeWorkspaceFiles(basePath: string, config: AppConfig): Promise
       content: generateTeamslandSpawnSkill(),
     },
     {
-      path: join(basePath, WORKSPACE_DIRS.larkMessage, "SKILL.md"),
-      content: generateLarkMessageSkill(),
-    },
-    {
-      path: join(basePath, WORKSPACE_DIRS.larkDocs, "SKILL.md"),
-      content: generateLarkDocsSkill(),
-    },
-    {
       path: join(basePath, WORKSPACE_DIRS.meegoQuery, "SKILL.md"),
       content: generateMeegoQuerySkill(),
     },
     {
       path: join(basePath, WORKSPACE_DIRS.selfEvolve, "SKILL.md"),
       content: generateSelfEvolveSkill(),
+    },
+    {
+      path: join(basePath, WORKSPACE_DIRS.feishuCard, "SKILL.md"),
+      content: generateFeishuCardSkill(),
+    },
+    {
+      path: join(basePath, WORKSPACE_DIRS.feishuCardTemplates, "text-reply.json"),
+      content: generateCardTemplate("text-reply"),
+    },
+    {
+      path: join(basePath, WORKSPACE_DIRS.feishuCardTemplates, "structured-data.json"),
+      content: generateCardTemplate("structured-data"),
+    },
+    {
+      path: join(basePath, WORKSPACE_DIRS.feishuCardTemplates, "status-notification.json"),
+      content: generateCardTemplate("status-notification"),
+    },
+    {
+      path: join(basePath, WORKSPACE_DIRS.feishuCardTemplates, "error-alert.json"),
+      content: generateCardTemplate("error-alert"),
+    },
+    {
+      path: join(basePath, WORKSPACE_DIRS.feishuCardTemplates, "worker-result.json"),
+      content: generateCardTemplate("worker-result"),
     },
     {
       path: join(basePath, "evolution-config.json"),
@@ -236,7 +252,7 @@ function generateClaudeMd(config: AppConfig): string {
 1. **是否需要处理？** — 闲聊、重复消息、已处理的事件 → 忽略或简短回复
 2. **能直接回答吗？** — 状态查询、简单问题 → 直接回复
 3. **需要执行任务？** — 代码修改、文档撰写、Bug 修复 → spawn worker
-4. **需要通知他人？** — 工单变更、任务完成 → 通过 lark-cli 发消息
+4. **需要通知他人？** — 工单变更、任务完成 → 通过 bytedcli feishu 或 lark-cli 发消息
 
 ## 团队项目
 
@@ -262,6 +278,23 @@ ${chatTable}
 - 保持简洁、专业
 - 涉及代码时使用 Markdown 代码块
 - 回复中包含相关的工单 ID 或 Worker ID 方便追溯
+
+## 回复通道
+
+- **群聊消息** → 回复到同一群聊：\`lark-cli im +messages-send --as bot --chat-id "<chatId>" --text "..."\`
+- **私聊消息** → 回复到私聊：\`lark-cli im +messages-send --as bot --user-id "<senderId>" --text "..."\`
+- 私聊中的敏感信息不要转发到群聊
+- Worker 完成后根据消息来源（群聊/私聊）选择对应的回复通道
+- 私聊消息不绑定特定项目，根据消息内容和上下文自行判断关联项目
+
+## 飞书消息格式选择
+
+- **一句话回复** → 纯文本（--text）
+- **带格式但无表格** → post（--markdown），注意：post 不支持表格语法和 HTML
+- **包含表格、彩色标题、结构化数据** → 卡片消息（参见 feishu-card skill）
+
+**严禁在 post 消息中使用 \`| col1 | col2 |\` 表格语法** — 会原样显示为纯文本。
+需要表格时必须使用 feishu-card skill 的 structured-data 模板。
 `;
 }
 
@@ -280,6 +313,8 @@ function generateSettingsJson(): string {
     permissions: {
       allow: [
         "Bash(teamsland *)",
+        "Bash(bytedcli *)",
+        "Bash(npx -y @bytedance-dev/bytedcli*)",
         "Bash(lark-cli *)",
         "Bash(curl *)",
         "Bash(cat *)",
@@ -363,142 +398,6 @@ teamsland cancel <worker-id> --force
 ## CRITICAL: Always use single-quoted EOF
 
 Always use \`'EOF'\` (single-quoted) to prevent shell expansion of \`$variables\` and backticks.
-`;
-}
-
-/**
- * 生成 lark-message SKILL.md 内容
- *
- * @returns SKILL.md 文件内容
- *
- * @example
- * ```typescript
- * const content = generateLarkMessageSkill();
- * ```
- */
-function generateLarkMessageSkill(): string {
-  return `---
-name: lark-message
-description: Send messages to Lark chats and users. Use when you need to reply in a group chat, send a direct message, or forward worker results to users.
-allowed-tools: Bash(lark-cli *)
----
-
-# Lark Message Skill
-
-通过 lark-cli 发送飞书消息。
-
-## 发送群聊消息
-
-\`\`\`bash
-lark-cli im +messages-send --chat-id <chat-id> --text "消息内容"
-\`\`\`
-
-## 回复指定消息
-
-\`\`\`bash
-lark-cli im +messages-send --chat-id <chat-id> --text "回复内容"
-\`\`\`
-
-## 发送私聊消息
-
-\`\`\`bash
-lark-cli im +messages-send --user-id <user-id> --text "私聊内容"
-\`\`\`
-
-## 发送富文本（Markdown）
-
-\`\`\`bash
-lark-cli im +messages-send --chat-id <chat-id> --markdown "$(cat <<'EOF'
-**标题**
-
-- 要点 1
-- 要点 2
-
-\\\`\\\`\\\`typescript
-const x = 1;
-\\\`\\\`\\\`
-EOF
-)"
-\`\`\`
-
-## 飞书 Markdown 限制
-
-飞书的 --markdown 选项会自动转为 post 富文本格式，**以下语法不被支持**：
-
-- **表格**（\`| col1 | col2 |\`）— 不会渲染，改用列表格式
-- **HTML 标签** — 不会渲染
-
-**表格替代方案**：用缩进列表代替表格：
-
-\`\`\`
-项目 A
-  - 字段 1: 值 1
-  - 字段 2: 值 2
-
-项目 B
-  - 字段 1: 值 1
-  - 字段 2: 值 2
-\`\`\`
-
-支持的格式：**加粗**、*斜体*、~~删除线~~、\\\`行内代码\\\`、代码块、有序/无序列表、超链接。
-
-## 注意事项
-
-- 消息内容通过 heredoc 传递，避免 shell 转义问题
-- 长文本建议使用 Markdown 格式
-`;
-}
-
-/**
- * 生成 lark-docs SKILL.md 内容
- *
- * @returns SKILL.md 文件内容
- *
- * @example
- * ```typescript
- * const content = generateLarkDocsSkill();
- * ```
- */
-function generateLarkDocsSkill(): string {
-  return `---
-name: lark-docs
-description: Read and search Lark documents. Use when you need to fetch document content, search for information in Lark docs, or reference documentation.
-allowed-tools: Bash(lark-cli *)
----
-
-# Lark Docs Skill
-
-通过 lark-cli 读取和搜索飞书文档。
-
-## 获取文档内容
-
-\`\`\`bash
-lark-cli docs get <doc-url-or-id>
-\`\`\`
-
-## 搜索文档
-
-\`\`\`bash
-lark-cli docs search --query "搜索关键词"
-\`\`\`
-
-## 列出最近文档
-
-\`\`\`bash
-lark-cli docs list --recent 10
-\`\`\`
-
-## 获取文档元信息
-
-\`\`\`bash
-lark-cli docs info <doc-url-or-id>
-\`\`\`
-
-## 注意事项
-
-- 文档 URL 和 ID 都可以作为参数
-- 搜索结果按相关度排序
-- 大文档可能需要分段获取
 `;
 }
 
@@ -653,6 +552,208 @@ export const handle = async (event: MeegoEvent, ctx: HookContext): Promise<void>
 }
 
 /**
+ * 生成 feishu-card SKILL.md 内容
+ *
+ * 轻量入口文件：校验规则 + 发送命令 + 模板索引。
+ * 模板 JSON 单独存放在 templates/ 目录，大脑按需 Read。
+ */
+function generateFeishuCardSkill(): string {
+  return `---
+name: feishu-card
+description: >
+  Use when sending Feishu/Lark messages that need rich formatting —
+  tables, colored headers, status badges, structured data.
+  Provides card templates, validation checklist, and send commands.
+allowed-tools: Bash(lark-cli *), Bash(bytedcli *), Read
+---
+
+# 飞书卡片消息
+
+普通 post 消息（--markdown）不支持表格和复杂排版。
+需要丰富格式时，使用 **interactive 卡片消息**。
+
+## 发送命令
+
+\`\`\`bash
+# lark-cli
+lark-cli im +messages-send --as bot --chat-id "<chat_id>" \\
+  --msg-type interactive --content '<card_json>'
+
+# bytedcli
+bytedcli feishu message send --chat-id "<chat_id>" \\
+  --msg-type interactive --content-json '<card_json>'
+
+# 私聊
+lark-cli im +messages-send --as bot --user-id "<user_id>" \\
+  --msg-type interactive --content '<card_json>'
+\`\`\`
+
+## 发送前校验清单
+
+发送卡片 JSON 前，逐项检查：
+
+1. **JSON 合法** — 能被 JSON.parse 解析
+2. **有 header.title** — 必须包含 \`header.title.content\`
+3. **body.elements 非空** — 至少一个元素
+4. **元素 tag 合法** — 见下方合法列表
+5. **表格约束** — 表格数 ≤ 5，列 ≤ 10，行 ≤ 50
+6. **总大小 ≤ 30KB**
+7. **嵌套 ≤ 6 层**
+
+合法元素 tag：\`markdown\`、\`div\`、\`table\`、\`hr\`、\`note\`、\`img\`、
+\`column_set\`、\`column\`、\`collapsible_panel\`、\`form\`、\`action\`、
+\`button\`、\`select_static\`、\`multi_select_static\`、\`date_picker\`、
+\`input\`、\`overflow\`、\`checker\`、\`chart\`、\`progress\`、
+\`person_list\`、\`icon\`
+
+Header template 颜色：\`blue\`、\`wathet\`、\`turquoise\`、\`green\`、
+\`yellow\`、\`orange\`、\`red\`、\`carmine\`、\`violet\`、\`purple\`、
+\`indigo\`、\`grey\`、\`default\`
+
+## 卡片 JSON 基本结构
+
+\`\`\`json
+{
+  "schema": "2.0",
+  "config": { "wide_screen_mode": true },
+  "header": {
+    "title": { "tag": "plain_text", "content": "标题" },
+    "template": "blue"
+  },
+  "body": {
+    "elements": [
+      { "tag": "markdown", "content": "**正文** markdown 内容" }
+    ]
+  }
+}
+\`\`\`
+
+## 模板索引
+
+按需 Read 对应模板文件，替换占位符后发送。
+
+| 模板 | 文件 | 场景 |
+|------|------|------|
+| 文本回复 | templates/text-reply.json | 日常回复，标题 + markdown 正文 |
+| 结构化数据 | templates/structured-data.json | 表格展示：仓库映射、工单列表 |
+| 状态通知 | templates/status-notification.json | Worker 启动/完成/失败 |
+| 错误告警 | templates/error-alert.json | 系统异常、任务失败 |
+| Worker 结果 | templates/worker-result.json | 任务完成详细报告 |
+
+## 何时用卡片 vs 纯文本
+
+- 一句话回复 → 纯文本（--text）
+- 带格式的回复但无表格 → post（--markdown）
+- 包含表格、彩色标题、结构化数据 → 卡片（--msg-type interactive）
+`;
+}
+
+type CardTemplateType = "text-reply" | "structured-data" | "status-notification" | "error-alert" | "worker-result";
+
+/**
+ * 生成卡片模板 JSON
+ *
+ * 每个模板包含占位符（{{placeholder}}），大脑 Read 后替换并发送。
+ */
+function generateCardTemplate(type: CardTemplateType): string {
+  const templates: Record<CardTemplateType, object> = {
+    "text-reply": {
+      _comment: "文本回复卡片 — 替换 {{TITLE}}、{{COLOR}}、{{CONTENT}}",
+      schema: "2.0",
+      config: { wide_screen_mode: true },
+      header: {
+        title: { tag: "plain_text", content: "{{TITLE}}" },
+        template: "{{COLOR}}",
+      },
+      body: {
+        elements: [{ tag: "markdown", content: "{{CONTENT}}" }],
+      },
+    },
+    "structured-data": {
+      _comment: "结构化数据卡片 — 替换 {{TITLE}}、{{COLOR}}、{{COLUMNS}}、{{ROWS}}",
+      schema: "2.0",
+      config: { wide_screen_mode: true },
+      header: {
+        title: { tag: "plain_text", content: "{{TITLE}}" },
+        template: "{{COLOR}}",
+      },
+      body: {
+        elements: [
+          {
+            tag: "table",
+            page_size: 10,
+            row_height: "low",
+            header_style: { bold: true, background_style: "grey" },
+            columns: "{{COLUMNS}}",
+            rows: "{{ROWS}}",
+          },
+        ],
+      },
+    },
+    "status-notification": {
+      _comment: "状态通知卡片 — 替换 {{TITLE}}、{{COLOR}}、{{STATUS}}、{{DETAILS}}",
+      schema: "2.0",
+      config: { wide_screen_mode: true },
+      header: {
+        title: { tag: "plain_text", content: "{{TITLE}}" },
+        template: "{{COLOR}}",
+      },
+      body: {
+        elements: [
+          { tag: "markdown", content: "**状态：** {{STATUS}}" },
+          { tag: "hr" },
+          { tag: "markdown", content: "{{DETAILS}}" },
+        ],
+      },
+    },
+    "error-alert": {
+      _comment: "错误告警卡片 — 替换 {{TITLE}}、{{ERROR_MESSAGE}}、{{SUGGESTION}}",
+      schema: "2.0",
+      config: { wide_screen_mode: true },
+      header: {
+        title: { tag: "plain_text", content: "{{TITLE}}" },
+        template: "red",
+      },
+      body: {
+        elements: [
+          { tag: "markdown", content: "**错误信息：**\n{{ERROR_MESSAGE}}" },
+          { tag: "hr" },
+          { tag: "markdown", content: "**建议操作：**\n{{SUGGESTION}}" },
+        ],
+      },
+    },
+    "worker-result": {
+      _comment: "Worker 结果卡片 — 替换 {{TITLE}}、{{COLOR}}、{{WORKER_ID}}、{{SUMMARY}}、{{DETAILS}}",
+      schema: "2.0",
+      config: { wide_screen_mode: true },
+      header: {
+        title: { tag: "plain_text", content: "{{TITLE}}" },
+        template: "{{COLOR}}",
+      },
+      body: {
+        elements: [
+          { tag: "markdown", content: "**Worker：** `{{WORKER_ID}}`" },
+          { tag: "hr" },
+          { tag: "markdown", content: "{{SUMMARY}}" },
+          {
+            tag: "collapsible_panel",
+            expanded: false,
+            header: { title: { tag: "plain_text", content: "详细信息" } },
+            border: { color: "grey" },
+            background_style: "default",
+            body: {
+              elements: [{ tag: "markdown", content: "{{DETAILS}}" }],
+            },
+          },
+        ],
+      },
+    },
+  };
+
+  return JSON.stringify(templates[type], null, 2);
+}
+
+/**
  * 验证 Coordinator 工作目录完整性
  *
  * 检查所有必需文件是否存在。缺失的文件将在下次 initCoordinatorWorkspace 调用时被重新创建。
@@ -668,10 +769,9 @@ export async function verifyWorkspaceIntegrity(workspacePath: string): Promise<{
     "CLAUDE.md",
     ".claude/settings.json",
     join(WORKSPACE_DIRS.teamslandSpawn, "SKILL.md"),
-    join(WORKSPACE_DIRS.larkMessage, "SKILL.md"),
-    join(WORKSPACE_DIRS.larkDocs, "SKILL.md"),
     join(WORKSPACE_DIRS.meegoQuery, "SKILL.md"),
     join(WORKSPACE_DIRS.selfEvolve, "SKILL.md"),
+    join(WORKSPACE_DIRS.feishuCard, "SKILL.md"),
   ];
   const missing: string[] = [];
   for (const rel of required) {
