@@ -84,11 +84,16 @@ function extractChatContext(eventPayload: Record<string, unknown>): string | und
 
 const PAYLOAD_EXTRACTORS: Record<string, (payload: unknown) => Record<string, unknown>> = {
   lark_mention(payload) {
-    const p = payload as LarkChatPayload & { event: { issueId: string; projectKey: string } };
+    const p = payload as LarkChatPayload & {
+      senderName?: string;
+      senderDepartment?: string;
+    };
     const ep = p.event.payload;
     return {
       chatId: p.chatId,
       senderId: p.senderId,
+      senderName: p.senderName ?? "",
+      senderDepartment: p.senderDepartment ?? "",
       messageId: p.messageId,
       message: extractMessage(ep),
       chatContext: extractChatContext(ep),

@@ -268,4 +268,48 @@ describe("CoordinatorPromptBuilder", () => {
       expect(prompt).toContain("\n---\n");
     });
   });
+
+  describe("lark_dm 事件", () => {
+    it("输出包含私聊标记和 --user-id 回复指引", () => {
+      const event = createEvent({
+        type: "lark_dm",
+        payload: {
+          chatId: "oc_p2p_test",
+          senderId: "ou_user001",
+          senderName: "张三",
+          senderDepartment: "工程部",
+          message: "帮我看看那个 Bug",
+          messageId: "msg-dm-001",
+        },
+      });
+      const context = createContext();
+      const prompt = builder.build(event, context);
+
+      expect(prompt).toContain("## 私聊消息");
+      expect(prompt).toContain("张三（工程部）");
+      expect(prompt).toContain("ou_user001");
+      expect(prompt).toContain("帮我看看那个 Bug");
+      expect(prompt).toContain('--user-id "ou_user001"');
+      expect(prompt).toContain("不要在群聊中回复此消息");
+    });
+
+    it("senderName 为空时退化为只显示 ID", () => {
+      const event = createEvent({
+        type: "lark_dm",
+        payload: {
+          chatId: "oc_p2p_test",
+          senderId: "ou_unknown",
+          senderName: "",
+          senderDepartment: "",
+          message: "你好",
+          messageId: "msg-dm-002",
+        },
+      });
+      const context = createContext();
+      const prompt = builder.build(event, context);
+
+      expect(prompt).toContain("用户 (ID: ou_unknown)");
+      expect(prompt).not.toContain("（）");
+    });
+  });
 });

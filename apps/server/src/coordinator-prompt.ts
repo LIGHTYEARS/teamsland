@@ -163,6 +163,11 @@ export class CoordinatorPromptBuilder {
     const { payload } = event;
     const chatId = extractString(payload, "chatId");
     const senderId = extractString(payload, "senderId");
+    const senderName = extractString(payload, "senderName", "");
+    const senderDepartment = extractString(payload, "senderDepartment", "");
+    const senderLabel = senderName
+      ? `${senderName}${senderDepartment ? `（${senderDepartment}）` : ""} (ID: ${senderId})`
+      : `(ID: ${senderId})`;
     const message = extractString(payload, "message");
     const messageId = extractString(payload, "messageId");
     const chatContext = extractString(payload, "chatContext", "");
@@ -170,7 +175,7 @@ export class CoordinatorPromptBuilder {
     const parts = [
       "## 新消息",
       "",
-      `群聊 (ID: ${chatId}) 中，用户 (ID: ${senderId}) 说：`,
+      `群聊 (ID: ${chatId}) 中，用户 ${senderLabel} 说：`,
       "",
       `> ${message}`,
       "",
@@ -198,33 +203,42 @@ export class CoordinatorPromptBuilder {
    */
   private buildLarkDm(event: CoordinatorEvent): string {
     const { payload } = event;
-    const chatId = extractString(payload, "chatId");
     const senderId = extractString(payload, "senderId");
     const senderName = extractString(payload, "senderName", "");
     const senderDepartment = extractString(payload, "senderDepartment", "");
     const message = extractString(payload, "message");
     const messageId = extractString(payload, "messageId");
+    const chatContext = extractString(payload, "chatContext", "");
 
-    const senderDesc = senderName
-      ? `${senderName}${senderDepartment ? `（${senderDepartment}）` : ""}（ID: ${senderId}）`
-      : `用户 (ID: ${senderId})`;
+    const senderLabel = senderName
+      ? `${senderName}${senderDepartment ? `（${senderDepartment}）` : ""} (ID: ${senderId})`
+      : `(ID: ${senderId})`;
 
     const parts = [
-      "## 新私聊消息",
+      "## 私聊消息",
       "",
-      `${senderDesc} 通过私聊说：`,
+      `用户 ${senderLabel} 通过私聊说：`,
       "",
       `> ${message}`,
       "",
       `消息 ID: ${messageId}`,
-      `会话 ID: ${chatId}`,
       `时间: ${formatTimestamp(event.timestamp)}`,
+    ];
+
+    if (chatContext && chatContext !== message) {
+      parts.push("", "### 聊天上下文", "", chatContext);
+    }
+
+    parts.push(
       "",
       "---",
       "",
-      "请按照决策流程处理这条私聊消息。如果需要 spawn worker，确保在 --task 中包含 --origin-chat " +
-        `"${chatId}" 以便 worker 完成后回复。`,
-    ];
+      "这是一条私聊消息。回复时使用以下命令发送私聊：",
+      `lark-cli im +messages-send --as bot --user-id "${senderId}" --text "回复内容"`,
+      "",
+      `如果需要 spawn worker，在 --task 中包含 --reply-user "${senderId}" 以便 worker 完成后通过私聊回复。`,
+      "不要在群聊中回复此消息。",
+    );
 
     return parts.join("\n");
   }

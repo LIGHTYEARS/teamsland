@@ -244,6 +244,8 @@ describe("coordinator-event-mapper", () => {
       expect(event.payload).toEqual({
         chatId: "oc_xxx",
         senderId: "ou_xxx",
+        senderName: "",
+        senderDepartment: "",
         messageId: "msg_xxx",
         message: "帮我看看这个问题",
         chatContext: undefined,
