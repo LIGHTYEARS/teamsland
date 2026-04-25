@@ -12,6 +12,7 @@
  */
 export type CoordinatorEventType =
   | "lark_mention"
+  | "lark_dm"
   | "meego_issue_created"
   | "meego_issue_assigned"
   | "meego_issue_status_changed"
