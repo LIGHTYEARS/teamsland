@@ -43,6 +43,7 @@ export type QueueMessageStatus = "pending" | "processing" | "completed" | "faile
  */
 export type QueueMessageType =
   | "lark_mention"
+  | "lark_dm"
   | "meego_issue_created"
   | "meego_issue_status_changed"
   | "meego_issue_assigned"
@@ -129,6 +130,7 @@ export interface QueueMessage {
  */
 export type QueuePayload =
   | LarkMentionPayload
+  | LarkDmPayload
   | MeegoEventPayload
   | WorkerCompletedPayload
   | WorkerAnomalyPayload
@@ -160,6 +162,26 @@ export interface LarkMentionPayload {
   chatId: string;
   /** 发送者 ID */
   senderId: string;
+  /** 消息 ID */
+  messageId: string;
+}
+
+/**
+ * 飞书私聊消息事件负载
+ *
+ * 当用户通过私聊直接向机器人发送消息时产生。
+ */
+export interface LarkDmPayload {
+  /** 桥接后的 MeegoEvent（私聊场景 projectKey 为空） */
+  event: MeegoEvent;
+  /** p2p 会话 ID */
+  chatId: string;
+  /** 发送者 open_id */
+  senderId: string;
+  /** 发送者名字（富化后，查询失败为空字符串） */
+  senderName: string;
+  /** 发送者部门（富化后，查询失败为空字符串） */
+  senderDepartment: string;
   /** 消息 ID */
   messageId: string;
 }

@@ -68,6 +68,7 @@ export class CoordinatorPromptBuilder {
    */
   private readonly promptHandlers: Record<CoordinatorEventType, (event: CoordinatorEvent) => string> = {
     lark_mention: (e) => this.buildLarkMention(e),
+    lark_dm: (e) => this.buildLarkDm(e),
     meego_issue_created: (e) => this.buildMeegoIssueCreated(e),
     meego_issue_assigned: (e) => this.buildMeegoIssueAssigned(e),
     meego_issue_status_changed: (e) => this.buildMeegoIssueStatusChanged(e),
@@ -188,6 +189,42 @@ export class CoordinatorPromptBuilder {
       "请按照决策流程处理这条消息。如果需要 spawn worker，确保在 --task 中包含 --origin-chat " +
         `"${chatId}" 以便 worker 完成后回复。`,
     );
+
+    return parts.join("\n");
+  }
+
+  /**
+   * 生成飞书私聊消息事件的提示词
+   */
+  private buildLarkDm(event: CoordinatorEvent): string {
+    const { payload } = event;
+    const chatId = extractString(payload, "chatId");
+    const senderId = extractString(payload, "senderId");
+    const senderName = extractString(payload, "senderName", "");
+    const senderDepartment = extractString(payload, "senderDepartment", "");
+    const message = extractString(payload, "message");
+    const messageId = extractString(payload, "messageId");
+
+    const senderDesc = senderName
+      ? `${senderName}${senderDepartment ? `（${senderDepartment}）` : ""}（ID: ${senderId}）`
+      : `用户 (ID: ${senderId})`;
+
+    const parts = [
+      "## 新私聊消息",
+      "",
+      `${senderDesc} 通过私聊说：`,
+      "",
+      `> ${message}`,
+      "",
+      `消息 ID: ${messageId}`,
+      `会话 ID: ${chatId}`,
+      `时间: ${formatTimestamp(event.timestamp)}`,
+      "",
+      "---",
+      "",
+      "请按照决策流程处理这条私聊消息。如果需要 spawn worker，确保在 --task 中包含 --origin-chat " +
+        `"${chatId}" 以便 worker 完成后回复。`,
+    ];
 
     return parts.join("\n");
   }
