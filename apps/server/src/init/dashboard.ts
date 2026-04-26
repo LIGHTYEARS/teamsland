@@ -4,8 +4,10 @@ import { resolve } from "node:path";
 import type { HookEngine, HookMetricsCollector } from "@teamsland/hooks";
 import type { IVikingMemoryClient } from "@teamsland/memory";
 import type { createLogger } from "@teamsland/observability";
+import type { PersistentQueue } from "@teamsland/queue";
 import type { SessionDB } from "@teamsland/session";
 import { ClaudeMdInjector, SkillInjector, type SubagentRegistry } from "@teamsland/sidecar";
+import type { TicketStore } from "@teamsland/ticket";
 import type { AppConfig } from "@teamsland/types";
 import { startDashboard } from "../dashboard.js";
 import { LarkAuthManager } from "../lark-auth.js";
@@ -92,6 +94,13 @@ function buildSkillInjector(config: AppConfig, logger: ReturnType<typeof createL
  * logger.info({ port: config.dashboard.port }, "Dashboard 已启动");
  * ```
  */
+/** Ticket lifecycle 依赖 */
+export interface TicketDeps {
+  ticketStore: TicketStore;
+  queue: PersistentQueue;
+  larkSendDm: (userId: string, text: string) => Promise<void>;
+}
+
 export function initDashboard(
   config: AppConfig,
   registry: SubagentRegistry,
@@ -104,6 +113,7 @@ export function initDashboard(
   hookEngine?: HookEngine | null,
   hookMetricsCollector?: HookMetricsCollector | null,
   vikingClient?: IVikingMemoryClient | null,
+  ticketDeps?: TicketDeps,
 ): DashboardResult {
   const authManager =
     config.dashboard.auth.provider === "lark_oauth"
@@ -136,6 +146,9 @@ export function initDashboard(
       appConfig: config,
       vikingClient,
       interruptController: sidecar.interruptController,
+      ticketStore: ticketDeps?.ticketStore,
+      queue: ticketDeps?.queue,
+      larkSendDm: ticketDeps?.larkSendDm,
     },
     controller.signal,
   );

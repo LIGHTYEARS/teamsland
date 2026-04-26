@@ -231,11 +231,19 @@ function dispatchTicketRoutes(
     docRead: TicketRouteDeps["docRead"] | null | undefined;
   },
 ): Response | Promise<Response> | null {
-  if (!ctx.ticketStore || !ctx.meegoGet || !ctx.docRead) return null;
+  if (!ctx.ticketStore) return null;
   return handleTicketRoutes(req, url, {
     ticketStore: ctx.ticketStore,
-    meegoGet: ctx.meegoGet,
-    docRead: ctx.docRead,
+    meegoGet:
+      ctx.meegoGet ??
+      (async () => {
+        throw new Error("meegoGet not configured");
+      }),
+    docRead:
+      ctx.docRead ??
+      (async () => {
+        throw new Error("docRead not configured");
+      }),
   });
 }
 

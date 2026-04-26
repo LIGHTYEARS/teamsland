@@ -1,9 +1,11 @@
 // @teamsland/server — main process entry point
 // 启动编排、优雅关闭
 
+import { Database } from "bun:sqlite";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createLogger, shutdownTracing } from "@teamsland/observability";
+import { TicketStore } from "@teamsland/ticket";
 import { toCoordinatorEvent } from "./coordinator-event-mapper.js";
 import { verifyWorkspaceIntegrity } from "./coordinator-init.js";
 import { initConfigAndLogging } from "./init/config-and-logging.js";
@@ -25,6 +27,12 @@ import { getVikingClient, initViking } from "./init/viking.js";
 
     // ── Phase 1: 存储层 ──
     const storage = await initStorage(config, logger);
+
+    // ── Phase 1.1: Ticket Store ──
+    const ticketDb = new Database("data/tickets.sqlite", { create: true });
+    ticketDb.exec("PRAGMA journal_mode=WAL");
+    const ticketStore = new TicketStore(ticketDb);
+    logger.info("TicketStore 已初始化");
 
     // ── Phase 1.5: OpenViking 连接 ──
     const viking = initViking(config, logger);
@@ -99,6 +107,7 @@ import { getVikingClient, initViking } from "./init/viking.js";
       hooks.engine,
       hooks.metricsCollector,
       vikingClient,
+      { ticketStore, queue, larkSendDm: (userId, text) => lark.larkCli.sendDm(userId, text) },
     );
 
     // ── Phase 7: 定时任务 ──
@@ -121,6 +130,7 @@ import { getVikingClient, initViking } from "./init/viking.js";
       await shutdownTracing();
       await sidecar.registry.persist();
       queue.close();
+      ticketDb.close();
       storage.sessionDb.close();
       logger.info("优雅关闭完成");
       process.exit(0);
