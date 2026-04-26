@@ -282,10 +282,8 @@ describe("CoordinatorSessionManager", () => {
       expect(manager.getActiveSession()?.sessionId).toBe("stream-session-001");
     });
 
-    it("应在超时后杀死进程并抛出错误", async () => {
-      // stdout 永远不发出任何数据
-      const killedPids: number[] = [];
-
+    it("应在 stdout 无数据时使用 placeholder ID 立即完成（超时在后台处理）", async () => {
+      // stdout 永远不发出任何数据 — 但 processEvent 不再阻塞
       const silentSpawnFn: SpawnFn = vi.fn().mockImplementation(
         (): SpawnedProcess => ({
           pid: 88888,
@@ -311,20 +309,13 @@ describe("CoordinatorSessionManager", () => {
         spawnFn: silentSpawnFn,
       });
 
-      // 追踪 process.kill 调用
-      vi.spyOn(process, "kill").mockImplementation((pid: number) => {
-        killedPids.push(pid);
-        return true;
-      });
-
       await manager.processEvent(makeEvent({ id: "evt-timeout-1" }));
 
-      // 超时应导致进入 failed 状态（maxRecoveryRetries: 0）
-      expect(manager.getState()).toBe("failed");
-      // 应该尝试杀死进程
-      expect(killedPids).toContain(88888);
-
-      vi.mocked(process.kill).mockRestore();
+      // processEvent 不再阻塞，应立即以 placeholder ID 完成
+      expect(manager.getState()).toBe("running");
+      const session = manager.getActiveSession();
+      expect(session).not.toBeNull();
+      expect(session?.sessionId).toMatch(/^coord-/);
     });
 
     it("应在 destroySession 时杀死 pending 进程", async () => {

@@ -404,21 +404,30 @@ export class CoordinatorSessionManager {
     proc.stdin.flush();
     proc.stdin.end();
 
-    let sessionId: string;
-    try {
-      sessionId = await this.extractSessionIdFromStream(proc.stdout);
-    } catch (err: unknown) {
-      this.pendingProcess = null;
-      this.killProcess(proc.pid);
-      throw err;
-    }
+    // Use a placeholder session ID immediately — don't block processEvent
+    const placeholderId = `coord-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    // Extract real session ID in background
+    this.extractSessionIdFromStream(proc.stdout)
+      .then((realId) => {
+        if (this.activeSession && this.activeSession.sessionId === placeholderId) {
+          this.activeSession.sessionId = realId;
+          this.persistCurrentSession().catch((err: unknown) => {
+            logger.warn({ err }, "Failed to persist session after ID resolution");
+          });
+          logger.info({ realId }, "Coordinator session ID resolved");
+        }
+      })
+      .catch((err) => {
+        logger.warn({ err, placeholderId }, "Failed to extract session ID, using placeholder");
+      });
 
     this.pendingProcess = null;
     const chatId = typeof event.payload.chatId === "string" ? event.payload.chatId : undefined;
 
     this.activeSession = {
       pid: proc.pid,
-      sessionId,
+      sessionId: placeholderId,
       startedAt: Date.now(),
       lastActivityAt: Date.now(),
       processedEvents: [event.id],
@@ -427,10 +436,13 @@ export class CoordinatorSessionManager {
 
     this.state = "running";
     this.scheduleIdleTimeout();
-    this.registerProcessCleanup(proc, sessionId);
+    this.registerProcessCleanup(proc, placeholderId);
     await this.persistCurrentSession();
 
-    logger.info({ sessionId, pid: proc.pid, eventId: event.id }, "Coordinator session 已启动");
+    logger.info(
+      { sessionId: placeholderId, pid: proc.pid, eventId: event.id },
+      "Coordinator session 已启动（placeholder ID）",
+    );
   }
 
   // ─── Private: 继续现有 Session ───
@@ -471,13 +483,13 @@ export class CoordinatorSessionManager {
     proc.stdin.flush();
     proc.stdin.end();
 
-    try {
-      await this.extractSessionIdFromStream(proc.stdout);
-    } catch (err: unknown) {
-      this.pendingProcess = null;
-      this.killProcess(proc.pid);
-      throw err;
-    }
+    // Extract session ID in background — don't block processEvent
+    this.extractSessionIdFromStream(proc.stdout).catch((err) => {
+      logger.warn(
+        { err, sessionId: this.activeSession?.sessionId },
+        "continueSession: failed to read session ID from stream",
+      );
+    });
 
     this.pendingProcess = null;
 
