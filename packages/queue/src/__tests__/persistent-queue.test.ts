@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PersistentQueue } from "../persistent-queue.js";
 import type { QueueConfig, QueuePayload } from "../types.js";
 
@@ -717,6 +717,42 @@ describe("PersistentQueue", () => {
       const msg = queue.dequeue();
       expect(msg?.payload).toEqual(payload);
       expect(msg?.type).toBe("worker_completed");
+    });
+  });
+
+  // ── onDeadLetter callback ──
+
+  describe("onDeadLetter callback", () => {
+    it("should call onDeadLetter callback when message enters dead letter via nack", () => {
+      const callback = vi.fn();
+      queue.onDeadLetter(callback);
+      const id = queue.enqueue({ type: "lark_dm", payload: makeLarkPayload() as QueuePayload, maxRetries: 1 });
+      queue.dequeue();
+      queue.nack(id, "test error");
+      expect(callback).toHaveBeenCalledOnce();
+      expect(callback).toHaveBeenCalledWith({ id, type: "lark_dm", lastError: "test error" });
+    });
+
+    it("should not call onDeadLetter when message is retried (not dead yet)", () => {
+      const callback = vi.fn();
+      queue.onDeadLetter(callback);
+      const id = queue.enqueue({ type: "lark_dm", payload: makeLarkPayload() as QueuePayload, maxRetries: 3 });
+      queue.dequeue();
+      queue.nack(id, "first error");
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it("should call onDeadLetter when message enters dead letter via recoverTimeouts", () => {
+      const callback = vi.fn();
+      queue.onDeadLetter(callback);
+      const id = queue.enqueue({ type: "lark_dm", payload: makeLarkPayload() as QueuePayload, maxRetries: 1 });
+      queue.dequeue(); // sets status to 'processing'
+      // Manually set processing_at to far in the past to trigger timeout
+      // biome-ignore lint/complexity/useLiteralKeys: accessing private field for testing
+      queue["db"].prepare("UPDATE messages SET processing_at = ? WHERE id = ?").run(0, id);
+      queue.recoverTimeouts();
+      expect(callback).toHaveBeenCalledOnce();
+      expect(callback).toHaveBeenCalledWith({ id, type: "lark_dm", lastError: "visibility timeout exceeded" });
     });
   });
 });

@@ -296,10 +296,9 @@ export class PersistentQueue {
     this.assertNotClosed();
     const now = Date.now();
 
-    const row = this.db.prepare("SELECT retry_count, max_retries FROM messages WHERE id = ?").get(messageId) as Pick<
-      RawMessageRow,
-      "retry_count" | "max_retries"
-    > | null;
+    const row = this.db
+      .prepare("SELECT retry_count, max_retries, type FROM messages WHERE id = ?")
+      .get(messageId) as Pick<RawMessageRow, "retry_count" | "max_retries" | "type"> | null;
 
     if (!row) {
       logger.warn({ id: messageId }, "nack: 消息不存在");
@@ -315,6 +314,7 @@ export class PersistentQueue {
         )
         .run(newRetryCount, error, now, messageId);
       logger.warn({ id: messageId, retryCount: newRetryCount, lastError: error }, "消息超过最大重试次数，进入死信队列");
+      this.deadLetterCallback?.({ id: messageId, type: row.type, lastError: error });
     } else {
       this.db
         .prepare(
@@ -394,6 +394,15 @@ export class PersistentQueue {
   }
 
   /**
+   * 注册死信队列回调
+   *
+   * 当消息进入死信队列时触发（nack 超过重试次数或可见性超时）。
+   */
+  onDeadLetter(callback: (info: { id: string; type: string; lastError: string }) => void): void {
+    this.deadLetterCallback = callback;
+  }
+
+  /**
    * 恢复超时的 processing 消息
    *
    * 将超过 visibilityTimeout 的 processing 消息恢复为 pending 或移入死信。
@@ -411,10 +420,14 @@ export class PersistentQueue {
     const now = Date.now();
     const threshold = now - this.config.visibilityTimeoutMs;
 
+    const deadLettered: Array<{ id: string; type: string }> = [];
+
     const recovered = this.db.transaction(() => {
       const rows = this.db
-        .prepare("SELECT id, retry_count, max_retries FROM messages WHERE status = 'processing' AND processing_at <= ?")
-        .all(threshold) as Pick<RawMessageRow, "id" | "retry_count" | "max_retries">[];
+        .prepare(
+          "SELECT id, retry_count, max_retries, type FROM messages WHERE status = 'processing' AND processing_at <= ?",
+        )
+        .all(threshold) as Pick<RawMessageRow, "id" | "retry_count" | "max_retries" | "type">[];
 
       let count = 0;
       for (const row of rows) {
@@ -427,6 +440,7 @@ export class PersistentQueue {
             )
             .run(newRetryCount, "visibility timeout exceeded", now, row.id);
           logger.warn({ id: row.id }, "超时消息进入死信队列");
+          deadLettered.push({ id: row.id, type: row.type });
         } else {
           this.db
             .prepare(
@@ -439,6 +453,10 @@ export class PersistentQueue {
       }
       return count;
     })();
+
+    for (const item of deadLettered) {
+      this.deadLetterCallback?.({ id: item.id, type: item.type, lastError: "visibility timeout exceeded" });
+    }
 
     if (recovered > 0) {
       logger.info({ recovered }, "超时恢复完成");
