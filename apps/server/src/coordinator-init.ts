@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { createLogger } from "@teamsland/observability";
 import type { AppConfig, RepoMappingEntry } from "@teamsland/types";
+import { generateHandleMeegoIssueWorkflow, generateTicketLifecycleSkill } from "./coordinator-init-workflows.js";
 
 const logger = createLogger("server:coordinator-init");
 
@@ -23,6 +24,8 @@ const WORKSPACE_DIRS = {
   selfEvolve: ".claude/skills/self-evolve",
   feishuCard: ".claude/skills/feishu-card",
   feishuCardTemplates: ".claude/skills/feishu-card/templates",
+  workflows: "workflows",
+  ticketLifecycle: ".claude/skills/ticket-lifecycle",
 } as const;
 
 /**
@@ -134,6 +137,14 @@ async function writeWorkspaceFiles(basePath: string, config: AppConfig): Promise
     {
       path: join(basePath, WORKSPACE_DIRS.feishuCardTemplates, "worker-result.json"),
       content: generateCardTemplate("worker-result"),
+    },
+    {
+      path: join(basePath, WORKSPACE_DIRS.workflows, "handle-meego-issue.md"),
+      content: generateHandleMeegoIssueWorkflow(),
+    },
+    {
+      path: join(basePath, WORKSPACE_DIRS.ticketLifecycle, "SKILL.md"),
+      content: generateTicketLifecycleSkill(),
     },
     {
       path: join(basePath, "evolution-config.json"),
@@ -772,6 +783,8 @@ export async function verifyWorkspaceIntegrity(workspacePath: string): Promise<{
     join(WORKSPACE_DIRS.meegoQuery, "SKILL.md"),
     join(WORKSPACE_DIRS.selfEvolve, "SKILL.md"),
     join(WORKSPACE_DIRS.feishuCard, "SKILL.md"),
+    join(WORKSPACE_DIRS.workflows, "handle-meego-issue.md"),
+    join(WORKSPACE_DIRS.ticketLifecycle, "SKILL.md"),
   ];
   const missing: string[] = [];
   for (const rel of required) {
