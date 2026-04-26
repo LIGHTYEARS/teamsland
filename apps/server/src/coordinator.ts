@@ -246,6 +246,7 @@ export class CoordinatorSessionManager {
   private pendingProcess: SpawnedProcess | null = null;
   private recoveryCount = 0;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
+  private stateChangeCallback: ((state: CoordinatorState, eventId?: string) => void) | null = null;
 
   private readonly config: CoordinatorSessionManagerConfig;
   private readonly contextLoader: CoordinatorContextLoader;
@@ -328,6 +329,37 @@ export class CoordinatorSessionManager {
   }
 
   /**
+   * 注册状态变化回调
+   *
+   * @param callback - 状态变化时触发的回调函数
+   *
+   * @example
+   * ```typescript
+   * manager.onStateChange((state, eventId) => {
+   *   console.log(`状态变为 ${state}，事件: ${eventId}`);
+   * });
+   * ```
+   */
+  onStateChange(callback: (state: CoordinatorState, eventId?: string) => void): void {
+    this.stateChangeCallback = callback;
+  }
+
+  /**
+   * 获取当前恢复重试计数
+   *
+   * @returns 当前恢复次数
+   *
+   * @example
+   * ```typescript
+   * const count = manager.getRecoveryCount();
+   * console.log(`已重试 ${count} 次`);
+   * ```
+   */
+  getRecoveryCount(): number {
+    return this.recoveryCount;
+  }
+
+  /**
    * 重置 Coordinator 到初始状态
    *
    * 销毁当前 session、清除恢复计数器和空闲定时器。
@@ -341,7 +373,7 @@ export class CoordinatorSessionManager {
    */
   reset(): void {
     this.destroySession();
-    this.state = "idle";
+    this.setState("idle");
     this.recoveryCount = 0;
     logger.info("Coordinator 已重置到初始状态");
   }
@@ -384,7 +416,7 @@ export class CoordinatorSessionManager {
    */
   private async spawnNewSession(prompt: string, event: CoordinatorEvent): Promise<void> {
     this.destroySession();
-    this.state = "spawning";
+    this.setState("spawning", event.id);
 
     logger.info({ eventId: event.id }, "正在启动新的 Coordinator session");
 
@@ -434,7 +466,7 @@ export class CoordinatorSessionManager {
       chatId,
     };
 
-    this.state = "running";
+    this.setState("running", event.id);
     this.scheduleIdleTimeout();
     this.registerProcessCleanup(proc, placeholderId);
     await this.persistCurrentSession();
@@ -581,7 +613,7 @@ export class CoordinatorSessionManager {
     const errMsg = err instanceof Error ? err.message : String(err);
 
     if (this.recoveryCount < this.config.maxRecoveryRetries) {
-      this.state = "recovery";
+      this.setState("recovery", event.id);
       this.recoveryCount++;
       logger.warn(
         { eventId: event.id, recoveryCount: this.recoveryCount, error: errMsg },
@@ -590,7 +622,7 @@ export class CoordinatorSessionManager {
       this.destroySession();
       await this.processEvent(event);
     } else {
-      this.state = "failed";
+      this.setState("failed", event.id);
       logger.error(
         { eventId: event.id, recoveryCount: this.recoveryCount, error: errMsg },
         "Coordinator 恢复重试耗尽，进入 failed 状态",
@@ -608,6 +640,14 @@ export class CoordinatorSessionManager {
   }
 
   // ─── Private: Session 销毁 ───
+
+  /**
+   * 更新状态并触发回调
+   */
+  private setState(newState: CoordinatorState, eventId?: string): void {
+    this.state = newState;
+    this.stateChangeCallback?.(newState, eventId);
+  }
 
   /**
    * 销毁当前活跃 session
@@ -688,7 +728,7 @@ export class CoordinatorSessionManager {
     this.idleTimer = setTimeout(() => {
       logger.info("Coordinator session 空闲超时，自动销毁");
       this.destroySession();
-      this.state = "idle";
+      this.setState("idle");
     }, this.config.sessionIdleTimeoutMs);
   }
 }

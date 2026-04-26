@@ -216,6 +216,41 @@ describe("CoordinatorSessionManager", () => {
       await manager.processEvent(makeEvent({ id: "evt-2", payload: { chatId: "oc_reuse" } }));
       expect(manager.getActiveSession()?.processedEvents).toEqual(["evt-1", "evt-2"]);
     });
+
+    it("应在状态变化时触发 onStateChange 回调", async () => {
+      const failingManager = new CoordinatorSessionManager({
+        config: { ...DEFAULT_CONFIG, maxRecoveryRetries: 0 },
+        contextLoader: makeContextLoader(),
+        promptBuilder: makePromptBuilder(),
+        spawnFn: createFailingSpawnFn(),
+      });
+
+      const stateChanges: Array<{ state: string; eventId?: string }> = [];
+      failingManager.onStateChange((state, eventId) => stateChanges.push({ state, eventId }));
+
+      const event = makeEvent({ id: "evt-state-change" });
+      await expect(failingManager.processEvent(event)).rejects.toThrow(/recovery exhausted/);
+
+      expect(stateChanges).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ state: "spawning", eventId: "evt-state-change" }),
+          expect.objectContaining({ state: "failed", eventId: "evt-state-change" }),
+        ]),
+      );
+    });
+
+    it("应通过 getRecoveryCount 暴露恢复计数", async () => {
+      const failingManager = new CoordinatorSessionManager({
+        config: { ...DEFAULT_CONFIG, maxRecoveryRetries: 2 },
+        contextLoader: makeContextLoader(),
+        promptBuilder: makePromptBuilder(),
+        spawnFn: createFailingSpawnFn(),
+      });
+
+      expect(failingManager.getRecoveryCount()).toBe(0);
+      await expect(failingManager.processEvent(makeEvent())).rejects.toThrow();
+      expect(failingManager.getRecoveryCount()).toBe(2);
+    });
   });
 
   describe("reset", () => {
