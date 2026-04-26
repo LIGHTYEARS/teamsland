@@ -74,6 +74,15 @@ export async function initCoordinator(
     return { manager: null, lifecycleMonitor: null, anomalyDetector: null };
   }
 
+  // Validate claude binary availability
+  const claudePath = Bun.which("claude");
+  if (!claudePath) {
+    parentLogger.error(
+      "claude binary not found in PATH — Coordinator will not be able to spawn sessions. " +
+        "Install Claude Code CLI or ensure it is in PATH.",
+    );
+  }
+
   const coordConfig = config.coordinator;
 
   // 1. 初始化工作区
