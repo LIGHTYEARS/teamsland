@@ -1,33 +1,5 @@
 import z from "zod";
 
-/**
- * Meego 记忆类型枚举 Schema
- *
- * 与 `@teamsland/types` 中的 `MemoryType` 联合类型保持一致。
- *
- * @example
- * ```typescript
- * import { MemoryTypeSchema } from "./schema.js";
- *
- * MemoryTypeSchema.parse("profile"); // OK
- * MemoryTypeSchema.parse("unknown"); // throws ZodError
- * ```
- */
-const MemoryTypeSchema = z.enum([
-  "profile",
-  "preferences",
-  "entities",
-  "events",
-  "cases",
-  "patterns",
-  "tools",
-  "skills",
-  "decisions",
-  "project_context",
-  "soul",
-  "identity",
-]);
-
 const MeegoSpaceSchema = z.object({
   spaceId: z.string(),
   name: z.string(),
@@ -57,6 +29,8 @@ const MeegoConfigSchema = z.object({
   poll: MeegoPollSchema,
   longConnection: MeegoLongConnectionSchema,
   apiBaseUrl: z.string().url().default("https://project.feishu.cn/open_api"),
+  pluginId: z.string().default(""),
+  pluginSecret: z.string().default(""),
   pluginAccessToken: z.string().default(""),
   userKey: z.string().default(""),
 });
@@ -98,42 +72,6 @@ const SidecarConfigSchema = z.object({
   minSwarmSuccessRatio: z.number().min(0).max(1),
 });
 
-const MemoryConfigSchema = z.object({
-  decayHalfLifeDays: z.number().positive(),
-  extractLoopMaxIterations: z.number().int().positive(),
-  exemptTypes: z.array(MemoryTypeSchema).default([]),
-  perTypeTtl: z
-    .record(MemoryTypeSchema, z.number().positive())
-    .optional()
-    .default({} as Record<string, never>),
-});
-
-const SqliteVecSchema = z.object({
-  dbPath: z.string().min(1),
-  busyTimeoutMs: z.number().int().positive(),
-  vectorDimensions: z.number().int().positive(),
-});
-
-const EmbeddingSchema = z.object({
-  model: z.string().min(1),
-  contextSize: z.number().int().positive(),
-});
-
-const EntityMergeSchema = z.object({
-  cosineThreshold: z.number().min(0).max(1),
-});
-
-const Fts5Schema = z.object({
-  optimizeIntervalHours: z.number().positive(),
-});
-
-const StorageConfigSchema = z.object({
-  sqliteVec: SqliteVecSchema,
-  embedding: EmbeddingSchema,
-  entityMerge: EntityMergeSchema,
-  fts5: Fts5Schema,
-});
-
 const ConfirmationConfigSchema = z.object({
   reminderIntervalMin: z.number().positive(),
   maxReminders: z.number().int().positive(),
@@ -154,6 +92,7 @@ const DashboardConfigSchema = z.object({
 const RepoEntrySchema = z.object({
   path: z.string().min(1),
   name: z.string(),
+  remoteUrl: z.string().optional(),
 });
 
 const RepoMappingEntrySchema = z.object({
@@ -199,8 +138,6 @@ export const AppConfigSchema = z.object({
   lark: LarkConfigSchema,
   session: SessionConfigSchema,
   sidecar: SidecarConfigSchema,
-  memory: MemoryConfigSchema,
-  storage: StorageConfigSchema,
   confirmation: ConfirmationConfigSchema,
   dashboard: DashboardConfigSchema,
   repoMapping: z.array(RepoMappingEntrySchema),
@@ -228,6 +165,7 @@ export const AppConfigSchema = z.object({
   coordinator: z
     .object({
       workspacePath: z.string().default("~/.teamsland/coordinator"),
+      reposDir: z.string().default("~/teamsland-repos"),
       sessionIdleTimeoutMs: z.number().default(300_000),
       sessionMaxLifetimeMs: z.number().default(1_800_000),
       sessionReuseWindowMs: z.number().default(300_000),

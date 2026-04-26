@@ -17,6 +17,8 @@
       "reconnectIntervalSeconds": 10
     },
     "apiBaseUrl": "https://project.feishu.cn/open_api",
+    "pluginId": "${MEEGO_PLUGIN_ID}",
+    "pluginSecret": "${MEEGO_PLUGIN_SECRET}",
     "pluginAccessToken": "${MEEGO_PLUGIN_ACCESS_TOKEN}",
     "userKey": "${MEEGO_USER_KEY}"
   },
@@ -50,42 +52,6 @@
     "healthCheckTimeoutMs": 30000,
     "minSwarmSuccessRatio": 0.5
   },
-  "memory": {
-    "decayHalfLifeDays": 30,
-    "extractLoopMaxIterations": 3,
-    "exemptTypes": ["decisions", "identity"],
-    "perTypeTtl": {
-      "profile": 365,
-      "preferences": 180,
-      "entities": 180,
-      "events": 90,
-      "cases": 365,
-      "patterns": 365,
-      "tools": 365,
-      "skills": 365,
-      "decisions": 365,
-      "project_context": 180,
-      "soul": 365,
-      "identity": 365
-    }
-  },
-  "storage": {
-    "sqliteVec": {
-      "dbPath": "./data/memory.sqlite",
-      "busyTimeoutMs": 5000,
-      "vectorDimensions": 1024
-    },
-    "embedding": {
-      "model": "hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf",
-      "contextSize": 2048
-    },
-    "entityMerge": {
-      "cosineThreshold": 0.95
-    },
-    "fts5": {
-      "optimizeIntervalHours": 24
-    }
-  },
   "confirmation": {
     "reminderIntervalMin": 30,
     "maxReminders": 3,
@@ -102,7 +68,17 @@
   "repoMapping": [
     {
       "meegoProjectId": "project_xxx",
-      "repos": [{ "path": "/Users/bytedance/workspace/teamsland", "name": "teamsland 主仓库" }]
+      "repos": [{ "path": "~/teamsland-repos/teamsland", "name": "teamsland 主仓库" }]
+    },
+    {
+      "meegoProjectId": "novel_admin",
+      "repos": [
+        {
+          "path": "~/teamsland-repos/novel-admin-monorepo",
+          "name": "novel-admin-monorepo",
+          "remoteUrl": "git@code.byted.org:novel-fe/novel-admin-monorepo.git"
+        }
+      ]
     }
   ],
   "skillRouting": {
