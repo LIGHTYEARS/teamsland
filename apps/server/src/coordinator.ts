@@ -651,7 +651,11 @@ export class CoordinatorSessionManager {
   private registerProcessCleanup(proc: SpawnedProcess, sessionId: string): void {
     proc.exited
       .then((code) => {
-        logger.info({ sessionId, pid: proc.pid, exitCode: code }, "Coordinator 子进程已退出");
+        if (code !== 0) {
+          logger.error({ sessionId, pid: proc.pid, exitCode: code }, "Coordinator 子进程异常退出");
+        } else {
+          logger.info({ sessionId, pid: proc.pid, exitCode: code }, "Coordinator 子进程已退出");
+        }
       })
       .catch((err: unknown) => {
         logger.warn({ sessionId, pid: proc.pid, err }, "Coordinator 子进程退出异常");

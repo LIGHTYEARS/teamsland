@@ -110,6 +110,7 @@ export class PersistentQueue {
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private recoveryTimer: ReturnType<typeof setInterval> | null = null;
   private handler: ((msg: QueueMessage) => Promise<void>) | null = null;
+  private deadLetterCallback: ((info: { id: string; type: string; lastError: string }) => void) | null = null;
   private processing = false;
   private currentMessageId: string | null = null;
   private closed = false;
@@ -313,14 +314,14 @@ export class PersistentQueue {
           "UPDATE messages SET status = 'dead', retry_count = ?, last_error = ?, updated_at = ?, processing_at = NULL WHERE id = ?",
         )
         .run(newRetryCount, error, now, messageId);
-      logger.warn({ id: messageId, retryCount: newRetryCount }, "消息超过最大重试次数，进入死信队列");
+      logger.warn({ id: messageId, retryCount: newRetryCount, lastError: error }, "消息超过最大重试次数，进入死信队列");
     } else {
       this.db
         .prepare(
           "UPDATE messages SET status = 'pending', retry_count = ?, last_error = ?, updated_at = ?, processing_at = NULL WHERE id = ?",
         )
         .run(newRetryCount, error, now, messageId);
-      logger.info({ id: messageId, retryCount: newRetryCount }, "消息处理失败，已放回队列");
+      logger.info({ id: messageId, retryCount: newRetryCount, lastError: error }, "消息处理失败，已放回队列");
     }
   }
 
