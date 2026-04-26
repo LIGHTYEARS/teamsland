@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import { runAsk } from "./commands/ask.js";
 import { runCancel } from "./commands/cancel.js";
 import { runList } from "./commands/list.js";
 import { runResult } from "./commands/result.js";
@@ -27,6 +28,7 @@ Commands:
   ticket status <id> --set <state>  Transition ticket state
   ticket state <id>                 Show ticket state
   ticket enrich <id>                Deep information gathering
+  ask --to <user> --ticket <id> --text <msg>  Ask for clarification
 
 Global Options:
   --server <url>  Server URL (default: TEAMSLAND_SERVER env or http://localhost:3001)
@@ -146,6 +148,9 @@ async function main(): Promise<void> {
         break;
       case "ticket":
         await runTicket(client, commandArgs, jsonOutput);
+        break;
+      case "ask":
+        await runAsk(client, commandArgs, jsonOutput);
         break;
       default:
         printError(`Unknown command: ${command}`);

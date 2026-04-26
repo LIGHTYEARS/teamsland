@@ -330,6 +330,10 @@ export class TeamslandClient {
     return this.request("POST", `/api/ticket/${issueId}/enrich`, { projectKey, workItemType });
   }
 
+  async ask(to: string, ticketId: string, text: string): Promise<{ ok: boolean; ticketId: string; state: string }> {
+    return this.request("POST", "/api/ask", { to, ticketId, text });
+  }
+
   /**
    * 通用 HTTP 请求方法
    */

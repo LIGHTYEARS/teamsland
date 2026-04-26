@@ -4,6 +4,7 @@ import type { WorktreeManager } from "@teamsland/git";
 import type { HookEngine, HookMetricsCollector } from "@teamsland/hooks";
 import type { IVikingMemoryClient } from "@teamsland/memory";
 import { createLogger } from "@teamsland/observability";
+import type { PersistentQueue } from "@teamsland/queue";
 import type { SessionDB } from "@teamsland/session";
 import type {
   ClaudeMdInjector,
@@ -16,6 +17,7 @@ import type {
 import type { TicketStore } from "@teamsland/ticket";
 import type { AgentRecord, AppConfig, DashboardConfig } from "@teamsland/types";
 import { handleExtendedApiRoutes } from "./api-routes.js";
+import { handleAskRoutes } from "./ask-routes.js";
 import { handleWsMessage, type WsHandlerContext } from "./dashboard-ws.js";
 import { handleFileRoutes } from "./file-routes.js";
 import { handleGitRoutes } from "./git-routes.js";
@@ -84,6 +86,10 @@ export interface DashboardDeps {
   meegoGet?: TicketRouteDeps["meegoGet"] | null;
   /** Lark document reader (可选，ticket lifecycle 启用时提供) */
   docRead?: TicketRouteDeps["docRead"] | null;
+  /** Lark DM sender (可选，ask 命令使用) */
+  larkSendDm?: (userId: string, text: string) => Promise<void>;
+  /** 消息队列 (可选，ask 命令超时使用) */
+  queue?: PersistentQueue | null;
 }
 
 /** WebSocket 推送消息类型 */
@@ -233,6 +239,24 @@ function dispatchTicketRoutes(
   });
 }
 
+/** 尝试分发 Ask 路由（依赖不完整时直接返回 null） */
+function dispatchAskRoutes(
+  req: Request,
+  url: URL,
+  ctx: {
+    ticketStore: TicketStore | null | undefined;
+    larkSendDm: ((userId: string, text: string) => Promise<void>) | undefined;
+    queue: PersistentQueue | null | undefined;
+  },
+): Response | Promise<Response> | null {
+  if (!ctx.ticketStore || !ctx.larkSendDm || !ctx.queue) return null;
+  return handleAskRoutes(req, url, {
+    ticketStore: ctx.ticketStore,
+    larkSendDm: ctx.larkSendDm,
+    queue: ctx.queue,
+  });
+}
+
 /** 文件/Git/Viking/核心 API 路由（从 routeRequest 提取以降低 cognitive complexity） */
 async function routeContentApis(
   req: Request,
@@ -293,6 +317,8 @@ async function routeRequest(
     ticketStore: TicketStore | null | undefined;
     meegoGet: TicketRouteDeps["meegoGet"] | null | undefined;
     docRead: TicketRouteDeps["docRead"] | null | undefined;
+    larkSendDm: ((userId: string, text: string) => Promise<void>) | undefined;
+    queue: PersistentQueue | null | undefined;
   },
 ): Promise<Response | null> {
   if (req.method === "GET" && url.pathname === "/health") {
@@ -326,6 +352,10 @@ async function routeRequest(
   // Ticket lifecycle routes (/api/ticket/*) — dispatchTicketRoutes handles missing deps
   const ticketResult = dispatchTicketRoutes(req, url, ctx);
   if (ticketResult) return ticketResult;
+
+  // Ask routes (/api/ask) — send DM and transition ticket to awaiting_clarification
+  const askResult = dispatchAskRoutes(req, url, ctx);
+  if (askResult) return askResult;
 
   // 扩展 API 路由（/api/projects, /api/topology, /api/sessions/:id/normalized-messages）
   const extendedResult = handleExtendedApiRoutes(req, url, { registry: ctx.registry });
@@ -649,6 +679,8 @@ export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): Retur
         ticketStore: deps.ticketStore,
         meegoGet: deps.meegoGet,
         docRead: deps.docRead,
+        larkSendDm: deps.larkSendDm,
+        queue: deps.queue,
       };
       return (await routeRequest(req, url, ctx)) ?? jsonResponse({ error: "Not Found" }, 404);
     },
