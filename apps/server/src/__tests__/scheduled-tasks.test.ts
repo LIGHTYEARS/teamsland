@@ -1,9 +1,8 @@
 import type { WorktreeManager } from "@teamsland/git";
 import type { MeegoEventBus } from "@teamsland/meego";
-import type { MemoryReaper, TeamMemoryStore } from "@teamsland/memory";
 import type { SubagentRegistry } from "@teamsland/sidecar";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { startFts5Optimize, startMemoryReaper, startSeenEventsSweep, startWorktreeReaper } from "../scheduled-tasks.js";
+import { startSeenEventsSweep, startWorktreeReaper } from "../scheduled-tasks.js";
 
 // ─── mock @teamsland/observability ───
 vi.mock("@teamsland/observability", () => ({
@@ -67,45 +66,6 @@ describe("startWorktreeReaper", () => {
   });
 });
 
-// ─── startMemoryReaper ───
-
-describe("startMemoryReaper", () => {
-  it("返回有效的定时器 ID", () => {
-    const mockReaper = { reap: vi.fn().mockResolvedValue({ archived: 0, skipped: 0 }) } as unknown as MemoryReaper;
-
-    const timer = startMemoryReaper(mockReaper, 5000);
-    expect(timer).toBeDefined();
-    clearInterval(timer);
-  });
-
-  it("按间隔调用 reaper.reap", async () => {
-    const mockReaper = {
-      reap: vi.fn().mockResolvedValue({ archived: 3, skipped: 5 }),
-    } as unknown as MemoryReaper;
-
-    const timer = startMemoryReaper(mockReaper, 2000);
-
-    await vi.advanceTimersByTimeAsync(2000);
-    expect(mockReaper.reap).toHaveBeenCalledTimes(1);
-
-    await vi.advanceTimersByTimeAsync(2000);
-    expect(mockReaper.reap).toHaveBeenCalledTimes(2);
-
-    clearInterval(timer);
-  });
-
-  it("依赖抛出异常时不向外传播", async () => {
-    const mockReaper = { reap: vi.fn().mockRejectedValue(new Error("reap failed")) } as unknown as MemoryReaper;
-
-    const timer = startMemoryReaper(mockReaper, 1000);
-
-    await vi.advanceTimersByTimeAsync(1000);
-    expect(mockReaper.reap).toHaveBeenCalledTimes(1);
-
-    clearInterval(timer);
-  });
-});
-
 // ─── startSeenEventsSweep ───
 
 describe("startSeenEventsSweep", () => {
@@ -143,48 +103,6 @@ describe("startSeenEventsSweep", () => {
     // 不应抛出
     vi.advanceTimersByTime(1000);
     expect(mockBus.sweepSeenEvents).toHaveBeenCalledTimes(1);
-
-    clearInterval(timer);
-  });
-});
-
-// ─── startFts5Optimize ───
-
-describe("startFts5Optimize", () => {
-  it("返回有效的定时器 ID", () => {
-    const mockStore = { optimizeFts5: vi.fn() } as unknown as TeamMemoryStore;
-
-    const timer = startFts5Optimize(mockStore, 5000);
-    expect(timer).toBeDefined();
-    clearInterval(timer);
-  });
-
-  it("按间隔调用 memoryStore.optimizeFts5", () => {
-    const mockStore = { optimizeFts5: vi.fn() } as unknown as TeamMemoryStore;
-
-    const timer = startFts5Optimize(mockStore, 4000);
-
-    vi.advanceTimersByTime(4000);
-    expect(mockStore.optimizeFts5).toHaveBeenCalledTimes(1);
-
-    vi.advanceTimersByTime(4000);
-    expect(mockStore.optimizeFts5).toHaveBeenCalledTimes(2);
-
-    clearInterval(timer);
-  });
-
-  it("依赖抛出异常时不向外传播", () => {
-    const mockStore = {
-      optimizeFts5: vi.fn().mockImplementation(() => {
-        throw new Error("optimize failed");
-      }),
-    } as unknown as TeamMemoryStore;
-
-    const timer = startFts5Optimize(mockStore, 1000);
-
-    // 不应抛出
-    vi.advanceTimersByTime(1000);
-    expect(mockStore.optimizeFts5).toHaveBeenCalledTimes(1);
 
     clearInterval(timer);
   });
