@@ -312,6 +312,24 @@ export class TeamslandClient {
     return this.request<TranscriptResponse>("GET", `/api/workers/${id}/transcript`);
   }
 
+  async getTicketState(
+    issueId: string,
+  ): Promise<{ issueId: string; state: string; context: string | null; updatedAt: number; createdAt: number }> {
+    return this.request("GET", `/api/ticket/${issueId}`);
+  }
+
+  async createTicket(issueId: string, eventId: string): Promise<{ issueId: string; state: string }> {
+    return this.request("POST", `/api/ticket/${issueId}/create`, { eventId });
+  }
+
+  async transitionTicket(issueId: string, to: string): Promise<{ ok: boolean; state?: string; error?: string }> {
+    return this.request("POST", `/api/ticket/${issueId}/transition`, { to });
+  }
+
+  async enrichTicket(issueId: string, projectKey: string, workItemType: string): Promise<unknown> {
+    return this.request("POST", `/api/ticket/${issueId}/enrich`, { projectKey, workItemType });
+  }
+
   /**
    * 通用 HTTP 请求方法
    */

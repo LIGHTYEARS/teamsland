@@ -5,6 +5,7 @@ import { runList } from "./commands/list.js";
 import { runResult } from "./commands/result.js";
 import { runSpawn } from "./commands/spawn.js";
 import { runStatus } from "./commands/status.js";
+import { runTicket } from "./commands/ticket.js";
 import { runTranscript } from "./commands/transcript.js";
 import { TeamslandApiError, TeamslandClient } from "./http-client.js";
 import { printError, printLine } from "./output.js";
@@ -23,6 +24,9 @@ Commands:
   result <id>  Show the result of a completed Worker
   cancel <id>  Cancel a running Worker
   transcript <id>  Show transcript file path for a Worker
+  ticket status <id> --set <state>  Transition ticket state
+  ticket state <id>                 Show ticket state
+  ticket enrich <id>                Deep information gathering
 
 Global Options:
   --server <url>  Server URL (default: TEAMSLAND_SERVER env or http://localhost:3001)
@@ -139,6 +143,9 @@ async function main(): Promise<void> {
         break;
       case "transcript":
         await runTranscript(client, commandArgs, jsonOutput);
+        break;
+      case "ticket":
+        await runTicket(client, commandArgs, jsonOutput);
         break;
       default:
         printError(`Unknown command: ${command}`);
