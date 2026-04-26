@@ -51,13 +51,13 @@ interface Connector {
 - 不判断是否是 bot mention（Coordinator 做）
 - 不过滤消息类型（Coordinator 做）
 - 不映射事件类型（payload 如实投递）
-- 不决定优先级（Coordinator 做）
 
 ### Connector 可以做的 transport 层关注点
 
 - **签名验证**（如 Meego HMAC webhook 验证）——这是传输安全，不是语义处理
 - **去重 ID 构造**（如 Meego 轮询时根据 item.id + updated_at 生成 eventId）——这是幂等保障
 - **context 字段提取**（从原始数据中提取 chatId、projectKey 等公共索引字段）——这是结构化标注，不是语义判断
+- **优先级设置**（根据 `source + sourceEvent` 设置 `priority` 字段）——复用现有 `high | normal | low` 枚举，是 transport-level 标注
 
 ---
 
@@ -87,8 +87,29 @@ TeamEvent 进入
 type RuleResult = "consumed" | "enriched";
 ```
 
-- `"consumed"`：事件已被完全处理，不再继续匹配也不入队（默认行为，handle 返回 void 等同 consumed）
+- `"consumed"`：事件已被完全处理，不再继续匹配也不入队
 - `"enriched"`：规则修改了事件（如添加 metadata）但事件应继续流转
+
+`handle` 函数必须显式返回 `RuleResult`。
+
+### ruleEngine.process() 接口
+
+```typescript
+interface RuleEngine {
+  process(event: TeamEvent): Promise<RuleResult | "none">;
+  // "consumed" → 有规则 consumed，事件不入队
+  // "enriched" → 有规则 enriched 但无规则 consumed，事件入队（可能已被修改）
+  // "none"     → 无规则匹配，事件原样入队
+}
+```
+
+pipeline 的消费逻辑：
+```typescript
+const result = await deps.ruleEngine.process(event);
+if (result !== "consumed") {
+  await deps.queue.enqueue(event);  // enriched 或 none 都入队
+}
+```
 
 ### 规则文件格式
 
@@ -112,10 +133,11 @@ export function match(event: TeamEvent): boolean {
     && event.payload.changedFields?.includes("assignee");
 }
 
-export async function handle(event: TeamEvent, ctx: RuleContext): Promise<void> {
+export async function handle(event: TeamEvent, ctx: RuleContext): Promise<RuleResult> {
   const assignee = event.payload.assignee as string;
   await ctx.exec("teamsland", ["lark", "send", "--to", assignee,
     "--text", `你被分配了工单 ${event.context.issueId}`]);
+  return "consumed";
 }
 ```
 
@@ -136,7 +158,7 @@ interface RuleContext {
 ### 规则管理 Primitives
 
 ```
-teamsland rule create <name>     # stdin 读 TS 内容，写入 rules/
+teamsland rule create <name> --file <path>  # 从文件读 TS 内容，写入 rules/
 teamsland rule list              # 列出所有规则及元数据
 teamsland rule show <name>       # 查看规则内容
 teamsland rule delete <name>     # 删除规则

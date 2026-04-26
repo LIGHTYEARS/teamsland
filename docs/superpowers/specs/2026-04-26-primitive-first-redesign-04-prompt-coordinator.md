@@ -264,12 +264,12 @@ Server 注入运行时上下文时强制 cap：
 
 ### 队列优先级
 
-保留轻量 **3-tier** 队列优先级。这是基础设施排序，不是语义决策——确保紧急事件不被低优先级事件堵塞。
+复用现有 `PersistentQueue` 的 `high | normal | low` 优先级枚举，不做 schema 迁移。Connector 在构建 TeamEvent 时设置 `priority` 字段。
 
-| Tier | 事件类型 | 说明 |
-|------|---------|------|
-| **critical** (0) | `worker.anomaly`, `worker.failed`, `system.*` | 需要立即响应的异常 |
-| **normal** (1) | `lark.mention`, `lark.dm`, `meego.issue.*`, `worker.completed` | 常规事件 |
-| **background** (2) | `meego.status.changed`, `worker.progress` | 低优先级状态更新 |
+| 优先级 | 事件类型 | 说明 |
+|--------|---------|------|
+| **high** | `worker.anomaly`, `worker.failed`, `system.*` | 需要立即响应的异常 |
+| **normal** | `lark.mention`, `lark.dm`, `meego.issue.*`, `worker.completed` | 常规事件 |
+| **low** | `meego.status.changed`, `worker.progress` | 低优先级状态更新 |
 
-Connector 在构建 TeamEvent 时根据 `source + sourceEvent` 设置 tier。这是一个简单的 2 行 lookup，不是决策逻辑——Coordinator 仍然是所有事件的唯一决策者。
+这是 transport-level 标注，不是语义决策——Coordinator 仍然是所有事件的唯一决策者。

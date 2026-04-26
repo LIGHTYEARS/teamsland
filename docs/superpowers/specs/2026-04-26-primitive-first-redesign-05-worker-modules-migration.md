@@ -224,8 +224,9 @@ export function createPipeline(deps: PipelineDeps) {
   // Connector 事件 → 规则引擎 → 队列
   const onEvent = async (event: TeamEvent) => {
     try {
-      const handled = await deps.ruleEngine.process(event);
-      if (!handled) {
+      const result = await deps.ruleEngine.process(event);
+      if (result !== "consumed") {
+        // "enriched" 或 "none" 都入队（enriched 时事件可能已被规则修改）
         await deps.queue.enqueue(event);
       }
     } catch (err) {
@@ -239,7 +240,8 @@ export function createPipeline(deps: PipelineDeps) {
     connector.onEvent = onEvent;
   }
 
-  // 队列消费 → Coordinator（concurrency: 1，Coordinator 是单会话）
+  // 队列消费 → Coordinator
+  // 扩展 consume() API 支持 options（concurrency: 1 因为 Coordinator 是单会话）
   deps.queue.consume(async (msg) => {
     try {
       await deps.coordinator.processEvent(msg.payload as TeamEvent);
@@ -251,6 +253,8 @@ export function createPipeline(deps: PipelineDeps) {
   }, { concurrency: 1 });
 }
 ```
+
+**注意**：Phase 1 中 `QueuePayload` 类型将被重定义为 `TeamEvent`（breaking change）。Legacy fallback 路径需同步适配。
 
 ---
 

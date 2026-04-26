@@ -57,7 +57,7 @@ teamsland
 │   └── rm <resource-uri>                    # 删除资源
 │
 ├── rule                            # 自演化规则管理
-│   ├── create <name> [--file <path>]        # 创建规则（默认 stdin，--file 从文件读）
+│   ├── create <name> --file <path>           # 创建规则（从文件读 TS 内容）
 │   ├── list                                 # 列出所有规则
 │   ├── show <name>                          # 查看规则内容
 │   ├── delete <name>                        # 删除规则

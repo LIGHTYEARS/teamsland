@@ -69,6 +69,9 @@ interface TeamEvent<P = Record<string, unknown>> {
   // === 关联 ===
   correlationId?: string;  // 原始触发事件 ID（用于追溯事件因果链）
 
+  // === 调度 ===
+  priority: "high" | "normal" | "low";  // 队列调度优先级，由 Connector 设置
+
   // === 上下文 ===
   context: {
     chatId?: string;       // Lark 会话 ID
@@ -96,5 +99,6 @@ function handleLarkMention(event: TeamEvent<LarkMentionPayload>) { ... }
 2. **payload 泛型**：传输/存储层使用无约束的 `TeamEvent`，消费端通过 `TeamEvent<SpecificPayload>` 获得类型安全。Connector 把原始数据放进 payload，不做字段重命名或裁剪。
 3. **context 是 Connector 提取的公共索引字段**：Connector 在转换为 TeamEvent 时从原始数据中提取少量公共字段（chatId、projectKey 等）到 context 层。这是 transport-level 的字段提取，不是语义处理。方便规则引擎匹配和日志检索，但不替代 payload。
 4. **correlationId 追溯因果链**：Worker 事件通过 `correlationId` 指向触发它的原始事件 ID。例如：Coordinator 因事件 E1 spawn 了 Worker W1，W1 完成时产出的事件 E2 携带 `correlationId: E1.id`。
-5. **Worker 事件也是 TeamEvent**：Worker 完成/失败/异常统一为 `{source: "worker", sourceEvent: "completed|failed|anomaly"}`，Coordinator 像处理其他事件一样处理。
-6. **可扩展**：新事件源只需实现 Connector 接口，`source` 使用新字符串值，`sourceEvent` 自由定义。
+5. **priority 由 Connector 设置**：Connector 在构建 TeamEvent 时根据 `source + sourceEvent` 设置 `priority` 字段。复用现有队列的 `high | normal | low` 枚举。映射关系：worker.anomaly/failed/system.* → `high`；lark.*/meego.issue.*/worker.completed → `normal`；meego.status.changed/worker.progress → `low`。这是 transport-level 标注，不是语义决策。
+6. **Worker 事件也是 TeamEvent**：Worker 完成/失败/异常统一为 `{source: "worker", sourceEvent: "completed|failed|anomaly"}`，Coordinator 像处理其他事件一样处理。
+7. **可扩展**：新事件源只需实现 Connector 接口，`source` 使用新字符串值，`sourceEvent` 自由定义。
