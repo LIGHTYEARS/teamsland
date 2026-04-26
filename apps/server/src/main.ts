@@ -73,9 +73,31 @@ import { getVikingClient, initViking } from "./init/viking.js";
     const vikingClient = getVikingClient(viking);
     const coordinator = await initCoordinator(config, queue, sidecar.registry, controller, logger, vikingClient);
     if (coordinator.manager) {
+      // Dead letter 告警
+      queue.onDeadLetter(({ id, type, lastError }) => {
+        logger.error({ msgId: id, type, lastError }, "消息进入死信队列");
+        lark.notifier
+          .sendCard("消息进入死信队列", `消息 ID: ${id}\n类型: ${type}\n错误: ${lastError}`, "error")
+          .catch((err) => logger.warn({ err, msgId: id }, "死信告警发送失败"));
+      });
+
       queue.consume(async (msg) => {
         const event = toCoordinatorEvent(msg);
-        await coordinator.manager?.processEvent(event);
+        logger.info({ msgId: msg.id, eventId: event.id, eventType: event.type }, "开始处理队列消息");
+        try {
+          await coordinator.manager?.processEvent(event);
+          logger.info({ msgId: msg.id, eventId: event.id }, "队列消息处理完成");
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          logger.error(
+            { msgId: msg.id, eventId: event.id, eventType: event.type, error: errMsg },
+            "Coordinator 事件处理失败",
+          );
+          lark.notifier
+            .sendCard("Coordinator 处理失败", `事件类型: ${event.type}\n事件 ID: ${event.id}\n错误: ${errMsg}`, "error")
+            .catch((sendErr) => logger.warn({ sendErr }, "Coordinator 失败告警发送失败"));
+          throw err; // Re-throw so queue nacks
+        }
       });
       logger.info("Coordinator 队列消费者已注册");
     }
