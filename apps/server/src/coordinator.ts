@@ -595,13 +595,15 @@ export class CoordinatorSessionManager {
         { eventId: event.id, recoveryCount: this.recoveryCount, error: errMsg },
         "Coordinator 恢复重试耗尽，进入 failed 状态",
       );
+      const failedEventId = event.id;
       // 延迟重置，给上层监控时间观察 failed 状态
       setTimeout(() => {
         if (this.state === "failed") {
           this.reset();
-          logger.info("Coordinator 从 failed 状态自动重置");
+          logger.info({ originalEventId: failedEventId }, "Coordinator 从 failed 状态自动重置");
         }
       }, 30_000);
+      throw new Error(`Coordinator recovery exhausted after ${this.recoveryCount} retries: ${errMsg}`);
     }
   }
 

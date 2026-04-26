@@ -204,7 +204,7 @@ describe("CoordinatorSessionManager", () => {
         spawnFn: createFailingSpawnFn(),
       });
 
-      await manager.processEvent(makeEvent({ id: "evt-fail" }));
+      await expect(manager.processEvent(makeEvent({ id: "evt-fail" }))).rejects.toThrow(/recovery exhausted/);
 
       expect(manager.getState()).toBe("failed");
     });
