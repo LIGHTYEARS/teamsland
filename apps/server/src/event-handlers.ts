@@ -4,8 +4,7 @@ import type { WorktreeManager } from "@teamsland/git";
 import type { DocumentParser } from "@teamsland/ingestion";
 import type { LarkCli, LarkNotifier } from "@teamsland/lark";
 import type { ConfirmationWatcher, MeegoEventBus } from "@teamsland/meego";
-import type { ExtractLoop, IVikingMemoryClient, MemoryUpdater, TeamMemoryStore } from "@teamsland/memory";
-import { ingestDocument } from "@teamsland/memory";
+import type { IVikingMemoryClient } from "@teamsland/memory";
 import { createLogger } from "@teamsland/observability";
 import type { LarkMentionPayload, MeegoEventPayload, PersistentQueue, QueueMessage } from "@teamsland/queue";
 import type {
@@ -62,12 +61,6 @@ export interface EventHandlerDeps {
   teamId: string;
   /** 文档解析器 */
   documentParser: DocumentParser;
-  /** 团队记忆存储（仅 TeamMemoryStore 时可用于 ingest） */
-  memoryStore: TeamMemoryStore | null;
-  /** 记忆提取循环（LLM 未配置时为 null） */
-  extractLoop: ExtractLoop | null;
-  /** 记忆更新器（NullMemoryStore 时为 null） */
-  memoryUpdater: MemoryUpdater | null;
   /** 人工确认监视器 */
   confirmationWatcher: ConfirmationWatcher;
   /** Coordinator Session Manager（未启用时为 null） */
@@ -247,43 +240,6 @@ async function handleMeegoEventMessage(msg: QueueMessage, handler: EventHandler)
 }
 
 /**
- * 解析并异步注入文档到团队记忆（fire-and-forget）
- *
- * 若 memoryStore、extractLoop、memoryUpdater 任一为 null，或 parsedDocument 为 null / 无 sections，则跳过。
- * 失败时记录警告日志，不影响调用方流程。
- *
- * @param deps - 事件处理器依赖项
- * @param event - 触发记忆注入的 MeegoEvent
- * @param agentId - 已分配的 Agent ID，用于关联记忆条目
- * @param parsedDocument - 由调用方预解析的文档结构（复用，避免重复解析）
- *
- * @example
- * ```typescript
- * const parsed = deps.documentParser.parseMarkdown(rawDescription);
- * scheduleMemoryIngestion(deps, event, agentId, parsed);
- * ```
- */
-function scheduleMemoryIngestion(
-  deps: EventHandlerDeps,
-  event: MeegoEvent,
-  agentId: string,
-  parsedDocument: { sections: Array<{ heading: string; content: string }> } | null,
-): void {
-  const { memoryStore, extractLoop, memoryUpdater } = deps;
-  if (!memoryStore || !extractLoop || !memoryUpdater) {
-    return;
-  }
-  if (!parsedDocument || parsedDocument.sections.length === 0) {
-    return;
-  }
-  const rawDescription = extractDescription(event);
-  const docText = parsedDocument.sections.map((s) => `${s.heading}\n${s.content}`).join("\n\n") || rawDescription;
-  ingestDocument(docText, deps.teamId, agentId, memoryStore, extractLoop, memoryUpdater).catch((ingestErr: unknown) => {
-    logger.warn({ issueId: event.issueId, err: ingestErr }, "文档记忆注入失败（不影响 Agent 启动）");
-  });
-}
-
-/**
  * 将已启动的 Agent 注册到注册表并启动数据平面流
  *
  * 容量不足时向指派人发送 DM 通知并返回 false；成功返回 true。
@@ -381,12 +337,7 @@ async function spawnAgent(
 
   const agentId = `agent-${event.issueId}-${randomUUID().slice(0, 8)}`;
 
-  // 4. 文档解析 + 记忆注入（fire-and-forget, 不阻塞 Agent 启动）
-  const rawDescription = extractDescription(event);
-  const parsedDocument = rawDescription ? deps.documentParser.parseMarkdown(rawDescription) : null;
-  scheduleMemoryIngestion(deps, event, agentId, parsedDocument);
-
-  // 5. 组装初始提示词
+  // 4. 组装初始提示词
   const prompt = await deps.assembler.buildInitialPrompt(taskConfig, deps.teamId);
   logger.info({ issueId: event.issueId, promptLength: prompt.length }, "初始提示词组装完成");
 
