@@ -8,9 +8,6 @@ export type {
   CoordinatorConfig,
   DashboardAuthConfig,
   DashboardConfig,
-  EmbeddingConfig,
-  EntityMergeConfig,
-  Fts5Config,
   HooksConfig,
   LarkBotConfig,
   LarkConfig,
@@ -23,7 +20,6 @@ export type {
   MeegoPollConfig,
   MeegoSpaceConfig,
   MeegoWebhookConfig,
-  MemoryConfig,
   OpenVikingConfig,
   QueueConfig,
   RepoEntry,
@@ -32,8 +28,6 @@ export type {
   SessionConfig,
   SidecarConfig,
   SkillRoutingConfig,
-  SqliteVecConfig,
-  StorageConfig,
 } from "./config.js";
 
 // 请求上下文与意图
@@ -51,7 +45,7 @@ export type {
 // Meego 事件
 export type { EventHandler, MeegoEvent, MeegoEventType } from "./meego.js";
 // 记忆系统
-export type { AbstractMemoryStore, MemoryEntry, MemoryType } from "./memory.js";
+export type { MemoryType } from "./memory.js";
 // 团队通讯
 export type { TeamMessage, TeamMessageType } from "./message.js";
 // 归一化消息（Dashboard Phase 7）

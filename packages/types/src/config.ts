@@ -1,5 +1,3 @@
-import type { MemoryType } from "./memory.js";
-
 // ─── meego.yaml ───
 
 /**
@@ -115,7 +113,11 @@ export interface MeegoConfig {
   longConnection: MeegoLongConnectionConfig;
   /** Meego OpenAPI 基础地址 */
   apiBaseUrl: string;
-  /** 插件访问令牌（Plugin Access Token） */
+  /** 插件 ID（与 pluginSecret 配合自动获取 token） */
+  pluginId?: string;
+  /** 插件 Secret（与 pluginId 配合自动获取 token） */
+  pluginSecret?: string;
+  /** 静态插件访问令牌（当 pluginId + pluginSecret 未配置时使用） */
   pluginAccessToken: string;
   /** 调用者 user_key（在飞书项目中双击头像获取，API CRUD 操作必需） */
   userKey?: string;
@@ -266,131 +268,6 @@ export interface SidecarConfig {
   minSwarmSuccessRatio: number;
 }
 
-// ─── memory.yaml ───
-
-/**
- * 记忆衰减与回收配置，对应 config/memory.yaml
- *
- * @example
- * ```typescript
- * import type { MemoryConfig } from "@teamsland/types";
- *
- * const cfg: MemoryConfig = {
- *   decayHalfLifeDays: 30,
- *   extractLoopMaxIterations: 3,
- *   exemptTypes: ["decisions", "identity"],
- *   perTypeTtl: { events: 90, cases: 365 },
- * };
- * ```
- */
-export interface MemoryConfig {
-  /** 记忆热度衰减半衰期（天） */
-  decayHalfLifeDays: number;
-  /** ExtractLoop 最大迭代次数 */
-  extractLoopMaxIterations: number;
-  /** 豁免类型，不参与自动回收 */
-  exemptTypes: MemoryType[];
-  /** 按类型的硬过期天数，超过即归档 */
-  perTypeTtl: Partial<Record<MemoryType, number>>;
-}
-
-// ─── storage.yaml ───
-
-/**
- * SQLite-vec 向量存储配置
- *
- * @example
- * ```typescript
- * import type { SqliteVecConfig } from "@teamsland/types";
- *
- * const cfg: SqliteVecConfig = { dbPath: "./data/memory.sqlite", busyTimeoutMs: 5000, vectorDimensions: 512 };
- * ```
- */
-export interface SqliteVecConfig {
-  /** SQLite 数据库文件路径 */
-  dbPath: string;
-  /** busy_timeout 毫秒 */
-  busyTimeoutMs: number;
-  /** 向量维度 */
-  vectorDimensions: number;
-}
-
-/**
- * Embedding 模型配置
- *
- * @example
- * ```typescript
- * import type { EmbeddingConfig } from "@teamsland/types";
- *
- * const cfg: EmbeddingConfig = {
- *   model: "hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf",
- *   contextSize: 2048,
- * };
- * ```
- */
-export interface EmbeddingConfig {
-  /** GGUF 模型 URI */
-  model: string;
-  /** 上下文窗口大小 */
-  contextSize: number;
-}
-
-/**
- * 实体合并配置
- *
- * @example
- * ```typescript
- * import type { EntityMergeConfig } from "@teamsland/types";
- *
- * const cfg: EntityMergeConfig = { cosineThreshold: 0.95 };
- * ```
- */
-export interface EntityMergeConfig {
-  /** 余弦相似度阈值，大于等于此值视为同一实体 */
-  cosineThreshold: number;
-}
-
-/**
- * FTS5 全文索引配置
- *
- * @example
- * ```typescript
- * import type { Fts5Config } from "@teamsland/types";
- *
- * const cfg: Fts5Config = { optimizeIntervalHours: 24 };
- * ```
- */
-export interface Fts5Config {
-  /** FTS5 OPTIMIZE 执行间隔（小时） */
-  optimizeIntervalHours: number;
-}
-
-/**
- * 存储完整配置，对应 config/storage.yaml
- *
- * @example
- * ```typescript
- * import type { StorageConfig } from "@teamsland/types";
- *
- * const cfg: StorageConfig = {
- *   sqliteVec: { dbPath: "./data/memory.sqlite", busyTimeoutMs: 5000, vectorDimensions: 512 },
- *   embedding: { model: "hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf", contextSize: 2048 },
- *   entityMerge: { cosineThreshold: 0.95 },
- *   fts5: { optimizeIntervalHours: 24 },
- * };
- * ```
- */
-export interface StorageConfig {
-  /** sqlite-vec 向量存储 */
-  sqliteVec: SqliteVecConfig;
-  /** Embedding 模型 */
-  embedding: EmbeddingConfig;
-  /** 实体合并 */
-  entityMerge: EntityMergeConfig;
-  /** FTS5 全文索引 */
-  fts5: Fts5Config;
-}
-
 // ─── confirmation.yaml ───
 
 /**
@@ -474,6 +351,8 @@ export interface RepoEntry {
   path: string;
   /** 仓库显示名称 */
   name: string;
+  /** git clone URL（有则可自动 clone 到 ~/teamsland-repos/） */
+  remoteUrl?: string;
 }
 
 /**
@@ -620,6 +499,8 @@ export interface QueueConfig {
 export interface CoordinatorConfig {
   /** Coordinator 工作目录 */
   workspacePath: string;
+  /** 托管仓库目录（系统自动 clone 的仓库存放于此），默认 ~/teamsland-repos */
+  reposDir?: string;
   /** session 空闲超时（ms） */
   sessionIdleTimeoutMs: number;
   /** session 最大存活时间（ms） */
@@ -723,10 +604,6 @@ export interface AppConfig {
   session: SessionConfig;
   /** Sidecar 配置 */
   sidecar: SidecarConfig;
-  /** 记忆配置 */
-  memory: MemoryConfig;
-  /** 存储配置 */
-  storage: StorageConfig;
   /** 确认流程配置 */
   confirmation: ConfirmationConfig;
   /** Dashboard 配置 */
