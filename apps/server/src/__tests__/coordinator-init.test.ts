@@ -57,18 +57,6 @@ function createMinimalConfig(workspacePath: string): AppConfig {
       healthCheckTimeoutMs: 30000,
       minSwarmSuccessRatio: 0.5,
     },
-    memory: {
-      decayHalfLifeDays: 30,
-      extractLoopMaxIterations: 3,
-      exemptTypes: ["decisions", "identity"],
-      perTypeTtl: {},
-    },
-    storage: {
-      sqliteVec: { dbPath: "./data/memory.sqlite", busyTimeoutMs: 5000, vectorDimensions: 512 },
-      embedding: { model: "hf:test-model", contextSize: 2048 },
-      entityMerge: { cosineThreshold: 0.95 },
-      fts5: { optimizeIntervalHours: 24 },
-    },
     confirmation: { reminderIntervalMin: 30, maxReminders: 3, pollIntervalMs: 60000 },
     dashboard: {
       port: 3001,

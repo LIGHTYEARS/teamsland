@@ -51,13 +51,6 @@ const testConfig = {
     healthCheckTimeoutMs: 30000,
     minSwarmSuccessRatio: 0.5,
   },
-  memory: { decayHalfLifeDays: 30, extractLoopMaxIterations: 3, exemptTypes: [], perTypeTtl: {} },
-  storage: {
-    sqliteVec: { dbPath: ":memory:", busyTimeoutMs: 5000, vectorDimensions: 512 },
-    embedding: { model: "test-model", contextSize: 512 },
-    entityMerge: { cosineThreshold: 0.95 },
-    fts5: { optimizeIntervalHours: 24 },
-  },
   confirmation: { reminderIntervalMin: 30, maxReminders: 3, pollIntervalMs: 60000 },
   dashboard: { port: 3000, auth: { provider: "lark_oauth", sessionTtlHours: 8, allowedDepartments: [] } },
   repoMapping: [{ meegoProjectId: "project_xxx", repos: [{ path: "/tmp/test-repo", name: "测试仓库" }] }],
@@ -121,9 +114,6 @@ describe("worker_completed 处理器", () => {
       config: testConfig,
       teamId: "default",
       documentParser: { parseMarkdown: vi.fn().mockReturnValue({ title: "", sections: [], entities: [] }) } as never,
-      memoryStore: null,
-      extractLoop: null,
-      memoryUpdater: null,
       confirmationWatcher: { watch: vi.fn().mockResolvedValue("approved") } as never,
       coordinatorManager: coordinatorManager as never,
     });
@@ -292,9 +282,6 @@ describe("worker_anomaly 处理器", () => {
       config: testConfig,
       teamId: "default",
       documentParser: { parseMarkdown: vi.fn().mockReturnValue({ title: "", sections: [], entities: [] }) } as never,
-      memoryStore: null,
-      extractLoop: null,
-      memoryUpdater: null,
       confirmationWatcher: { watch: vi.fn().mockResolvedValue("approved") } as never,
       coordinatorManager: coordinatorManager as never,
     });
