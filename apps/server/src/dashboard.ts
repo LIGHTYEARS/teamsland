@@ -13,6 +13,7 @@ import type {
   SkillInjector,
   SubagentRegistry,
 } from "@teamsland/sidecar";
+import type { TicketStore } from "@teamsland/ticket";
 import type { AgentRecord, AppConfig, DashboardConfig } from "@teamsland/types";
 import { handleExtendedApiRoutes } from "./api-routes.js";
 import { handleWsMessage, type WsHandlerContext } from "./dashboard-ws.js";
@@ -20,6 +21,7 @@ import { handleFileRoutes } from "./file-routes.js";
 import { handleGitRoutes } from "./git-routes.js";
 import { extractToken, type LarkAuthManager } from "./lark-auth.js";
 import { TerminalService } from "./terminal-service.js";
+import { handleTicketRoutes, type TicketRouteDeps } from "./ticket-routes.js";
 import { normalizeJsonlEntry } from "./utils/normalized-message.js";
 import { handleVikingRoutes } from "./viking-routes.js";
 import { handleWorkerRoutes } from "./worker-routes.js";
@@ -76,6 +78,12 @@ export interface DashboardDeps {
   vikingClient?: IVikingMemoryClient | null;
   /** 中断控制器，用于 Dashboard 用户中止正在运行的会话 */
   interruptController?: InterruptController;
+  /** Ticket state store (可选，ticket lifecycle 启用时提供) */
+  ticketStore?: TicketStore | null;
+  /** Meego work item getter (可选，ticket lifecycle 启用时提供) */
+  meegoGet?: TicketRouteDeps["meegoGet"] | null;
+  /** Lark document reader (可选，ticket lifecycle 启用时提供) */
+  docRead?: TicketRouteDeps["docRead"] | null;
 }
 
 /** WebSocket 推送消息类型 */
@@ -207,6 +215,60 @@ function checkApiAuth(
   return null;
 }
 
+/** 尝试分发 Ticket 路由（依赖不完整时直接返回 null，避免调用方增加分支） */
+function dispatchTicketRoutes(
+  req: Request,
+  url: URL,
+  ctx: {
+    ticketStore: TicketStore | null | undefined;
+    meegoGet: TicketRouteDeps["meegoGet"] | null | undefined;
+    docRead: TicketRouteDeps["docRead"] | null | undefined;
+  },
+): Response | Promise<Response> | null {
+  if (!ctx.ticketStore || !ctx.meegoGet || !ctx.docRead) return null;
+  return handleTicketRoutes(req, url, {
+    ticketStore: ctx.ticketStore,
+    meegoGet: ctx.meegoGet,
+    docRead: ctx.docRead,
+  });
+}
+
+/** 文件/Git/Viking/核心 API 路由（从 routeRequest 提取以降低 cognitive complexity） */
+async function routeContentApis(
+  req: Request,
+  url: URL,
+  ctx: {
+    registry: SubagentRegistry;
+    sessionDb: SessionDB;
+    hookEngine: HookEngine | null | undefined;
+    hookMetricsCollector: HookMetricsCollector | null | undefined;
+    appConfig: AppConfig | null | undefined;
+    vikingClient: IVikingMemoryClient | null | undefined;
+  },
+): Promise<Response | null> {
+  // 文件系统路由（/api/files/*）
+  const fileResult = handleFileRoutes(req, url);
+  if (fileResult) return fileResult;
+
+  // Git 操作路由（/api/git/*）
+  const gitResult = handleGitRoutes(req, url);
+  if (gitResult) return gitResult;
+
+  // Viking 代理路由（/api/viking/*）
+  const vikingResult = ctx.vikingClient ? await handleVikingRoutes(req, url, ctx.vikingClient) : null;
+  if (vikingResult) return vikingResult;
+
+  return handleApiRoutes(
+    req,
+    url,
+    ctx.registry,
+    ctx.sessionDb,
+    ctx.hookEngine,
+    ctx.hookMetricsCollector,
+    ctx.appConfig,
+  );
+}
+
 /** 路由主请求（从 Bun.serve fetch 中调出以降低 cognitive complexity） */
 async function routeRequest(
   req: Request,
@@ -228,6 +290,9 @@ async function routeRequest(
     hookMetricsCollector: HookMetricsCollector | null | undefined;
     appConfig: AppConfig | null | undefined;
     vikingClient: IVikingMemoryClient | null | undefined;
+    ticketStore: TicketStore | null | undefined;
+    meegoGet: TicketRouteDeps["meegoGet"] | null | undefined;
+    docRead: TicketRouteDeps["docRead"] | null | undefined;
   },
 ): Promise<Response | null> {
   if (req.method === "GET" && url.pathname === "/health") {
@@ -258,31 +323,15 @@ async function routeRequest(
   });
   if (workerResult) return workerResult;
 
+  // Ticket lifecycle routes (/api/ticket/*) — dispatchTicketRoutes handles missing deps
+  const ticketResult = dispatchTicketRoutes(req, url, ctx);
+  if (ticketResult) return ticketResult;
+
   // 扩展 API 路由（/api/projects, /api/topology, /api/sessions/:id/normalized-messages）
   const extendedResult = handleExtendedApiRoutes(req, url, { registry: ctx.registry });
   if (extendedResult) return extendedResult;
 
-  // 文件系统路由（/api/files/*）
-  const fileResult = handleFileRoutes(req, url);
-  if (fileResult) return fileResult;
-
-  // Git 操作路由（/api/git/*）
-  const gitResult = handleGitRoutes(req, url);
-  if (gitResult) return gitResult;
-
-  // Viking 代理路由（/api/viking/*）
-  const vikingResult = ctx.vikingClient ? await handleVikingRoutes(req, url, ctx.vikingClient) : null;
-  if (vikingResult) return vikingResult;
-
-  return handleApiRoutes(
-    req,
-    url,
-    ctx.registry,
-    ctx.sessionDb,
-    ctx.hookEngine,
-    ctx.hookMetricsCollector,
-    ctx.appConfig,
-  );
+  return routeContentApis(req, url, ctx);
 }
 
 /** 解析以 ~ 开头的路径 */
@@ -597,6 +646,9 @@ export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): Retur
         hookMetricsCollector,
         appConfig,
         vikingClient,
+        ticketStore: deps.ticketStore,
+        meegoGet: deps.meegoGet,
+        docRead: deps.docRead,
       };
       return (await routeRequest(req, url, ctx)) ?? jsonResponse({ error: "Not Found" }, 404);
     },

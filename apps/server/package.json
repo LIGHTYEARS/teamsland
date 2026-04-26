@@ -22,6 +22,7 @@
     "@teamsland/git": "workspace:*",
     "@teamsland/hooks": "workspace:*",
     "@teamsland/lark": "workspace:*",
-    "@teamsland/observability": "workspace:*"
+    "@teamsland/observability": "workspace:*",
+    "@teamsland/ticket": "workspace:*"
   }
 }

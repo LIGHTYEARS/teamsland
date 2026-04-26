@@ -75,6 +75,7 @@
         "@teamsland/session": "workspace:*",
         "@teamsland/sidecar": "workspace:*",
         "@teamsland/swarm": "workspace:*",
+        "@teamsland/ticket": "workspace:*",
         "@teamsland/types": "workspace:*",
       },
     },
@@ -205,6 +206,10 @@
         "@teamsland/sidecar": "workspace:*",
         "@teamsland/types": "workspace:*",
       },
+    },
+    "packages/ticket": {
+      "name": "@teamsland/ticket",
+      "version": "0.0.1",
     },
     "packages/types": {
       "name": "@teamsland/types",
@@ -863,6 +868,8 @@
     "@teamsland/sidecar": ["@teamsland/sidecar@workspace:packages/sidecar"],
 
     "@teamsland/swarm": ["@teamsland/swarm@workspace:packages/swarm"],
+
+    "@teamsland/ticket": ["@teamsland/ticket@workspace:packages/ticket"],
 
     "@teamsland/types": ["@teamsland/types@workspace:packages/types"],
 
