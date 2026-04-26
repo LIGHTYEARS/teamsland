@@ -107,7 +107,12 @@ import { getVikingClient, initViking } from "./init/viking.js";
       hooks.engine,
       hooks.metricsCollector,
       vikingClient,
-      { ticketStore, queue, larkSendDm: (userId, text) => lark.larkCli.sendDm(userId, text) },
+      {
+        ticketStore,
+        queue,
+        larkSendDm: (userId, text) => lark.larkCli.sendDm(userId, text),
+        coordinatorManager: coordinator.manager,
+      },
     );
 
     // ── Phase 7: 定时任务 ──

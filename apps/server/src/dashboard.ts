@@ -18,10 +18,12 @@ import type { TicketStore } from "@teamsland/ticket";
 import type { AgentRecord, AppConfig, DashboardConfig } from "@teamsland/types";
 import { handleExtendedApiRoutes } from "./api-routes.js";
 import { handleAskRoutes } from "./ask-routes.js";
+import type { CoordinatorSessionManager } from "./coordinator.js";
 import { handleWsMessage, type WsHandlerContext } from "./dashboard-ws.js";
 import { handleFileRoutes } from "./file-routes.js";
 import { handleGitRoutes } from "./git-routes.js";
 import { extractToken, type LarkAuthManager } from "./lark-auth.js";
+import { handleObservabilityRoutes } from "./observability-routes.js";
 import { TerminalService } from "./terminal-service.js";
 import { handleTicketRoutes, type TicketRouteDeps } from "./ticket-routes.js";
 import { normalizeJsonlEntry } from "./utils/normalized-message.js";
@@ -90,6 +92,8 @@ export interface DashboardDeps {
   larkSendDm?: (userId: string, text: string) => Promise<void>;
   /** 消息队列 (可选，ask 命令超时使用) */
   queue?: PersistentQueue | null;
+  /** Coordinator Session Manager (可选, coordinator 未启用时为 null) */
+  coordinatorManager?: CoordinatorSessionManager | null;
 }
 
 /** WebSocket 推送消息类型 */
@@ -124,7 +128,21 @@ interface WsCommandAck {
   agentId: string;
 }
 
-type WsMessage = WsAgentsUpdate | WsConnected | WsNormalizedMessage | WsCommandError | WsCommandAck;
+/** Coordinator 状态变更推送 */
+interface WsCoordinatorState {
+  type: "coordinator_state";
+  state: string;
+  eventId?: string;
+  timestamp: number;
+}
+
+type WsMessage =
+  | WsAgentsUpdate
+  | WsConnected
+  | WsNormalizedMessage
+  | WsCommandError
+  | WsCommandAck
+  | WsCoordinatorState;
 
 /** JSON 响应工具函数 */
 function jsonResponse(body: unknown, status = 200): Response {
@@ -265,6 +283,22 @@ function dispatchAskRoutes(
   });
 }
 
+/** 尝试分发 Observability 路由（queue 不存在时直接返回 null） */
+function dispatchObservabilityRoutes(
+  req: Request,
+  url: URL,
+  ctx: {
+    queue: PersistentQueue | null | undefined;
+    coordinatorManager: CoordinatorSessionManager | null | undefined;
+  },
+): Response | Promise<Response> | null {
+  if (!ctx.queue) return null;
+  return handleObservabilityRoutes(req, url, {
+    coordinatorManager: ctx.coordinatorManager ?? null,
+    queue: ctx.queue,
+  });
+}
+
 /** 文件/Git/Viking/核心 API 路由（从 routeRequest 提取以降低 cognitive complexity） */
 async function routeContentApis(
   req: Request,
@@ -327,6 +361,7 @@ async function routeRequest(
     docRead: TicketRouteDeps["docRead"] | null | undefined;
     larkSendDm: ((userId: string, text: string) => Promise<void>) | undefined;
     queue: PersistentQueue | null | undefined;
+    coordinatorManager: CoordinatorSessionManager | null | undefined;
   },
 ): Promise<Response | null> {
   if (req.method === "GET" && url.pathname === "/health") {
@@ -368,6 +403,10 @@ async function routeRequest(
   // 扩展 API 路由（/api/projects, /api/topology, /api/sessions/:id/normalized-messages）
   const extendedResult = handleExtendedApiRoutes(req, url, { registry: ctx.registry });
   if (extendedResult) return extendedResult;
+
+  // Observability routes (/api/coordinator/*, /api/queue/*)
+  const obsResult = dispatchObservabilityRoutes(req, url, ctx);
+  if (obsResult) return obsResult;
 
   return routeContentApis(req, url, ctx);
 }
@@ -623,6 +662,7 @@ export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): Retur
     hookMetricsCollector,
     appConfig,
     vikingClient,
+    coordinatorManager,
   } = deps;
   const clients = new Set<unknown>();
   /** 追踪每个 WebSocket 连接关联的终端会话 ID，用于连接断开时自动清理 */
@@ -654,6 +694,17 @@ export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): Retur
   const unsubscribe = registry.subscribe((agents) => {
     broadcast(clients, { type: "agents_update", agents });
   });
+
+  if (coordinatorManager) {
+    coordinatorManager.onStateChange((state, eventId) => {
+      broadcast(clients, {
+        type: "coordinator_state",
+        state,
+        eventId,
+        timestamp: Date.now(),
+      });
+    });
+  }
 
   const server = Bun.serve({
     port: config.port,
@@ -689,6 +740,7 @@ export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): Retur
         docRead: deps.docRead,
         larkSendDm: deps.larkSendDm,
         queue: deps.queue,
+        coordinatorManager: deps.coordinatorManager,
       };
       return (await routeRequest(req, url, ctx)) ?? jsonResponse({ error: "Not Found" }, 404);
     },
