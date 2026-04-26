@@ -53,6 +53,12 @@ interface Connector {
 - 不映射事件类型（payload 如实投递）
 - 不决定优先级（Coordinator 做）
 
+### Connector 可以做的 transport 层关注点
+
+- **签名验证**（如 Meego HMAC webhook 验证）——这是传输安全，不是语义处理
+- **去重 ID 构造**（如 Meego 轮询时根据 item.id + updated_at 生成 eventId）——这是幂等保障
+- **context 字段提取**（从原始数据中提取 chatId、projectKey 等公共索引字段）——这是结构化标注，不是语义判断
+
 ---
 
 ## 规则引擎
@@ -68,10 +74,21 @@ TeamEvent 进入
     ↓
 遍历规则（按 priority 排序）
     ↓
-第一条命中 → 执行 handle 函数
-    ↓ (无命中)
+匹配的规则 → 执行 handle 函数
+  返回 "consumed" → 停止匹配，事件已处理
+  返回 "enriched" → 继续匹配下一条规则（事件可被多条规则依次增强）
+    ↓ (无命中或全部 enriched)
 事件入队 → Coordinator 消费
 ```
+
+### 规则 handle 返回值
+
+```typescript
+type RuleResult = "consumed" | "enriched";
+```
+
+- `"consumed"`：事件已被完全处理，不再继续匹配也不入队（默认行为，handle 返回 void 等同 consumed）
+- `"enriched"`：规则修改了事件（如添加 metadata）但事件应继续流转
 
 ### 规则文件格式
 
@@ -139,7 +156,15 @@ Coordinator 第 3 次处理同类事件 → 识别模式 → teamsland rule crea
 
 ### 安全边界
 
-- 规则只能调用 `teamsland` CLI 子命令，不能执行任意 shell
-- 规则文件通过 `fs.watch` 热加载，无需重启
-- Coordinator 可随时 `rule delete` 撤销规则
-- 每条规则有 `createdBy` 和 `createdAt` 元数据，可追溯
+- `ctx.exec()` 接受任意命令和参数，提供最大灵活性（规则可能需要调用 lark-cli 等外部工具）
+- **安全风险**：恶意或错误的规则可执行任意 shell 命令。缓解措施：
+  - 所有规则文件记录 `createdBy` 和 `createdAt` 元数据，可审计
+  - Coordinator 可随时 `rule delete` 撤销规则
+  - 建议生产环境对 `ctx.exec()` 增加命令白名单日志告警
+- 规则文件通过 `fs.watch` 热加载，**带 300ms debounce**（防止编辑器分段写入导致加载半成品文件）
+- 热加载失败（import 抛异常）时**保留旧版本规则**，不静默丢弃
+
+### 错误处理
+
+- **handle 函数抛异常 → fail-open**：事件视为未处理，入队交给 Coordinator。不允许规则错误吞掉事件。
+- 异常会被记录到结构化日志，包含规则名称和事件 ID。

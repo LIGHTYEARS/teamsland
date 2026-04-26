@@ -114,6 +114,12 @@ packages/
 │   ├── registry.ts
 │   ├── lifecycle-monitor.ts    # 状态检测 → TeamEvent
 │   ├── anomaly-detector.ts     # 异常检测 → TeamEvent
+│   ├── interrupt-controller.ts # 中断 Worker
+│   ├── resume-controller.ts    # 恢复 Worker
+│   ├── observer-controller.ts  # 启动 Observer 诊断
+│   ├── data-plane.ts           # NDJSON 流消费
+│   ├── message-bus.ts          # 可观测消息总线
+│   ├── transcript-reader.ts    # 会话记录读取
 │   └── worktree.ts
 │
 ├── context/            # 简化：Worker 上下文组装
@@ -165,6 +171,44 @@ apps/server/src/
 └── dashboard.ts
 ```
 
+### Sidecar 完整 export 迁移映射
+
+| 现 sidecar export | 迁移到 | 说明 |
+|---|---|---|
+| `ProcessController` | `worker/` | Worker 进程管理 |
+| `SubagentRegistry` | `worker/` | Worker 注册表 |
+| `SidecarDataPlane` | `worker/` | NDJSON 流消费 |
+| `ObservableMessageBus` | `worker/` | 内部消息总线 |
+| `Alerter` | `worker/` | 告警（合并到 anomaly-detector） |
+| `ClaudeMdInjector` | `context/` | CLAUDE.md 注入 |
+| `SkillInjector` | `context/` | Skills 注入 |
+| `TranscriptReader` | `worker/` | 会话记录读取 |
+| `AnomalyDetector` | `worker/` | 异常检测 |
+| `InterruptController` | `worker/` | 中断控制 |
+| `ResumeController` | `worker/` | 恢复控制 |
+| `ObserverController` | `worker/` | Observer 诊断 |
+| `CapacityError` | `worker/` | 容量错误类型 |
+
+### 包依赖方向
+
+```
+types/ ← config/ ← observability/
+  ↑         ↑
+  ├── queue/
+  ├── connector/      → types/
+  ├── rule-engine/    → types/
+  ├── lark/           → types/, config/
+  ├── meego/          → types/, config/
+  ├── memory/         → types/, config/
+  ├── context/        → types/, config/         （不依赖 worker/）
+  ├── worker/         → types/, context/        （单向依赖 context/）
+  ├── git/            → types/
+  ├── cli/            → types/                  （HTTP 客户端，不依赖其他包）
+  └── session/        → types/, config/
+```
+
+**关键约束**：`worker/` 单向依赖 `context/`（spawn 时需要 role-resolver + injector），`context/` 不依赖 `worker/`。
+
 ### 删除的文件
 
 - `event-handlers.ts` — switch 路由 → pipeline.ts
@@ -179,8 +223,14 @@ apps/server/src/
 export function createPipeline(deps: PipelineDeps) {
   // Connector 事件 → 规则引擎 → 队列
   const onEvent = async (event: TeamEvent) => {
-    const handled = await deps.ruleEngine.process(event);
-    if (!handled) {
+    try {
+      const handled = await deps.ruleEngine.process(event);
+      if (!handled) {
+        await deps.queue.enqueue(event);
+      }
+    } catch (err) {
+      // 规则执行异常 → fail-open，事件入队交给 Coordinator
+      deps.logger.error({ err, eventId: event.id }, "规则引擎异常，事件 fail-open 入队");
       await deps.queue.enqueue(event);
     }
   };
@@ -189,10 +239,16 @@ export function createPipeline(deps: PipelineDeps) {
     connector.onEvent = onEvent;
   }
 
-  // 队列消费 → Coordinator
+  // 队列消费 → Coordinator（concurrency: 1，Coordinator 是单会话）
   deps.queue.consume(async (msg) => {
-    await deps.coordinator.processEvent(msg.payload as TeamEvent);
-  });
+    try {
+      await deps.coordinator.processEvent(msg.payload as TeamEvent);
+      msg.ack();
+    } catch (err) {
+      deps.logger.error({ err, msgId: msg.id }, "Coordinator 处理异常，消息 nack");
+      msg.nack();  // 重回队列，由 PersistentQueue 的 retry/dead-letter 机制处理
+    }
+  }, { concurrency: 1 });
 }
 ```
 
@@ -208,11 +264,15 @@ export function createPipeline(deps: PipelineDeps) {
 - 实现 pipeline.ts
 - 保留 legacy event-handlers 作为 fallback（通过 feature flag 切换）
 
+**退出标准**：100% 的 Lark/Meego 事件成功产出 TeamEvent；新管道与 legacy 并行运行 48h 无错误；legacy fallback 处理 0 条事件。
+
 ### Phase 2：Primitives
 
-- 实现完整 CLI 子命令（worker, lark, meego, memory, rule, queue, git, report）
+- 实现完整 CLI 子命令（worker, lark, meego, memory, rule, queue, git, report, health）
 - 实现对应的 server routes
 - 编写所有 Skill 文档
+
+**退出标准**：所有 CLI 子命令通过集成测试；Coordinator 可通过 CLI 完成完整的事件处理流程（spawn worker → 接收结果 → 通知用户）。
 
 ### Phase 3：Coordinator 切换
 
@@ -221,6 +281,9 @@ export function createPipeline(deps: PipelineDeps) {
 - 切换 Coordinator 到新管道
 - 验证稳定后删除 legacy 代码
 
+**退出标准**：Coordinator 使用新管道处理 100+ 事件无异常；Worker spawn/完成/异常全流程验证通过；手动测试主要场景（Meego 工单处理、Lark 消息响应、Worker 异常恢复）。
+**回滚**：Phase 1 的 feature flag 在整个 Phase 3 期间保持可用。切换失败时翻转 flag 回退到 legacy 路径。
+
 ### Phase 4：清理
 
 - 拆分 sidecar → worker/ + context/
@@ -228,6 +291,8 @@ export function createPipeline(deps: PipelineDeps) {
 - 删除 IntentClassifier
 - 删除 event-handlers.ts、diagnosis-handler.ts 等废弃文件
 - 清理 meego 包（移除 connector、confirmation、event-bus）
+
+**退出标准**：所有测试通过；typecheck 通过；无 dead import 或 dead code。
 
 ---
 

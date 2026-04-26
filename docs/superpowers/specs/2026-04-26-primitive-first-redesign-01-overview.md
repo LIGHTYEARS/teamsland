@@ -53,18 +53,21 @@ Worker Agents（Claude Code CLI，隔离 Git Worktree）
 ### 结构定义
 
 ```typescript
-interface TeamEvent {
+interface TeamEvent<P = Record<string, unknown>> {
   // === 身份 ===
   id: string;              // 全局唯一 ID
   timestamp: number;       // Unix ms
 
   // === 来源 ===
-  source: "lark" | "meego" | "worker" | "system";
+  source: string;          // 事件源标识："lark" | "meego" | "worker" | "system" | 自定义
   sourceEvent: string;     // 原始事件类型，不做映射
                            // lark: "mention" | "dm" | "group_message"
                            // meego: "issue.created" | "issue.updated" | "status.changed" | ...
                            // worker: "completed" | "failed" | "anomaly" | "progress"
                            // system: "rule.created" | "startup" | "scheduled"
+
+  // === 关联 ===
+  correlationId?: string;  // 原始触发事件 ID（用于追溯事件因果链）
 
   // === 上下文 ===
   context: {
@@ -77,14 +80,21 @@ interface TeamEvent {
   };
 
   // === 负载 ===
-  payload: Record<string, unknown>;  // 原始负载，不裁剪不变形
+  payload: P;              // 原始负载，泛型支持消费端类型 narrow
 }
+```
+
+传输和存储层使用 `TeamEvent`（默认 `P = Record<string, unknown>`），消费端按需 narrow：
+```typescript
+// 例：处理 Lark mention 时
+function handleLarkMention(event: TeamEvent<LarkMentionPayload>) { ... }
 ```
 
 ### 设计原则
 
-1. **source + sourceEvent 分离**：`source` 标识来源系统，`sourceEvent` 保留原始事件语义。Lark @mention = `{source: "lark", sourceEvent: "mention"}`，不被变成 "issue.created"。
-2. **payload 不变形**：Connector 把原始数据放进 payload，不做字段重命名或裁剪。Coordinator 看到的是原始信息。
-3. **context 是公共索引字段**：从 payload 中提取高频查询字段放到 context 层，方便规则引擎匹配和日志检索，但不替代 payload。
-4. **Worker 事件也是 TeamEvent**：Worker 完成/失败/异常统一为 `{source: "worker", sourceEvent: "completed|failed|anomaly"}`，Coordinator 像处理其他事件一样处理。
-5. **可扩展**：新事件源只需新增 `source` 值，`sourceEvent` 自由定义，不需改核心类型。
+1. **source + sourceEvent 分离**：`source` 标识来源系统（`string` 类型，方便扩展新事件源），`sourceEvent` 保留原始事件语义。Lark @mention = `{source: "lark", sourceEvent: "mention"}`，不被变成 "issue.created"。
+2. **payload 泛型**：传输/存储层使用无约束的 `TeamEvent`，消费端通过 `TeamEvent<SpecificPayload>` 获得类型安全。Connector 把原始数据放进 payload，不做字段重命名或裁剪。
+3. **context 是 Connector 提取的公共索引字段**：Connector 在转换为 TeamEvent 时从原始数据中提取少量公共字段（chatId、projectKey 等）到 context 层。这是 transport-level 的字段提取，不是语义处理。方便规则引擎匹配和日志检索，但不替代 payload。
+4. **correlationId 追溯因果链**：Worker 事件通过 `correlationId` 指向触发它的原始事件 ID。例如：Coordinator 因事件 E1 spawn 了 Worker W1，W1 完成时产出的事件 E2 携带 `correlationId: E1.id`。
+5. **Worker 事件也是 TeamEvent**：Worker 完成/失败/异常统一为 `{source: "worker", sourceEvent: "completed|failed|anomaly"}`，Coordinator 像处理其他事件一样处理。
+6. **可扩展**：新事件源只需实现 Connector 接口，`source` 使用新字符串值，`sourceEvent` 自由定义。

@@ -94,7 +94,9 @@ allowed-tools: Bash(teamsland meego *)
 
 ### 第三层：Workflows（流程模板）
 
-描述常见场景的推荐处理流程。非强制——Coordinator 可根据上下文偏离。在 `.claude/workflows/` 下。
+描述常见场景的推荐处理流程。非强制——Coordinator 可根据上下文偏离。
+
+**加载方式**：所有 Workflow 文件全量注入 Coordinator 工作区的 `.claude/workflows/` 目录。Claude Code 按需读取。6 个 Workflow 约 1200 词，在 context window 预算内可控。
 
 ```
 workflows/
@@ -167,16 +169,17 @@ Coordinator 输出（自然语言推理 + CLI 调用）
 
 ### 会话复用策略
 
-简化判断：
+简化判断，但保留防御性安全阈值：
 
 ```typescript
 function shouldReuseSession(session: CoordinatorSession): boolean {
   return session.state === "idle"
-    && Date.now() - session.lastActiveAt < SESSION_TIMEOUT;
+    && Date.now() - session.lastActiveAt < SESSION_TIMEOUT
+    && session.processedEvents < MAX_EVENTS_BEFORE_RESET;  // 如 50
 }
 ```
 
-去掉 chatId 匹配、processedEvents 限制、priority 检查——Coordinator 有上下文，自己判断。
+去掉 chatId 匹配和 priority 检查。保留 `processedEvents` 计数作为防御性阈值——长会话即使有 Claude Code compaction 也可能退化，超过阈值强制新建会话。
 
 ### 事件传递格式
 
@@ -249,3 +252,24 @@ Worker 生命周期事件走完全相同的通道：
 - lark-greeting: 命中 12 次
 - sprint-reminder: 命中 2 次
 ```
+
+### 动态上下文容量控制
+
+Server 注入运行时上下文时强制 cap：
+- **Running Workers**：最多 10 条，超出摘要为 "+ N more workers"
+- **Recent Events**：最多 10 条
+- **Active Rules**：最多 20 条
+
+定义 `MAX_CONTEXT_TOKENS` 常量（如 2000 tokens），server 在注入前度量并截断。
+
+### 队列优先级
+
+保留轻量 **3-tier** 队列优先级。这是基础设施排序，不是语义决策——确保紧急事件不被低优先级事件堵塞。
+
+| Tier | 事件类型 | 说明 |
+|------|---------|------|
+| **critical** (0) | `worker.anomaly`, `worker.failed`, `system.*` | 需要立即响应的异常 |
+| **normal** (1) | `lark.mention`, `lark.dm`, `meego.issue.*`, `worker.completed` | 常规事件 |
+| **background** (2) | `meego.status.changed`, `worker.progress` | 低优先级状态更新 |
+
+Connector 在构建 TeamEvent 时根据 `source + sourceEvent` 设置 tier。这是一个简单的 2 行 lookup，不是决策逻辑——Coordinator 仍然是所有事件的唯一决策者。
