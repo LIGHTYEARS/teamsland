@@ -1,6 +1,36 @@
-import type { LlmClient, LlmMessage, LlmResponse, LlmToolDef } from "@teamsland/memory";
 import { createLogger } from "@teamsland/observability";
 import type { LlmConfig } from "@teamsland/types";
+
+/** LLM 消息 */
+export interface LlmMessage {
+  role: "system" | "user" | "assistant" | "tool";
+  content: string;
+  toolCallId?: string;
+}
+
+/** LLM 工具定义 */
+export interface LlmToolDef {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
+
+/** LLM 工具调用 */
+interface LlmToolCall {
+  name: string;
+  args: Record<string, unknown>;
+}
+
+/** LLM 响应 */
+export interface LlmResponse {
+  content: string;
+  toolCalls?: LlmToolCall[];
+}
+
+/** LLM 客户端接口 */
+export interface LlmClient {
+  chat(messages: LlmMessage[], tools?: LlmToolDef[]): Promise<LlmResponse>;
+}
 
 const logger = createLogger("server:llm");
 
