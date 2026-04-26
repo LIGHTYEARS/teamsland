@@ -122,7 +122,6 @@ import { getVikingClient, initViking } from "./init/viking.js";
       await sidecar.registry.persist();
       queue.close();
       storage.sessionDb.close();
-      storage.memoryStore.close();
       logger.info("优雅关闭完成");
       process.exit(0);
     };
