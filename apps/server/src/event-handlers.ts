@@ -390,7 +390,7 @@ async function spawnAgent(
   const prompt = await deps.assembler.buildInitialPrompt(taskConfig, deps.teamId);
   logger.info({ issueId: event.issueId, promptLength: prompt.length }, "初始提示词组装完成");
 
-  // 6. 启动 Agent 子进程
+  // 5. 启动 Agent 子进程
   const spawnResult = await deps.processController.spawn({
     issueId: event.issueId,
     worktreePath,
@@ -398,7 +398,7 @@ async function spawnAgent(
   });
   logger.info({ issueId: event.issueId, pid: spawnResult.pid, sessionId: spawnResult.sessionId }, "Agent 子进程已启动");
 
-  // 7. 注册到注册表 + 启动数据平面流
+  // 6. 注册到注册表 + 启动数据平面流
   const registered = await registerAgent(deps, {
     agentId,
     pid: spawnResult.pid,
