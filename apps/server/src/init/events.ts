@@ -4,7 +4,6 @@ import type { HookContext, HookEngine, HookMetricsCollector } from "@teamsland/h
 import { LarkConnector } from "@teamsland/lark";
 import { MeegoConnector, MeegoEventBus } from "@teamsland/meego";
 import type { IVikingMemoryClient } from "@teamsland/memory";
-import { TeamMemoryStore } from "@teamsland/memory";
 import type { createLogger } from "@teamsland/observability";
 import type { EnqueueOptions } from "@teamsland/queue";
 import { PersistentQueue } from "@teamsland/queue";
@@ -105,9 +104,6 @@ export async function initEvents(
     config,
     teamId: TEAM_ID,
     documentParser: context.documentParser,
-    memoryStore: storage.memoryStore instanceof TeamMemoryStore ? storage.memoryStore : null,
-    extractLoop: context.extractLoop,
-    memoryUpdater: context.memoryUpdater,
     confirmationWatcher: context.confirmationWatcher,
     coordinatorManager: null,
     interruptController: sidecar.interruptController ?? null,
