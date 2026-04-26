@@ -7,6 +7,9 @@
 │  ① CLAUDE.md — 角色 + 决策框架      │  始终加载
 │     "你是谁、怎么思考"               │
 ├─────────────────────────────────────┤
+│  ①' .claude/rules/ — 运营知识       │  始终加载（Claude Code 原生）
+│     repo mapping, chat mapping...   │
+├─────────────────────────────────────┤
 │  ② Skills — Primitive 使用指引       │  按需加载
 │     "每个工具怎么用"                 │
 ├─────────────────────────────────────┤
@@ -14,6 +17,8 @@
 │     "常见场景推荐怎么做"              │
 └─────────────────────────────────────┘
 ```
+
+**① 和 ①' 的分工**：CLAUDE.md 放稳定的角色定义和决策框架（极少变更），`.claude/rules/` 放可变的运营知识（Coordinator 可自行更新）。两者都由 Claude Code 原生自动加载，物理分离但逻辑上同属"始终加载的上下文"。
 
 ### 第一层：CLAUDE.md（角色 + 决策框架）
 
@@ -48,6 +53,53 @@
 ```
 
 `{{...}}` 是动态注入的运行时上下文，server 构建 prompt 时填充。
+
+### 第 ①' 层：.claude/rules/（运营知识）
+
+利用 Claude Code 原生的 `.claude/rules/` 目录，存放 Coordinator 需要的可变运营知识。这些 `.md` 文件被 Claude Code 自动加载到上下文，无需额外代码。
+
+```
+.claude/rules/
+├── repo-mapping.md          # projectKey → 本地 repo 路径
+├── chat-project-mapping.md  # Lark chatId → projectKey
+├── team-directory.md        # 团队成员信息（谁负责什么）
+└── operational-notes.md     # 运营备忘（如某项目正在 freeze）
+```
+
+示例 `repo-mapping.md`：
+
+```markdown
+# Repo Mapping
+
+当需要 spawn Worker 时，根据 projectKey 使用对应的本地仓库路径：
+
+| projectKey | 本地路径 | 说明 |
+|-----------|---------|------|
+| FRONTEND | /Users/dev/repos/frontend | 前端主仓库 |
+| BACKEND | /Users/dev/repos/backend | 后端服务 |
+```
+
+示例 `chat-project-mapping.md`：
+
+```markdown
+# Chat-Project Mapping
+
+Lark 群聊与项目的对应关系，处理群消息时参考：
+
+| chatId | projectKey | 群名 |
+|--------|-----------|------|
+| oc_abc123 | FRONTEND | 前端开发群 |
+| oc_def456 | BACKEND | 后端开发群 |
+```
+
+**设计要点**：
+
+- **零代码**：不需要实现配置管理命令，Claude Code 原生加载
+- **可自维护**：Coordinator 有 Read/Edit 工具，发现新项目或群聊映射时可自行更新
+- **人也能编辑**：纯 markdown，团队成员可直接修改
+- **关注点分离**：CLAUDE.md 放角色定义（稳定），rules/ 放运营配置（可变）
+
+**与 Worker 的区别**：Coordinator 的 `.claude/rules/` 放运营知识（repo mapping 等）。Worker 在 Git Worktree 中运行，读取的是项目仓库自带的 `.claude/rules/`（代码规范等），两者互不干扰。
 
 ### 第二层：Skills（Primitive 使用指引）
 
@@ -160,7 +212,9 @@ Server 不做的事（全交 Coordinator）：
 有活跃 Coordinator 会话？
   ├── 是 → continue（claude --continue <sessionId> -p <prompt>）
   └── 否 → spawn 新会话（claude -p <prompt>）
-           注入 CLAUDE.md + Skills + Workflows + 运行时上下文
+           CLAUDE.md + .claude/rules/ 自动加载
+           Skills + Workflows 注入工作区
+           运行时上下文动态注入
     ↓
 Coordinator 输出（自然语言推理 + CLI 调用）
     ↓
@@ -227,7 +281,7 @@ Worker 生命周期事件走完全相同的通道：
 | `worker-handlers.ts` 升级瀑布 | 整个瀑布，Worker 事件统一入队 |
 | `coordinator-event-mapper.ts` PRIORITY_MAP | Coordinator 自行判断优先级 |
 | `coordinator-event-mapper.ts` PAYLOAD_EXTRACTORS | payload 直接透传 |
-| `lark/connector.ts` chatProjectMapping | 移到 Coordinator Prompt 上下文 |
+| `lark/connector.ts` chatProjectMapping | 移到 `.claude/rules/chat-project-mapping.md` |
 | `lark/connector.ts` isLarkMention | Coordinator 从 payload 判断 |
 | `meego/connector.ts` work_item_type 过滤 | 全部投递 |
 

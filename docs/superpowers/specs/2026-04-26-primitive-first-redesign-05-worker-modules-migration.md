@@ -125,6 +125,7 @@ packages/
 ├── context/            # 简化：Worker 上下文组装
 │   ├── claude-md-injector.ts
 │   ├── skill-injector.ts
+│   ├── rules-injector.ts       # 管理 .claude/rules/ 运营知识文件
 │   └── role-resolver.ts        # 按 role 解析额外 skills
 │
 ├── memory/             # 不变
