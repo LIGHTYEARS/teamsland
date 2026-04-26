@@ -5,14 +5,12 @@ import { DynamicContextAssembler } from "@teamsland/context";
 import { BunCommandRunner as GitBunCommandRunner, WorktreeManager } from "@teamsland/git";
 import { DocumentParser } from "@teamsland/ingestion";
 import { ConfirmationWatcher } from "@teamsland/meego";
-import { ExtractLoop, MemoryUpdater, TeamMemoryStore } from "@teamsland/memory";
 import type { createLogger } from "@teamsland/observability";
 import type { AppConfig, LlmConfig } from "@teamsland/types";
 import { AnthropicLlmClient } from "../llm-client.js";
 import type { LarkResult } from "./lark.js";
 import type { SidecarResult } from "./sidecar.js";
 import type { StorageResult } from "./storage.js";
-import { TEAM_ID } from "./storage.js";
 
 /**
  * 业务上下文初始化结果
@@ -34,10 +32,6 @@ export interface ContextResult {
   llmClient: { chat(messages: unknown[], tools?: unknown[]): Promise<{ content: string }> };
   /** 文档解析器 */
   documentParser: DocumentParser;
-  /** 记忆更新器（NullMemoryStore 时为 null） */
-  memoryUpdater: MemoryUpdater | null;
-  /** 记忆提取循环（LLM 未配置或 NullMemoryStore 时为 null） */
-  extractLoop: ExtractLoop | null;
   /** Git Worktree 管理器 */
   worktreeManager: WorktreeManager;
   /** 人工确认监视器 */
@@ -65,7 +59,7 @@ function buildLlmStack(llmConfig: LlmConfig | undefined, logger: ReturnType<type
     logger.info({ model: llmConfig.model }, "AnthropicLlmClient 已初始化");
     return { llmClient: client };
   }
-  logger.warn("LLM 未配置，ExtractLoop 将不可用");
+  logger.warn("LLM 未配置");
   const stub = {
     async chat(): Promise<{ content: string }> {
       throw new Error("LLM 未配置 — 需要在配置中添加 API 密钥和模型端点");
@@ -81,7 +75,7 @@ function buildLlmStack(llmConfig: LlmConfig | undefined, logger: ReturnType<type
  * - RepoMapping — 仓库映射
  * - DynamicContextAssembler — 动态上下文组装
  * - LLM 客户端 — 条件初始化
- * - DocumentParser + MemoryUpdater + ExtractLoop — 文档解析与记忆管线
+ * - DocumentParser — 文档解析
  * - WorktreeManager — Git worktree 管理
  * - ConfirmationWatcher — 人工确认监视
  *
@@ -114,25 +108,13 @@ export function initContext(
   const assembler = new DynamicContextAssembler({
     config,
     repoMapping,
-    memoryStore: storage.memoryStore,
-    embedder: storage.embedder,
   });
 
   // LLM 客户端（条件初始化）
   const { llmClient } = buildLlmStack(config.llm, logger);
 
-  // DocumentParser + Memory Ingestion
+  // DocumentParser
   const documentParser = new DocumentParser();
-  const memoryUpdater = storage.memoryStore instanceof TeamMemoryStore ? new MemoryUpdater(storage.memoryStore) : null;
-  const extractLoop =
-    storage.memoryStore instanceof TeamMemoryStore
-      ? new ExtractLoop({
-          llm: llmClient as never,
-          store: storage.memoryStore,
-          teamId: TEAM_ID,
-          maxIterations: config.memory.extractLoopMaxIterations,
-        })
-      : null;
 
   // WorktreeManager
   const worktreeManager = new WorktreeManager(new GitBunCommandRunner());
@@ -151,8 +133,6 @@ export function initContext(
     assembler,
     llmClient,
     documentParser,
-    memoryUpdater,
-    extractLoop,
     worktreeManager,
     confirmationWatcher,
   };
