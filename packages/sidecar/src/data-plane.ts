@@ -185,7 +185,22 @@ export class SidecarDataPlane {
       }
       case "result": {
         await this.appendToSession(agentId, event);
-        this.updateStatus(agentId, "completed");
+        const stopReason = event.stop_reason as string | undefined;
+        const numTurns = event.num_turns as number | undefined;
+        const costUsd = event.total_cost_usd as number | undefined;
+        const durationMs = event.duration_ms as number | undefined;
+        const terminalReason = event.terminal_reason as string | undefined;
+
+        if (stopReason === "tool_use") {
+          this.logger.warn(
+            { agentId, stopReason, numTurns, costUsd, durationMs, terminalReason },
+            "Worker 在 tool_use 中途被截断退出，任务可能未完成",
+          );
+          this.updateStatus(agentId, "failed");
+        } else {
+          this.logger.info({ agentId, stopReason, numTurns, costUsd, durationMs, terminalReason }, "Worker 完成");
+          this.updateStatus(agentId, "completed");
+        }
         break;
       }
       case "error": {

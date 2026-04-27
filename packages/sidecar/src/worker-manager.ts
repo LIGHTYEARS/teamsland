@@ -19,6 +19,7 @@ export interface WorkerManagerOpts {
   workerSystemPromptPath: string;
   defaultAllowedTools: string[];
   maxBudgetPerWorker?: number;
+  resultTimeoutMs?: number;
 }
 
 export interface SpawnWorkerParams {
@@ -48,6 +49,7 @@ export class WorkerManager {
   private readonly workerSystemPromptPath: string;
   private readonly defaultAllowedTools: string[];
   private readonly maxBudgetPerWorker: number;
+  private readonly resultTimeoutMs: number;
 
   private readonly activeProcesses = new Map<string, CliProcess>();
   private workerEventCallback: ((event: WorkerEvent) => void) | null = null;
@@ -60,6 +62,7 @@ export class WorkerManager {
     this.workerSystemPromptPath = opts.workerSystemPromptPath;
     this.defaultAllowedTools = opts.defaultAllowedTools;
     this.maxBudgetPerWorker = opts.maxBudgetPerWorker ?? 2.0;
+    this.resultTimeoutMs = opts.resultTimeoutMs ?? 2 * 60 * 60 * 1000;
   }
 
   onWorkerEvent(callback: (event: WorkerEvent) => void): void {
@@ -104,6 +107,7 @@ export class WorkerManager {
       sessionId: workerId,
       args: cliArgs,
       spawnFn: this.spawnFn,
+      resultTimeoutMs: this.resultTimeoutMs,
     });
 
     this.activeProcesses.set(workerId, cli);
