@@ -86,4 +86,44 @@ describe("ticket routes", () => {
       expect(res?.status).toBe(400);
     });
   });
+
+  describe("extended TicketRecord fields", () => {
+    it("create stores eventType from parameter", () => {
+      store.create("ISSUE-1", "evt-001", "meego_issue_created");
+      const record = store.get("ISSUE-1");
+      expect(record?.eventType).toBe("meego_issue_created");
+    });
+
+    it("create defaults eventType to 'unknown' when not provided", () => {
+      store.create("ISSUE-2", "evt-002");
+      const record = store.get("ISSUE-2");
+      expect(record?.eventType).toBe("unknown");
+    });
+
+    it("history starts empty on create", () => {
+      store.create("ISSUE-1", "evt-001", "meego_issue_created");
+      const record = store.get("ISSUE-1");
+      expect(record?.history).toEqual([]);
+    });
+
+    it("transition appends to history", () => {
+      store.create("ISSUE-1", "evt-001", "meego_issue_created");
+      store.transition("ISSUE-1", "enriching");
+      const record = store.get("ISSUE-1");
+      expect(record?.history).toHaveLength(1);
+      expect(record?.history[0].from).toBe("received");
+      expect(record?.history[0].to).toBe("enriching");
+      expect(record?.history[0].timestamp).toBeGreaterThan(0);
+    });
+
+    it("multiple transitions build full history", () => {
+      store.create("ISSUE-1", "evt-001", "meego_issue_created");
+      store.transition("ISSUE-1", "enriching");
+      store.transition("ISSUE-1", "triaging");
+      store.transition("ISSUE-1", "ready");
+      const record = store.get("ISSUE-1");
+      expect(record?.history).toHaveLength(3);
+      expect(record?.history.map((h: { to: string }) => h.to)).toEqual(["enriching", "triaging", "ready"]);
+    });
+  });
 });
