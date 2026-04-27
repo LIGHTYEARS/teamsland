@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { performance } from "node:perf_hooks";
 import { createLogger } from "@teamsland/observability";
 import type { EnqueueFn, MeegoConfig, MeegoEvent, MeegoEventType } from "@teamsland/types";
 import type { MeegoEventBus } from "./event-bus.js";
@@ -223,12 +224,18 @@ export class MeegoConnector {
    */
   private async dispatchEvent(event: MeegoEvent): Promise<void> {
     if (this.enqueue) {
+      const dispatchStart = performance.now();
       try {
         this.enqueue({
           type: mapEventTypeToQueueType(event.type),
           payload: { event },
           traceId: event.eventId,
         });
+        const dispatchMs = Math.round(performance.now() - dispatchStart);
+        logger.info(
+          { eventId: event.eventId, type: mapEventTypeToQueueType(event.type), dispatchMs },
+          "Meego 事件已入队",
+        );
       } catch (err: unknown) {
         logger.error({ err, eventId: event.eventId }, "队列入队失败，回退到 EventBus");
       }

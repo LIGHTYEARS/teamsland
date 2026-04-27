@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import { createLogger } from "@teamsland/observability";
 import type { EnqueueFn, LarkConnectorConfig, MeegoEvent } from "@teamsland/types";
 import type { LarkCli } from "./lark-cli.js";
@@ -217,7 +218,9 @@ export class LarkConnector {
       `收到${logLabel}消息`,
     );
 
+    const enrichStart = performance.now();
     const event = await this.buildBridgeEvent(mention);
+    const enrichMs = Math.round(performance.now() - enrichStart);
     if (!event) return;
 
     const queueType = mention.chatType === "p2p" ? "lark_dm" : "lark_mention";
@@ -236,7 +239,7 @@ export class LarkConnector {
         priority: "high",
         traceId: event.eventId,
       });
-      logger.info({ eventId: event.eventId, type: queueType }, "Lark 消息已入队到 PersistentQueue");
+      logger.info({ eventId: event.eventId, type: queueType, enrichMs }, "Lark 消息已入队到 PersistentQueue");
     } catch (err: unknown) {
       logger.error({ err, eventId: event.eventId }, "消息入队失败");
     }
