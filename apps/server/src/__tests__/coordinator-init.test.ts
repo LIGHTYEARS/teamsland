@@ -118,25 +118,28 @@ describe("initCoordinatorWorkspace", () => {
     expect(existsSync(join(workspacePath, ".claude", "skills", "meego-query", "SKILL.md"))).toBe(true);
   });
 
-  it("幂等性：第二次运行不覆盖已有文件", async () => {
+  it("版本化更新：.md 文件内容变更时自动更新并备份旧版", async () => {
     const workspacePath = join(testDir, "coordinator");
     const config = createMinimalConfig(workspacePath);
 
     // 第一次初始化
     await initCoordinatorWorkspace(config);
-    const firstClaudeMd = readFileSync(join(workspacePath, "CLAUDE.md"), "utf-8");
 
-    // 手动修改文件
+    // 手动修改文件（模拟旧版本内容）
     const customContent = "# Custom Content\n用户自定义内容";
     await Bun.write(join(workspacePath, "CLAUDE.md"), customContent);
 
-    // 第二次初始化
+    // 第二次初始化 — .md 文件应被版本化更新
     await initCoordinatorWorkspace(config);
     const secondClaudeMd = readFileSync(join(workspacePath, "CLAUDE.md"), "utf-8");
 
-    // 文件应保持用户修改后的内容
-    expect(secondClaudeMd).toBe(customContent);
-    expect(secondClaudeMd).not.toBe(firstClaudeMd);
+    // .md 文件应被更新为最新模板内容（带 content hash）
+    expect(secondClaudeMd).toContain("teamsland-content-hash:");
+    expect(secondClaudeMd).not.toBe(customContent);
+
+    // 旧版本应被备份
+    const backupDir = join(workspacePath, ".backup");
+    expect(existsSync(backupDir)).toBe(true);
   });
 
   it("CLAUDE.md 包含 repoMapping 数据", async () => {
