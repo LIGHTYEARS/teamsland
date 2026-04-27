@@ -60,6 +60,8 @@ export function ChatInterface({
           ) : (
             messages.map((msg) => {
               if (pairedResultIds.has(msg.id)) return null;
+              // Hide internal status messages (from system JSONL entries) — they clutter the chat
+              if (msg.kind === "status") return null;
               const toolResult = msg.kind === "tool_use" && msg.toolId ? toolResultMap.get(msg.toolId) : undefined;
               return (
                 <MessageBubble

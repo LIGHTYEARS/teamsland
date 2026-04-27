@@ -44,9 +44,9 @@ export function MessageInput({
             <button
               type="button"
               onClick={onAbort}
-              className="inline-flex items-center gap-1.5 rounded-md bg-destructive px-3 py-1.5 text-xs font-medium text-destructive-foreground hover:bg-destructive/90 transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-accent transition-colors"
             >
-              <Square className="size-3" />
+              <Square className="size-2.5 fill-current" />
               停止
             </button>
           ) : (
