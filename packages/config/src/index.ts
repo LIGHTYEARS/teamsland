@@ -5,3 +5,4 @@ export { resolveEnvVars } from "./env.js";
 export { loadConfig } from "./loader.js";
 export { RepoMapping } from "./repo-mapping.js";
 export { AppConfigSchema } from "./schema.js";
+export { type ValidationResult, validateConfig } from "./validate.js";
