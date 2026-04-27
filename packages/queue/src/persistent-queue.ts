@@ -217,7 +217,8 @@ export class PersistentQueue {
 
     if (!row) return null;
 
-    logger.info({ id: row.id, type: row.type }, "消息已出队");
+    const dwellMs = Date.now() - row.created_at;
+    logger.info({ id: row.id, type: row.type, dwellMs }, "消息已出队");
     return this.mapRow(row);
   }
 
@@ -272,10 +273,14 @@ export class PersistentQueue {
   ack(messageId: string): void {
     this.assertNotClosed();
     const now = Date.now();
+    const row = this.db.prepare("SELECT processing_at FROM messages WHERE id = ?").get(messageId) as {
+      processing_at: number | null;
+    } | null;
     this.db
       .prepare("UPDATE messages SET status = 'completed', updated_at = ?, processing_at = NULL WHERE id = ?")
       .run(now, messageId);
-    logger.info({ id: messageId }, "消息已确认完成");
+    const processingMs = row?.processing_at ? now - row.processing_at : undefined;
+    logger.info({ id: messageId, processingMs }, "消息已确认完成");
   }
 
   /**
@@ -297,8 +302,8 @@ export class PersistentQueue {
     const now = Date.now();
 
     const row = this.db
-      .prepare("SELECT retry_count, max_retries, type FROM messages WHERE id = ?")
-      .get(messageId) as Pick<RawMessageRow, "retry_count" | "max_retries" | "type"> | null;
+      .prepare("SELECT retry_count, max_retries, type, created_at FROM messages WHERE id = ?")
+      .get(messageId) as Pick<RawMessageRow, "retry_count" | "max_retries" | "type" | "created_at"> | null;
 
     if (!row) {
       logger.warn({ id: messageId }, "nack: 消息不存在");
@@ -313,7 +318,11 @@ export class PersistentQueue {
           "UPDATE messages SET status = 'dead', retry_count = ?, last_error = ?, updated_at = ?, processing_at = NULL WHERE id = ?",
         )
         .run(newRetryCount, error, now, messageId);
-      logger.warn({ id: messageId, retryCount: newRetryCount, lastError: error }, "消息超过最大重试次数，进入死信队列");
+      const totalLifetimeMs = Date.now() - row.created_at;
+      logger.warn(
+        { id: messageId, retryCount: newRetryCount, maxRetries: row.max_retries, totalLifetimeMs, lastError: error },
+        "消息超过最大重试次数，进入死信队列",
+      );
       this.deadLetterCallback?.({ id: messageId, type: row.type, lastError: error });
     } else {
       this.db
@@ -425,9 +434,9 @@ export class PersistentQueue {
     const recovered = this.db.transaction(() => {
       const rows = this.db
         .prepare(
-          "SELECT id, retry_count, max_retries, type FROM messages WHERE status = 'processing' AND processing_at <= ?",
+          "SELECT id, retry_count, max_retries, type, created_at FROM messages WHERE status = 'processing' AND processing_at <= ?",
         )
-        .all(threshold) as Pick<RawMessageRow, "id" | "retry_count" | "max_retries" | "type">[];
+        .all(threshold) as Pick<RawMessageRow, "id" | "retry_count" | "max_retries" | "type" | "created_at">[];
 
       let count = 0;
       for (const row of rows) {
@@ -439,7 +448,7 @@ export class PersistentQueue {
               "UPDATE messages SET status = 'dead', retry_count = ?, last_error = ?, updated_at = ?, processing_at = NULL WHERE id = ?",
             )
             .run(newRetryCount, "visibility timeout exceeded", now, row.id);
-          logger.warn({ id: row.id }, "超时消息进入死信队列");
+          logger.warn({ id: row.id, retryCount: newRetryCount }, "超时消息进入死信队列");
           deadLettered.push({ id: row.id, type: row.type });
         } else {
           this.db
