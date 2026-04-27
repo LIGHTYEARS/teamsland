@@ -181,4 +181,57 @@ describe("SkillInjector", () => {
     // worktreePath 存在但没有 .claude/skills/
     await expect(injector.cleanup(worktreePath)).resolves.toBeUndefined();
   });
+
+  it("inject: core skills 在 taskType 无路由时仍被注入", async () => {
+    // 创建 teamsland-report skill 源目录
+    const teamslandReportDir = join(skillSourceDir, "teamsland-report");
+    await mkdir(teamslandReportDir, { recursive: true });
+    await Bun.write(join(teamslandReportDir, "SKILL.md"), "# teamsland-report\n上报结果");
+
+    const injector = new SkillInjector({
+      skills: [
+        { name: "lark-reply", sourcePath: join(skillSourceDir, "lark-reply") },
+        { name: "teamsland-report", sourcePath: teamslandReportDir },
+      ],
+      routing: { coding: ["lark-reply"] }, // unknown_task 无路由
+      coreSkills: ["teamsland-report"],
+      logger: makeFakeLogger() as never,
+    });
+
+    const result = await injector.inject({
+      worktreePath,
+      taskType: "unknown_task",
+    });
+
+    expect(result.injected).toContain("teamsland-report");
+
+    const skillMd = Bun.file(join(worktreePath, ".claude", "skills", "teamsland-report", "SKILL.md"));
+    const exists = await skillMd.exists();
+    expect(exists).toBe(true);
+  });
+
+  it("inject: core skills 不重复注入已在路由中的 skill", async () => {
+    // 创建 teamsland-report skill 源目录
+    const teamslandReportDir = join(skillSourceDir, "teamsland-report");
+    await mkdir(teamslandReportDir, { recursive: true });
+    await Bun.write(join(teamslandReportDir, "SKILL.md"), "# teamsland-report\n上报结果");
+
+    const injector = new SkillInjector({
+      skills: [
+        { name: "lark-reply", sourcePath: join(skillSourceDir, "lark-reply") },
+        { name: "teamsland-report", sourcePath: teamslandReportDir },
+      ],
+      routing: { coding: ["lark-reply", "teamsland-report"] },
+      coreSkills: ["teamsland-report"],
+      logger: makeFakeLogger() as never,
+    });
+
+    const result = await injector.inject({
+      worktreePath,
+      taskType: "coding",
+    });
+
+    const teamslandReportCount = result.injected.filter((s) => s === "teamsland-report").length;
+    expect(teamslandReportCount).toBe(1);
+  });
 });

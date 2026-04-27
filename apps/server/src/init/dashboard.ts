@@ -63,6 +63,7 @@ function buildSkillInjector(config: AppConfig, logger: ReturnType<typeof createL
   return new SkillInjector({
     skills,
     routing: config.skillRouting,
+    coreSkills: ["teamsland-report"],
     logger,
   });
 }

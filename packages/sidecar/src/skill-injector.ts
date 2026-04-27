@@ -63,6 +63,8 @@ export interface SkillInjectorOpts {
   routing: SkillRouting;
   /** 日志实例 */
   logger: Logger;
+  /** 核心 Skill 名称列表，无论路由如何都会被注入 */
+  coreSkills?: string[];
 }
 
 /**
@@ -143,10 +145,12 @@ export class SkillInjector {
   private readonly skillMap: Map<string, SkillManifest>;
   private readonly routing: SkillRouting;
   private readonly logger: Logger;
+  private readonly coreSkills: string[];
 
   constructor(opts: SkillInjectorOpts) {
     this.routing = opts.routing;
     this.logger = opts.logger;
+    this.coreSkills = opts.coreSkills ?? [];
     this.skillMap = new Map<string, SkillManifest>();
     for (const skill of opts.skills) {
       this.skillMap.set(skill.name, skill);
@@ -198,6 +202,21 @@ export class SkillInjector {
       await this.writeMarker(targetDir);
       injected.push(name);
       this.logger.info({ skill: name, target: targetDir }, "Skill 注入完成");
+    }
+
+    // Core skill fallback: ensure core skills are always injected
+    for (const name of this.coreSkills) {
+      if (injected.includes(name)) continue;
+      const manifest = this.skillMap.get(name);
+      if (!manifest) {
+        this.logger.warn({ skill: name }, "Core skill 不在清单中");
+        continue;
+      }
+      const targetDir = join(skillsDir, name);
+      await this.copySkillDir(manifest.sourcePath, targetDir);
+      await this.writeMarker(targetDir);
+      injected.push(name);
+      this.logger.info({ skill: name, target: targetDir }, "Core skill 兜底注入");
     }
 
     this.logger.info({ taskType: req.taskType, injected, skipped }, "Skill 注入批次完成");
