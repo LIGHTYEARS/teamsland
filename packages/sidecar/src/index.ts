@@ -8,6 +8,8 @@ export type { Anomaly, AnomalyDetectorOpts, AnomalyType } from "./anomaly-detect
 export { AnomalyDetector } from "./anomaly-detector.js";
 export type { ClaudeMdContext } from "./claude-md-injector.js";
 export { ClaudeMdInjector } from "./claude-md-injector.js";
+export type { AssistantEvent, CliProcessOpts, ResultEvent, StreamEvent } from "./cli-process.js";
+export { CliProcess } from "./cli-process.js";
 export type { InterceptedTool, RawEventListener, SidecarEventType } from "./data-plane.js";
 export { SidecarDataPlane } from "./data-plane.js";
 export type { InterruptRequest, InterruptResult } from "./interrupt-controller.js";
