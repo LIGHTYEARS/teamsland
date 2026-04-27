@@ -100,7 +100,7 @@ export interface FindOptions {
  * ```
  */
 export interface WriteOptions {
-  mode?: "replace" | "create";
+  mode?: "replace" | "create" | "append";
   wait?: boolean;
   timeout?: number;
 }
@@ -250,6 +250,22 @@ export interface TaskStatus {
   result?: Record<string, unknown>;
 }
 
+export interface GrepMatch {
+  uri: string;
+  line: number;
+  content: string;
+}
+
+export interface GrepResult {
+  matches: GrepMatch[];
+  count: number;
+}
+
+export interface GlobResult {
+  matches: string[];
+  count: number;
+}
+
 // ─── 接口 ───
 
 /**
@@ -281,6 +297,9 @@ export interface IVikingMemoryClient {
   ls(uri: string): Promise<FsEntry[]>;
   mkdir(uri: string, description?: string): Promise<void>;
   rm(uri: string, recursive?: boolean): Promise<void>;
+  mv(fromUri: string, toUri: string): Promise<void>;
+  grep(uri: string, pattern: string, opts?: { caseInsensitive?: boolean }): Promise<GrepResult>;
+  glob(pattern: string, uri?: string): Promise<GlobResult>;
   addResource(path: string, opts: AddResourceOptions): Promise<ResourceResult>;
   createSession(id?: string): Promise<string>;
   getSessionContext(id: string, tokenBudget?: number): Promise<SessionContext>;
@@ -434,6 +453,30 @@ export class VikingMemoryClient implements IVikingMemoryClient {
     });
   }
 
+  async mv(fromUri: string, toUri: string): Promise<void> {
+    logger.debug({ fromUri, toUri }, "mv 请求");
+    await this.request<unknown>("/api/v1/fs/mv", {
+      method: "POST",
+      body: JSON.stringify({ from_uri: fromUri, to_uri: toUri }),
+    });
+  }
+
+  async grep(uri: string, pattern: string, opts?: { caseInsensitive?: boolean }): Promise<GrepResult> {
+    logger.debug({ uri, pattern, opts }, "grep 请求");
+    return this.request<GrepResult>("/api/v1/search/grep", {
+      method: "POST",
+      body: JSON.stringify({ uri, pattern, case_insensitive: opts?.caseInsensitive }),
+    });
+  }
+
+  async glob(pattern: string, uri?: string): Promise<GlobResult> {
+    logger.debug({ pattern, uri }, "glob 请求");
+    return this.request<GlobResult>("/api/v1/search/glob", {
+      method: "POST",
+      body: JSON.stringify({ pattern, uri }),
+    });
+  }
+
   async addResource(path: string, opts: AddResourceOptions): Promise<ResourceResult> {
     logger.debug({ path, opts }, "addResource 请求");
     return this.request<ResourceResult>("/api/v1/resources", {
@@ -538,6 +581,18 @@ export class NullVikingMemoryClient implements IVikingMemoryClient {
 
   async rm(_uri: string, _recursive?: boolean): Promise<void> {
     // 空操作
+  }
+
+  async mv(_fromUri: string, _toUri: string): Promise<void> {
+    // 空操作
+  }
+
+  async grep(_uri: string, _pattern: string, _opts?: { caseInsensitive?: boolean }): Promise<GrepResult> {
+    return { matches: [], count: 0 };
+  }
+
+  async glob(_pattern: string, _uri?: string): Promise<GlobResult> {
+    return { matches: [], count: 0 };
   }
 
   async addResource(_path: string, _opts: AddResourceOptions): Promise<ResourceResult> {
