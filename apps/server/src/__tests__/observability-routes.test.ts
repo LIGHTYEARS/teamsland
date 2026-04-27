@@ -130,7 +130,7 @@ describe("handleObservabilityRoutes", () => {
       const queue = makeQueue({
         recentProcessed: vi.fn().mockReturnValue([
           { id: "msg-1", type: "lark_mention", status: "completed" },
-          { id: "msg-2", type: "meego_issue_created", status: "failed" },
+          { id: "msg-2", type: "meego_issue_created", status: "dead" },
         ]),
       });
       const result = handleObservabilityRoutes(

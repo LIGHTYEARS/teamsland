@@ -540,7 +540,7 @@ export class PersistentQueue {
   }
 
   /**
-   * 获取最近处理完成（completed 或 failed）的消息
+   * 获取最近处理完成（completed 或 dead）的消息
    */
   recentProcessed(limit = 20, types?: QueueMessageType[]): QueueMessage[] {
     this.assertNotClosed();
@@ -549,14 +549,14 @@ export class PersistentQueue {
       const placeholders = types.map(() => "?").join(",");
       const rows = this.db
         .prepare(
-          `SELECT * FROM messages WHERE status IN ('completed', 'failed') AND type IN (${placeholders}) ORDER BY updated_at DESC LIMIT ?`,
+          `SELECT * FROM messages WHERE status IN ('completed', 'dead') AND type IN (${placeholders}) ORDER BY updated_at DESC LIMIT ?`,
         )
         .all(...types, limit) as RawMessageRow[];
       return rows.map((row) => this.mapRow(row));
     }
 
     const rows = this.db
-      .prepare("SELECT * FROM messages WHERE status IN ('completed', 'failed') ORDER BY updated_at DESC LIMIT ?")
+      .prepare("SELECT * FROM messages WHERE status IN ('completed', 'dead') ORDER BY updated_at DESC LIMIT ?")
       .all(limit) as RawMessageRow[];
     return rows.map((row) => this.mapRow(row));
   }

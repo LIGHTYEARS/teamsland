@@ -73,8 +73,8 @@ async function handleUpdateContext(req: Request, issueId: string, deps: TicketRo
 function handleListTickets(url: URL, deps: TicketRouteDeps): Response {
   const stateParam = url.searchParams.get("state");
   const states = stateParam ? (stateParam.split(",") as TicketState[]) : undefined;
-  const limit = Number(url.searchParams.get("limit") ?? "200");
-  const offset = Number(url.searchParams.get("offset") ?? "0");
+  const limit = Number(url.searchParams.get("limit") ?? "200") || 200;
+  const offset = Number(url.searchParams.get("offset") ?? "0") || 0;
   return json(deps.ticketStore.listAll({ states, limit, offset }));
 }
 
@@ -100,7 +100,7 @@ function handleSingleTicket(req: Request, url: URL, deps: TicketRouteDeps): Rout
 }
 
 export function handleTicketRoutes(req: Request, url: URL, deps: TicketRouteDeps): RouteResult {
-  if (!url.pathname.startsWith("/api/ticket")) return null;
+  if (!url.pathname.startsWith("/api/ticket/") && url.pathname !== "/api/tickets") return null;
 
   // GET /api/tickets — list all tickets
   if (req.method === "GET" && url.pathname === "/api/tickets") return handleListTickets(url, deps);

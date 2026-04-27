@@ -17,12 +17,12 @@ function handleQueueRoutes(url: URL, deps: ObservabilityRouteDeps): Response | n
   }
 
   if (url.pathname === "/api/queue/dead-letters") {
-    const limit = Number(url.searchParams.get("limit") ?? "50");
+    const limit = Number(url.searchParams.get("limit") ?? "50") || 50;
     return jsonResponse(deps.queue.deadLetters(limit));
   }
 
   if (url.pathname === "/api/queue/recent") {
-    const limit = Number(url.searchParams.get("limit") ?? "20");
+    const limit = Number(url.searchParams.get("limit") ?? "20") || 20;
     const typeParam = url.searchParams.get("type");
     const types = typeParam ? (typeParam.split(",") as QueueMessageType[]) : undefined;
     return jsonResponse(deps.queue.recentProcessed(limit, types));
