@@ -27,15 +27,17 @@ export type AgentStatus = "running" | "completed" | "failed" | "interrupted" | "
  */
 export interface AgentOrigin {
   /** 飞书会话 ID */
-  chatId?: string;
+  chatId: string;
   /** 触发消息 ID */
   messageId?: string;
   /** 发送者用户 ID */
-  senderId?: string;
+  senderId: string;
+  /** 发送者用户名称 */
+  senderName?: string;
   /** 任务受理人用户 ID */
   assigneeId?: string;
   /** 来源渠道 */
-  source?: "meego" | "lark_mention" | "coordinator";
+  source: "meego" | "lark_mention" | "lark_dm" | "coordinator";
 }
 
 /**

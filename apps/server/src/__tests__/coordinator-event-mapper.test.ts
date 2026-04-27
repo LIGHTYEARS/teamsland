@@ -27,6 +27,9 @@ function makeMessage(type: string, payload: Record<string, unknown>, overrides?:
   };
 }
 
+/** 兼容旧名的别名（与 makeMessage 功能相同） */
+const createQueueMessage = makeMessage;
+
 describe("coordinator-event-mapper", () => {
   describe("类型映射", () => {
     it("lark_mention 映射为 lark_mention", () => {
@@ -114,16 +117,6 @@ describe("coordinator-event-mapper", () => {
       expect(event.type).toBe("worker_anomaly");
     });
 
-    it("diagnosis_ready 映射为 diagnosis_ready", () => {
-      const msg = makeMessage("diagnosis_ready", {
-        targetWorkerId: "w1",
-        observerWorkerId: "o1",
-        report: "诊断报告",
-      });
-      const event = toCoordinatorEvent(msg);
-      expect(event.type).toBe("diagnosis_ready");
-    });
-
     it("lark_dm 映射为 lark_dm", () => {
       const msg = makeMessage("lark_dm", {
         event: { eventId: "e1", issueId: "msg_dm", projectKey: "", type: "issue.created", payload: {}, timestamp: 0 },
@@ -176,15 +169,6 @@ describe("coordinator-event-mapper", () => {
         sessionId: "s1",
         issueId: "I1",
         resultSummary: "完成",
-      });
-      expect(toCoordinatorEvent(msg).priority).toBe(2);
-    });
-
-    it("diagnosis_ready 优先级为 2", () => {
-      const msg = makeMessage("diagnosis_ready", {
-        targetWorkerId: "w1",
-        observerWorkerId: "o1",
-        report: "报告",
       });
       expect(toCoordinatorEvent(msg).priority).toBe(2);
     });
@@ -341,7 +325,7 @@ describe("coordinator-event-mapper", () => {
       expect(event.payload.assigneeId).toBe("user-001");
     });
 
-    it("meego_issue_status_changed 提取 status 和 previousStatus", () => {
+    it("meego_issue_status_changed 提取 newStatus 和 oldStatus", () => {
       const msg = makeMessage("meego_issue_status_changed", {
         event: {
           eventId: "e1",
@@ -353,8 +337,8 @@ describe("coordinator-event-mapper", () => {
         },
       });
       const event = toCoordinatorEvent(msg);
-      expect(event.payload.status).toBe("done");
-      expect(event.payload.previousStatus).toBe("in_progress");
+      expect(event.payload.newStatus).toBe("done");
+      expect(event.payload.oldStatus).toBe("in_progress");
     });
 
     it("meego_sprint_started 提取 sprintName", () => {
@@ -381,12 +365,24 @@ describe("coordinator-event-mapper", () => {
         resultSummary: "登录页面已实现并通过测试",
       });
       const event = toCoordinatorEvent(msg);
-      expect(event.payload).toEqual({
-        workerId: "worker-001",
-        sessionId: "sess-001",
-        issueId: "ISSUE-42",
-        resultSummary: "登录页面已实现并通过测试",
+      expect(event.payload.workerId).toBe("worker-001");
+      expect(event.payload.sessionId).toBe("sess-001");
+      expect(event.payload.issueId).toBe("ISSUE-42");
+      expect(event.payload.resultSummary).toBe("登录页面已实现并通过测试");
+    });
+
+    it("worker_completed: 提取 chatId 和 senderId", () => {
+      const msg = createQueueMessage("worker_completed", {
+        workerId: "w-1",
+        sessionId: "s-1",
+        issueId: "ISS-1",
+        resultSummary: "done",
+        chatId: "oc_xxx",
+        senderId: "ou_yyy",
       });
+      const event = toCoordinatorEvent(msg);
+      expect(event.payload.chatId).toBe("oc_xxx");
+      expect(event.payload.senderId).toBe("ou_yyy");
     });
 
     it("worker_anomaly 提取 workerId、anomalyType、details", () => {
@@ -400,20 +396,6 @@ describe("coordinator-event-mapper", () => {
         workerId: "worker-001",
         anomalyType: "timeout",
         details: "Worker 超过 300 秒无响应",
-      });
-    });
-
-    it("diagnosis_ready 提取 targetWorkerId、observerWorkerId、report", () => {
-      const msg = makeMessage("diagnosis_ready", {
-        targetWorkerId: "worker-001",
-        observerWorkerId: "observer-001",
-        report: "Worker 陷入死循环，建议重启",
-      });
-      const event = toCoordinatorEvent(msg);
-      expect(event.payload).toEqual({
-        targetWorkerId: "worker-001",
-        observerWorkerId: "observer-001",
-        report: "Worker 陷入死循环，建议重启",
       });
     });
   });

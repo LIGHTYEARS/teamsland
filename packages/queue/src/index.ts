@@ -1,7 +1,6 @@
 export type { EnqueueOptions } from "./persistent-queue.js";
 export { PersistentQueue } from "./persistent-queue.js";
 export type {
-  DiagnosisReadyPayload,
   LarkDmPayload,
   LarkMentionPayload,
   MeegoEventPayload,

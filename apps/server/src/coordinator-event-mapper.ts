@@ -20,9 +20,6 @@ const TYPE_MAP: Record<string, CoordinatorEventType> = {
   meego_sprint_started: "meego_sprint_started",
   worker_completed: "worker_completed",
   worker_anomaly: "worker_anomaly",
-  worker_interrupted: "worker_interrupted",
-  worker_resumed: "worker_resumed",
-  diagnosis_ready: "diagnosis_ready",
 };
 
 /**
@@ -39,10 +36,7 @@ const PRIORITY_MAP: Record<string, number> = {
   worker_anomaly: 0,
   lark_mention: 1,
   lark_dm: 1,
-  worker_interrupted: 1,
   worker_completed: 2,
-  worker_resumed: 2,
-  diagnosis_ready: 2,
   meego_issue_created: 3,
   meego_issue_assigned: 4,
   meego_issue_status_changed: 4,
@@ -144,8 +138,8 @@ const PAYLOAD_EXTRACTORS: Record<string, (payload: unknown) => Record<string, un
     return {
       issueId: p.event.issueId,
       projectKey: p.event.projectKey,
-      status: p.event.payload.status,
-      previousStatus: p.event.payload.previousStatus,
+      newStatus: p.event.payload.status,
+      oldStatus: p.event.payload.previousStatus,
     };
   },
 
@@ -159,28 +153,21 @@ const PAYLOAD_EXTRACTORS: Record<string, (payload: unknown) => Record<string, un
   },
 
   worker_completed(payload) {
-    const p = payload as { workerId: string; sessionId: string; issueId: string; resultSummary: string };
-    return { workerId: p.workerId, sessionId: p.sessionId, issueId: p.issueId, resultSummary: p.resultSummary };
+    const p = payload as Record<string, unknown>;
+    return {
+      workerId: p.workerId,
+      sessionId: p.sessionId,
+      issueId: p.issueId,
+      resultSummary: p.resultSummary,
+      chatId: p.chatId,
+      senderId: p.senderId,
+      senderName: p.senderName,
+    };
   },
 
   worker_anomaly(payload) {
     const p = payload as { workerId: string; anomalyType: string; details: string };
     return { workerId: p.workerId, anomalyType: p.anomalyType, details: p.details };
-  },
-
-  diagnosis_ready(payload) {
-    const p = payload as { targetWorkerId: string; observerWorkerId: string; report: string };
-    return { targetWorkerId: p.targetWorkerId, observerWorkerId: p.observerWorkerId, report: p.report };
-  },
-
-  worker_interrupted(payload) {
-    const p = payload as { workerId: string; reason: string };
-    return { workerId: p.workerId, reason: p.reason };
-  },
-
-  worker_resumed(payload) {
-    const p = payload as { workerId: string; predecessorId: string };
-    return { workerId: p.workerId, predecessorId: p.predecessorId };
   },
 };
 

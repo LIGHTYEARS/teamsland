@@ -19,10 +19,6 @@ export type CoordinatorEventType =
   | "meego_sprint_started"
   | "worker_completed"
   | "worker_anomaly"
-  | "worker_timeout"
-  | "worker_interrupted"
-  | "worker_resumed"
-  | "diagnosis_ready"
   | "user_query";
 
 /**
@@ -187,4 +183,6 @@ export interface CoordinatorSessionManagerConfig {
   maxRecoveryRetries: number;
   /** 单次推理超时（毫秒） */
   inferenceTimeoutMs: number;
+  /** 单个 session 最多处理事件数 */
+  maxEventsPerSession: number;
 }
