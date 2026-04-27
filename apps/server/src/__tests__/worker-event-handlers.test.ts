@@ -64,6 +64,7 @@ describe("worker_completed 处理器", () => {
   let registry: SubagentRegistry;
   let sendDm: ReturnType<typeof vi.fn>;
   let sendGroupMessage: ReturnType<typeof vi.fn>;
+  let sendCard: ReturnType<typeof vi.fn>;
   let processEvent: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -77,6 +78,7 @@ describe("worker_completed 处理器", () => {
     });
     sendDm = vi.fn().mockResolvedValue(undefined);
     sendGroupMessage = vi.fn().mockResolvedValue(undefined);
+    sendCard = vi.fn().mockResolvedValue(undefined);
     processEvent = vi.fn().mockResolvedValue(undefined);
   });
 
@@ -96,7 +98,7 @@ describe("worker_completed 处理器", () => {
    * ```
    */
   function setup(coordinatorManager: { processEvent: ReturnType<typeof vi.fn> } | null) {
-    const notifier = { sendDm, sendGroupMessage };
+    const notifier = { sendDm, sendGroupMessage, sendCard };
     registry = new SubagentRegistry({
       config: testConfig.sidecar,
       notifier: notifier as never,
@@ -120,7 +122,7 @@ describe("worker_completed 处理器", () => {
   }
 
   /**
-   * 向注册表添加一条 Worker 记录
+   * 向注册表添加一条 Worker 记录（含 origin 信息）
    *
    * @example
    * ```typescript
@@ -137,6 +139,11 @@ describe("worker_completed 处理器", () => {
       status: "running",
       retryCount: 0,
       createdAt: Date.now(),
+      origin: {
+        chatId: "chat-test-001",
+        senderId: "sender-test-001",
+        source: "meego",
+      },
     });
   }
 
@@ -163,6 +170,10 @@ describe("worker_completed 处理器", () => {
 
     expect(registry.runningCount()).toBe(0);
     expect(registry.get("worker-done-001")).toBeUndefined();
+
+    // Worker is unregistered before notify, so senderId is unavailable → fallback to sendCard
+    expect(sendCard).toHaveBeenCalledOnce();
+    expect(sendCard).toHaveBeenCalledWith("任务完成", expect.stringContaining("ISSUE-42"), "info");
   });
 
   it("coordinatorManager 存在时，调用 processEvent 并传入正确事件结构", async () => {
@@ -222,6 +233,10 @@ describe("worker_completed 处理器", () => {
     expect(stats.completed).toBe(1);
 
     expect(registry.get("worker-done-003")).toBeUndefined();
+
+    // Worker is unregistered before notify, so senderId is unavailable → fallback to sendCard
+    expect(sendCard).toHaveBeenCalledOnce();
+    expect(sendCard).toHaveBeenCalledWith("任务完成", expect.stringContaining("ISSUE-44"), "info");
   });
 });
 
@@ -232,6 +247,7 @@ describe("worker_anomaly 处理器", () => {
   let registry: SubagentRegistry;
   let sendDm: ReturnType<typeof vi.fn>;
   let sendGroupMessage: ReturnType<typeof vi.fn>;
+  let sendCard: ReturnType<typeof vi.fn>;
   let processEvent: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -245,6 +261,7 @@ describe("worker_anomaly 处理器", () => {
     });
     sendDm = vi.fn().mockResolvedValue(undefined);
     sendGroupMessage = vi.fn().mockResolvedValue(undefined);
+    sendCard = vi.fn().mockResolvedValue(undefined);
     processEvent = vi.fn().mockResolvedValue(undefined);
   });
 
@@ -264,7 +281,7 @@ describe("worker_anomaly 处理器", () => {
    * ```
    */
   function setup(coordinatorManager: { processEvent: ReturnType<typeof vi.fn> } | null) {
-    const notifier = { sendDm, sendGroupMessage };
+    const notifier = { sendDm, sendGroupMessage, sendCard };
     registry = new SubagentRegistry({
       config: testConfig.sidecar,
       notifier: notifier as never,
@@ -305,9 +322,9 @@ describe("worker_anomaly 处理器", () => {
     const stats = queue.stats();
     expect(stats.completed).toBe(1);
 
-    expect(sendDm).toHaveBeenCalledOnce();
-    expect(sendDm).toHaveBeenCalledWith("channel-test-001", expect.stringContaining("worker-err-001"));
-    expect(sendDm).toHaveBeenCalledWith("channel-test-001", expect.stringContaining("timeout"));
+    // No worker registered → senderId unavailable, only sendCard (team channel) is called
+    expect(sendCard).toHaveBeenCalledOnce();
+    expect(sendCard).toHaveBeenCalledWith("Worker 异常", expect.stringContaining("timeout"), "error");
   });
 
   it("coordinatorManager 存在时，调用 processEvent 且 priority 为 0", async () => {
@@ -358,9 +375,9 @@ describe("worker_anomaly 处理器", () => {
 
     expect(processEvent).toHaveBeenCalledOnce();
 
-    expect(sendDm).toHaveBeenCalledOnce();
-    expect(sendDm).toHaveBeenCalledWith("channel-test-001", expect.stringContaining("worker-err-003"));
-    expect(sendDm).toHaveBeenCalledWith("channel-test-001", expect.stringContaining("crash"));
+    // No worker registered → senderId unavailable, only sendCard (team channel) is called
+    expect(sendCard).toHaveBeenCalledOnce();
+    expect(sendCard).toHaveBeenCalledWith("Worker 异常", expect.stringContaining("crash"), "error");
 
     const stats = queue.stats();
     expect(stats.completed).toBe(1);

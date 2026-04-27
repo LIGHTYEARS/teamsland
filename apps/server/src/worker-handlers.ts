@@ -127,23 +127,20 @@ async function notifyWorkerCompleted(
   issueId: string,
   resultSummary: string,
 ): Promise<void> {
-  const record = deps.registry.get(workerId);
+  const senderId = findAssigneeForIssue(deps, workerId);
   const briefSummary = resultSummary.length > 200 ? `${resultSummary.slice(0, 200)}...` : resultSummary;
-  const message = `✅ 任务 ${issueId} 已完成\n\nWorker: ${workerId}\n结果: ${briefSummary}`;
+  const message = `✅ 任务 ${issueId} 已完成：${briefSummary}`;
 
-  try {
-    if (record) {
-      const assignee = findAssigneeForIssue(deps, issueId);
-      if (assignee) {
-        await deps.notifier.sendDm(assignee, message);
-        logger.info({ workerId, issueId, assignee }, "worker_completed 通知已发送");
-        return;
-      }
+  if (senderId) {
+    try {
+      await deps.notifier.sendDm(senderId, message);
+      logger.info({ workerId, issueId, senderId }, "worker_completed DM 通知已发送");
+      return;
+    } catch (err: unknown) {
+      logger.warn({ err, senderId }, "DM 通知失败，降级到团队频道");
     }
-    logger.info({ workerId, issueId }, "worker_completed 无法确定通知对象，仅记录日志");
-  } catch (err: unknown) {
-    logger.warn({ workerId, issueId, err }, "worker_completed 通知发送失败");
   }
+  await deps.notifier.sendCard("任务完成", message, "info");
 }
 
 /**
@@ -216,20 +213,19 @@ async function notifyWorkerAnomaly(
   details: string,
 ): Promise<void> {
   const record = deps.registry.get(workerId);
-  const issueId = record?.issueId ?? "未知";
-  const message = `⚠️ Worker 异常告警\n\nWorker: ${workerId}\n任务: ${issueId}\n异常类型: ${anomalyType}\n详情: ${details}`;
+  const senderId = record?.origin?.senderId;
+  const message = `⚠️ 任务异常 (${anomalyType}): ${details.slice(0, 200)}`;
 
-  try {
-    const assignee = findAssigneeForIssue(deps, issueId);
-    if (assignee) {
-      await deps.notifier.sendDm(assignee, message);
-      logger.info({ workerId, issueId, assignee, anomalyType }, "worker_anomaly 通知已发送");
-      return;
+  // Notify user via DM
+  if (senderId) {
+    try {
+      await deps.notifier.sendDm(senderId, message);
+    } catch (err: unknown) {
+      logger.warn({ err, senderId }, "DM 通知失败");
     }
-    logger.warn({ workerId, issueId, anomalyType }, "worker_anomaly 无法确定通知对象，仅记录日志");
-  } catch (err: unknown) {
-    logger.warn({ workerId, issueId, err }, "worker_anomaly 通知发送失败");
   }
+  // Always notify team channel
+  await deps.notifier.sendCard("Worker 异常", message, "error");
 }
 
 /**
@@ -239,7 +235,7 @@ async function notifyWorkerAnomaly(
  * 当前实现受限于 AgentRecord 不含 assigneeId 字段，
  * 因此返回 config 中默认的 adminUserId（若配置了）。
  */
-function findAssigneeForIssue(deps: EventHandlerDeps, _issueId: string): string | undefined {
-  const channelId = deps.config.lark?.notification?.teamChannelId;
-  return typeof channelId === "string" && channelId.length > 0 ? channelId : undefined;
+function findAssigneeForIssue(deps: EventHandlerDeps, workerId: string): string | undefined {
+  const record = deps.registry.get(workerId);
+  return record?.origin?.senderId;
 }

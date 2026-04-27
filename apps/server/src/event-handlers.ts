@@ -18,7 +18,6 @@ import type {
 import { CapacityError } from "@teamsland/sidecar";
 import type { AppConfig, EventHandler, MeegoEvent, TaskConfig } from "@teamsland/types";
 import type { CoordinatorSessionManager } from "./coordinator.js";
-import { handleDiagnosisReady } from "./diagnosis-handler.js";
 import { handleWorkerAnomaly, handleWorkerCompleted } from "./worker-handlers.js";
 
 const logger = createLogger("server:events");
@@ -166,6 +165,10 @@ export function registerQueueConsumer(queue: PersistentQueue, deps: EventHandler
       case "lark_mention":
         await handleLarkMentionMessage(msg, issueCreatedHandler, deps);
         break;
+      case "lark_dm": {
+        await handleLarkMentionMessage(msg, issueCreatedHandler, deps);
+        break;
+      }
       case "meego_issue_created":
         await handleMeegoEventMessage(msg, issueCreatedHandler);
         break;
@@ -183,9 +186,6 @@ export function registerQueueConsumer(queue: PersistentQueue, deps: EventHandler
         break;
       case "worker_anomaly":
         await handleWorkerAnomaly(msg, deps);
-        break;
-      case "diagnosis_ready":
-        await handleDiagnosisReady(msg, deps);
         break;
       default:
         logger.warn({ msgId: msg.id, type: msg.type }, "未知的队列消息类型");
@@ -254,6 +254,11 @@ async function registerAgent(
     worktreePath: string;
     assigneeId: string;
     stdout: ReadableStream;
+    chatId?: string;
+    senderId?: string;
+    source?: "meego" | "lark_mention" | "lark_dm" | "coordinator";
+    description?: string;
+    initialPrompt?: string;
   },
 ): Promise<boolean> {
   try {
@@ -266,6 +271,13 @@ async function registerAgent(
       status: "running",
       retryCount: 0,
       createdAt: Date.now(),
+      origin: {
+        chatId: params.chatId ?? "",
+        senderId: params.senderId ?? "",
+        source: params.source ?? "meego",
+      },
+      taskBrief: params.description?.slice(0, 200),
+      taskPrompt: params.initialPrompt?.slice(0, 500),
     });
     logger.info({ agentId: params.agentId, issueId: params.issueId }, "Agent 注册完成");
 
