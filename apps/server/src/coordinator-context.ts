@@ -1,9 +1,15 @@
 // @teamsland/server — Coordinator 上下文加载器
 
+import { performance } from "node:perf_hooks";
 import type { FindResult, IVikingMemoryClient, SessionContext } from "@teamsland/memory";
 import { withSpan } from "@teamsland/observability";
 import type { SubagentRegistry } from "@teamsland/sidecar";
-import type { CoordinatorContext, CoordinatorContextLoader, CoordinatorEvent } from "@teamsland/types";
+import type {
+  CoordinatorContext,
+  CoordinatorContextLoader,
+  CoordinatorEvent,
+  PipelineTrackerLike,
+} from "@teamsland/types";
 
 /**
  * LiveContextLoader 构造参数
@@ -31,7 +37,7 @@ export interface LiveContextLoaderOpts {
  * 从多个 OpenViking 数据源并发加载 Coordinator 所需的上下文：
  * 1. taskStateSummary — 从 SubagentRegistry 获取运行中 Worker 列表 + Viking 活跃任务
  * 2. recentMessages — 从 Viking 会话上下文获取近期对话
- * 3. relevantMemories — 从 Viking 检索 Agent 记忆和用户记忆
+ * 3. relevantMemories — 从 Viking 检索用户记忆，Agent 记忆由 Coordinator 按需检索
  *
  * 每个数据源独立容错：失败时降级为空字符串，不阻塞其他数据源。
  *
@@ -61,7 +67,7 @@ export class LiveContextLoader implements CoordinatorContextLoader {
   /**
    * 根据事件并发加载上下文
    *
-   * 五个数据源通过 Promise.allSettled 并发加载，
+   * 四个数据源通过 Promise.allSettled 并发加载，
    * 任一失败不影响其他数据源的结果。
    *
    * @param event - Coordinator 事件
@@ -72,48 +78,42 @@ export class LiveContextLoader implements CoordinatorContextLoader {
    * const ctx = await loader.load(event);
    * ```
    */
-  async load(event: CoordinatorEvent): Promise<CoordinatorContext> {
+  async load(event: CoordinatorEvent, tracker?: PipelineTrackerLike): Promise<CoordinatorContext> {
     return withSpan("coordinator-context", "load", async () => {
       const query = buildMemoryQuery(event);
       const requesterId = extractRequesterId(event);
       const coordSessionId = `coord-${event.payload.chatId ?? event.id}`;
 
-      const fetches = this.buildFetches(query, requesterId, coordSessionId);
-      const [taskResult, vikingTasksResult, agentMemResult, userMemResult, sessionResult] =
-        await Promise.allSettled(fetches);
+      const fetches = this.buildTimedFetches(query, requesterId, coordSessionId, tracker);
+      const [taskResult, vikingTasksResult, userMemResult, sessionResult] = await Promise.allSettled(fetches);
 
       const taskSummary = taskResult.status === "fulfilled" ? taskResult.value : "";
       const vikingTasks =
         vikingTasksResult.status === "fulfilled" ? formatFindResult(vikingTasksResult.value, "活跃任务") : "";
-      const agentMem =
-        agentMemResult.status === "fulfilled" ? formatFindResult(agentMemResult.value, "Agent 记忆") : "";
       const userMem = userMemResult.status === "fulfilled" ? formatFindResult(userMemResult.value, "用户记忆") : "";
       const sessionCtx = sessionResult.status === "fulfilled" ? formatSessionContext(sessionResult.value) : "";
 
       return {
         taskStateSummary: [taskSummary, vikingTasks].filter(Boolean).join("\n"),
         recentMessages: sessionCtx,
-        relevantMemories: [agentMem, userMem].filter(Boolean).join("\n"),
+        relevantMemories: userMem,
       };
     });
   }
 
   /**
-   * 构建并发数据源请求列表
+   * 构建并发数据源请求列表（含计时）
    */
-  private buildFetches(
+  private buildTimedFetches(
     query: string,
     requesterId: string | undefined,
     coordSessionId: string,
-  ): [Promise<string>, Promise<FindResult>, Promise<FindResult>, Promise<FindResult>, Promise<SessionContext>] {
+    tracker?: PipelineTrackerLike,
+  ): [Promise<string>, Promise<FindResult>, Promise<FindResult>, Promise<SessionContext>] {
     const empty: FindResult = { memories: [], resources: [], skills: [], total: 0 };
 
     const tasksFetch = query
       ? this.vikingClient.find(query, { targetUri: "viking://resources/tasks/active/", limit: 5 })
-      : Promise.resolve(empty);
-
-    const agentMemFetch = query
-      ? this.vikingClient.find(query, { targetUri: "viking://agent/teamsland/memories/", limit: 5 })
       : Promise.resolve(empty);
 
     const userMemFetch =
@@ -122,12 +122,25 @@ export class LiveContextLoader implements CoordinatorContextLoader {
         : Promise.resolve(empty);
 
     return [
-      this.loadTaskStateSummary(),
-      tasksFetch,
-      agentMemFetch,
-      userMemFetch,
-      this.vikingClient.getSessionContext(coordSessionId, 8000),
+      this.timedFetch(tracker, "contextLoad", "registry", () => this.loadTaskStateSummary()),
+      this.timedFetch(tracker, "contextLoad", "vikingTasks", () => tasksFetch),
+      this.timedFetch(tracker, "contextLoad", "userMem", () => userMemFetch),
+      this.timedFetch(tracker, "contextLoad", "session", () =>
+        this.vikingClient.getSessionContext(coordSessionId, 8000),
+      ),
     ];
+  }
+
+  private timedFetch<T>(
+    tracker: PipelineTrackerLike | undefined,
+    parent: string,
+    name: string,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    const t0 = performance.now();
+    return fn().finally(() => {
+      tracker?.subPhase(parent, name, Math.round(performance.now() - t0));
+    });
   }
 
   /**

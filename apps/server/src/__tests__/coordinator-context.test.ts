@@ -202,27 +202,11 @@ describe("LiveContextLoader", () => {
       expect(vikingClient.find).not.toHaveBeenCalled();
     });
 
-    it("Agent 记忆和用户记忆分别格式化到 relevantMemories", async () => {
+    it("只将用户记忆格式化到 relevantMemories，Agent 记忆由 Coordinator 按需检索", async () => {
       const vikingClient = makeMockVikingClient({
         find: vi
           .fn()
           .mockResolvedValueOnce(emptyFindResult()) // tasks
-          .mockResolvedValueOnce({
-            memories: [
-              {
-                abstract: "Agent 学到了新知识",
-                uri: "m1",
-                context_type: "memory",
-                is_leaf: true,
-                category: "",
-                score: 0.9,
-                match_reason: "",
-              },
-            ],
-            resources: [],
-            skills: [],
-            total: 1,
-          }) // agent memories
           .mockResolvedValueOnce({
             memories: [
               {
@@ -247,8 +231,18 @@ describe("LiveContextLoader", () => {
       });
 
       const ctx = await loader.load(makeEvent({ payload: { message: "查询", userId: "user-001" } }));
-      expect(ctx.relevantMemories).toContain("[Agent 记忆] Agent 学到了新知识");
       expect(ctx.relevantMemories).toContain("[用户记忆] 用户偏好深色模式");
+      expect(ctx.relevantMemories).not.toContain("[Agent 记忆]");
+
+      const calls = vi.mocked(vikingClient.find).mock.calls;
+      const agentMemoryCall = calls.find(
+        (c: unknown[]) =>
+          typeof c[1] === "object" &&
+          c[1] !== null &&
+          "targetUri" in (c[1] as Record<string, unknown>) &&
+          String((c[1] as Record<string, unknown>).targetUri).startsWith("viking://agent/"),
+      );
+      expect(agentMemoryCall).toBeUndefined();
     });
 
     it("无 requesterId 时跳过用户记忆查询", async () => {
@@ -261,7 +255,7 @@ describe("LiveContextLoader", () => {
       });
 
       await loader.load(makeEvent({ payload: { message: "查询" } }));
-      // 应该只调用 2 次 find（tasks + agent memories），不调用 user memories
+      // 应该只调用 tasks 检索，不调用 user memories 或 agent memories
       const calls = findMock.mock.calls;
       const userMemoryCall = calls.find(
         (c: unknown[]) =>
@@ -271,6 +265,7 @@ describe("LiveContextLoader", () => {
           String((c[1] as Record<string, unknown>).targetUri).startsWith("viking://user/"),
       );
       expect(userMemoryCall).toBeUndefined();
+      expect(calls).toHaveLength(1);
     });
   });
 
@@ -465,6 +460,43 @@ describe("LiveContextLoader", () => {
       expect(ctx.taskStateSummary).toBe("");
       expect(ctx.recentMessages).toBe("");
       expect(ctx.relevantMemories).toBe("");
+    });
+  });
+
+  // ── sub-phase timing ──
+
+  describe("sub-phase timing", () => {
+    it("records sub-phase timings when tracker is provided", async () => {
+      const vikingClient = makeMockVikingClient();
+      const registry = makeMockRegistry();
+      const loader = new LiveContextLoader({ registry, vikingClient });
+      const event = makeEvent();
+
+      const subPhases: Record<string, Record<string, number>> = {};
+      const tracker = {
+        subPhase(parent: string, name: string, durationMs: number) {
+          if (!subPhases[parent]) subPhases[parent] = {};
+          subPhases[parent][name] = durationMs;
+        },
+      };
+
+      await loader.load(event, tracker);
+
+      expect(subPhases.contextLoad).toBeDefined();
+      expect(subPhases.contextLoad.registry).toBeGreaterThanOrEqual(0);
+      expect(subPhases.contextLoad.vikingTasks).toBeGreaterThanOrEqual(0);
+      expect(subPhases.contextLoad.userMem).toBeGreaterThanOrEqual(0);
+      expect(subPhases.contextLoad.session).toBeGreaterThanOrEqual(0);
+    });
+
+    it("works without tracker (backward compatible)", async () => {
+      const vikingClient = makeMockVikingClient();
+      const registry = makeMockRegistry();
+      const loader = new LiveContextLoader({ registry, vikingClient });
+      const event = makeEvent();
+
+      const ctx = await loader.load(event);
+      expect(ctx.taskStateSummary).toBeDefined();
     });
   });
 });
