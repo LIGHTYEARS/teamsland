@@ -7,15 +7,7 @@ import { generateHandleMeegoIssueWorkflow, generateTicketLifecycleSkill } from "
 
 const logger = createLogger("server:coordinator-init");
 
-/**
- * Coordinator 工作区目录结构常量
- *
- * @example
- * ```typescript
- * import { WORKSPACE_DIRS } from "./coordinator-init.js";
- * // WORKSPACE_DIRS.skills === ".claude/skills"
- * ```
- */
+/** Coordinator 工作区目录结构常量 */
 const WORKSPACE_DIRS = {
   claude: ".claude",
   skills: ".claude/skills",
@@ -64,11 +56,6 @@ export async function initCoordinatorWorkspace(config: AppConfig): Promise<strin
  * 创建工作区所需的目录结构
  *
  * @param basePath - 工作区根目录
- *
- * @example
- * ```typescript
- * createDirectories("/home/user/.teamsland/coordinator");
- * ```
  */
 function createDirectories(basePath: string): void {
   for (const dir of Object.values(WORKSPACE_DIRS)) {
@@ -92,11 +79,6 @@ function createDirectories(basePath: string): void {
  *
  * @param basePath - 工作区根目录
  * @param config - 应用配置
- *
- * @example
- * ```typescript
- * await writeWorkspaceFiles("/home/user/.teamsland/coordinator", config);
- * ```
  */
 async function writeWorkspaceFiles(basePath: string, config: AppConfig): Promise<void> {
   const files: Array<{ path: string; content: string }> = [
@@ -171,14 +153,6 @@ async function writeWorkspaceFiles(basePath: string, config: AppConfig): Promise
 
 /**
  * 仅在文件不存在时写入内容（幂等写入）
- *
- * @param filePath - 文件绝对路径
- * @param content - 文件内容
- *
- * @example
- * ```typescript
- * await writeFileIfNotExists("/path/to/file.md", "# Hello");
- * ```
  */
 async function writeFileIfNotExists(filePath: string, content: string): Promise<void> {
   if (existsSync(filePath)) {
@@ -341,6 +315,29 @@ ${chatTable}
 
 **严禁在 post 消息中使用 \`| col1 | col2 |\` 表格语法** — 会原样显示为纯文本。
 需要表格时必须使用 feishu-card skill 的 structured-data 模板。
+
+## Spawn Worker 提示词规范
+
+Spawn Worker 时，task prompt 必须包含以下结构：
+
+1. **任务目标**（必填）— 明确说明需要完成什么
+2. **验收标准**（必填）— 怎样算完成，预期产出是什么
+3. **已知上下文**（如有）— 相关 issue 信息、之前的讨论、已知约束
+4. **产出物要求**（如有）— 输出文件路径、格式要求
+
+示例：
+
+请在 novel-admin-monorepo 中 explore 项目结构，建立 repository profile。
+
+验收标准：
+- 生成 REPO_PROFILE.md，包含目录结构、技术栈、构建系统、核心模块说明
+- 文件放在仓库根目录
+
+已知上下文：
+- 这是一个 monorepo，使用 pnpm workspace
+- 主要技术栈是 React + TypeScript
+
+注意：不要在 prompt 中重复 Worker 已通过 CLAUDE.md 获得的信息（如 Worker ID、回报方式等）。
 `;
 }
 
