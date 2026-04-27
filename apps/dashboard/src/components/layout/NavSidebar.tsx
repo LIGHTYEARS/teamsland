@@ -1,7 +1,7 @@
 import { StatusDot } from "@teamsland/ui/components/ui/status-dot";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@teamsland/ui/components/ui/tooltip";
 import { cn } from "@teamsland/ui/lib/utils";
-import { Brain, Cpu, Home, LogOut, Settings, Waypoints } from "lucide-react";
+import { Activity, Brain, Cpu, Home, LogOut, Settings, TicketCheck, Waypoints } from "lucide-react";
 import { useWebSocket } from "../../contexts/WebSocketContext";
 import type { PageName } from "../../hooks/useRouter";
 
@@ -9,6 +9,8 @@ import type { PageName } from "../../hooks/useRouter";
 const NAV_ITEMS: { page: PageName; label: string; icon: typeof Home }[] = [
   { page: "overview", label: "Overview", icon: Home },
   { page: "sessions", label: "Sessions", icon: Cpu },
+  { page: "tickets", label: "Tickets", icon: TicketCheck },
+  { page: "coordinator", label: "Coordinator", icon: Activity },
   { page: "hooks", label: "Hooks", icon: Waypoints },
   { page: "memory", label: "Memory", icon: Brain },
   { page: "settings", label: "Settings", icon: Settings },

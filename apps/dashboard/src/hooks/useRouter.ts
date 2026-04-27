@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 /** 所有顶级页面 */
-export type PageName = "overview" | "sessions" | "hooks" | "memory" | "settings";
+export type PageName = "overview" | "sessions" | "tickets" | "coordinator" | "hooks" | "memory" | "settings";
 
 /** 路由解析结果 */
 export interface RouteState {
@@ -40,6 +40,13 @@ function resolveRoute(path: string): { page: PageName; segments: Partial<Record<
     if (segs[2]) segments.sessionId = segs[2];
     return { page: "sessions", segments };
   }
+
+  if (segs[0] === "tickets") {
+    const segments: Partial<Record<string, string>> = {};
+    if (segs[1]) segments.issueId = segs[1];
+    return { page: "tickets", segments };
+  }
+  if (segs[0] === "coordinator") return { page: "coordinator", segments: {} };
 
   if (segs[0] === "hooks") return { page: "hooks", segments: {} };
   if (segs[0] === "memory") return { page: "memory", segments: {} };

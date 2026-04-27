@@ -3,11 +3,13 @@ import { NavSidebar } from "./components/layout/NavSidebar";
 import { SessionDetailLayout } from "./components/layout/SessionDetailLayout";
 import type { PageName } from "./hooks/useRouter";
 import { useRouter } from "./hooks/useRouter";
+import { CoordinatorPage } from "./pages/CoordinatorPage";
 import { HooksPage } from "./pages/HooksPage";
 import { MemoryPage } from "./pages/MemoryPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { SessionsListPage } from "./pages/SessionsListPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { TicketsPage } from "./pages/TicketsPage";
 
 /**
  * 应用根组件
@@ -23,6 +25,8 @@ export function App() {
       const paths: Record<PageName, string> = {
         overview: "/",
         sessions: "/sessions",
+        tickets: "/tickets",
+        coordinator: "/coordinator",
         hooks: "/hooks",
         memory: "/memory",
         settings: "/settings",
@@ -59,6 +63,10 @@ export function App() {
         )}
 
         {page === "hooks" && <HooksPage activeTab={query.tab} onTabChange={(tab) => setQuery({ tab })} />}
+
+        {page === "tickets" && <TicketsPage issueId={segments.issueId} onNavigate={handlePathNav} />}
+
+        {page === "coordinator" && <CoordinatorPage />}
 
         {page === "memory" && <MemoryPage selectedUri={query.uri} onUriChange={(uri) => setQuery({ uri })} />}
 
