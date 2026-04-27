@@ -28,7 +28,7 @@ export type StreamEvent =
   | { type: string; [k: string]: unknown };
 
 interface BunLikeStdin {
-  write(data: string | Uint8Array): number | undefined;
+  write(data: string | Uint8Array): number | undefined | Promise<number>;
   flush?(): void;
   end(): void;
 }

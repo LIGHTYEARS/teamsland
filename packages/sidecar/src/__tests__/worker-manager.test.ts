@@ -113,8 +113,8 @@ describe("WorkerManager", () => {
 
     expect(registry.register).toHaveBeenCalledOnce();
     const registered = registry.register.mock.calls[0][0];
-    expect(registered.origin.chatId).toBe("oc_xxx");
-    expect(registered.origin.senderId).toBe("ou_yyy");
+    expect(registered.origin?.chatId).toBe("oc_xxx");
+    expect(registered.origin?.senderId).toBe("ou_yyy");
 
     expect(queue.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({

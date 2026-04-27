@@ -29,7 +29,7 @@ function makePredecessor(overrides: Partial<AgentRecord> = {}): AgentRecord {
     interruptReason: "方向偏离",
     taskPrompt: "实现登录功能",
     taskBrief: "登录功能",
-    origin: { chatId: "oc_chat", messageId: "om_msg", senderId: "ou_user" },
+    origin: { chatId: "oc_chat", messageId: "om_msg", senderId: "ou_user", source: "lark_mention" as const },
     ...overrides,
   };
 }
