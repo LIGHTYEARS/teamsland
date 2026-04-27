@@ -36,7 +36,26 @@ import { getVikingClient, initViking } from "./init/viking.js";
       process.exit(1);
     });
 
+    // ── Config Validation ──
+    const { validateConfig } = await import("@teamsland/config");
+    const validation = validateConfig(config);
+    for (const w of validation.warnings) logger.warn(w);
+    if (validation.fatal.length > 0) {
+      for (const f of validation.fatal) logger.fatal(f);
+      logger.fatal({ fatalCount: validation.fatal.length }, "配置校验失败，进程退出");
+      process.exit(1);
+    }
+
+    const startTime = performance.now();
+    const phaseTimings: Record<string, number> = {};
+    function timePhase(name: string, t0: number): void {
+      const ms = Math.round(performance.now() - t0);
+      phaseTimings[name] = ms;
+      logger.info({ phase: name, durationMs: ms }, `${name} 完成`);
+    }
+
     // ── Phase 1: 存储层 ──
+    let t0 = performance.now();
     const storage = await initStorage(config, logger);
 
     // ── Phase 1.1: Ticket Store ──
@@ -44,23 +63,35 @@ import { getVikingClient, initViking } from "./init/viking.js";
     ticketDb.exec("PRAGMA journal_mode=WAL");
     const ticketStore = new TicketStore(ticketDb);
     logger.info("TicketStore 已初始化");
+    timePhase("storage", t0);
 
     // ── Phase 1.5: OpenViking 连接 ──
+    t0 = performance.now();
     const viking = initViking(config, logger);
+    timePhase("viking", t0);
 
     // ── Phase 2: 飞书组件 ──
+    t0 = performance.now();
     const lark = initLark(config, logger);
+    timePhase("lark", t0);
 
     // ── Phase 3: Sidecar 进程管理 ──
+    t0 = performance.now();
     const sidecar = await initSidecar(config, lark.notifier, storage.sessionDb, logger);
+    timePhase("sidecar", t0);
 
     // ── Phase 4: 业务上下文 ──
+    t0 = performance.now();
     const context = initContext(config, storage, sidecar, lark, logger);
+    timePhase("context", t0);
 
     // ── Phase 4.5: Hook 引擎 ──
+    t0 = performance.now();
     const hooks = await initHooks(config, lark, sidecar, context, logger);
+    timePhase("hooks", t0);
 
     // ── Phase 5: 事件管线 ──
+    t0 = performance.now();
     const coordinatorEnabled = config.coordinator?.enabled === true;
     const { eventBus, queue } = await initEvents(
       config,
@@ -79,8 +110,10 @@ import { getVikingClient, initViking } from "./init/viking.js";
 
     // 将 PersistentQueue 绑定到 Hook 上下文的延迟引用
     hooks.queueRef.current = queue;
+    timePhase("events", t0);
 
     // ── Phase 5.5: Coordinator ──
+    t0 = performance.now();
     const vikingClient = getVikingClient(viking);
     const coordinator = await initCoordinator(
       config,
@@ -134,8 +167,10 @@ import { getVikingClient, initViking } from "./init/viking.js";
         );
       }
     }
+    timePhase("coordinator", t0);
 
     // ── Phase 6: Dashboard ──
+    t0 = performance.now();
     const dashboard = initDashboard(
       config,
       sidecar.registry,
@@ -155,12 +190,24 @@ import { getVikingClient, initViking } from "./init/viking.js";
         coordinatorManager: null, // TODO: update dashboard to accept CoordinatorProcess
       },
     );
+    timePhase("dashboard", t0);
 
     // ── Phase 7: 定时任务 ──
+    t0 = performance.now();
     const timers = initScheduledTasks(config, storage, sidecar, context, lark, eventBus, logger);
+    timePhase("scheduledTasks", t0);
 
     // ── 系统启动完成 ──
-    logger.info("系统启动完成");
+    logger.info(
+      {
+        phases: phaseTimings,
+        coordinatorEnabled: !!coordinator.coordinator,
+        workerManagerEnabled: !!coordinator.workerManager,
+        hooksEnabled: !!hooks.engine,
+        totalDurationMs: Math.round(performance.now() - startTime),
+      },
+      "系统启动完成",
+    );
 
     // ── 优雅关闭 ──
     const shutdown = async () => {
