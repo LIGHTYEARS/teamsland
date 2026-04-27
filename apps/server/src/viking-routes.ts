@@ -98,7 +98,7 @@ async function handleWrite(req: Request, client: IVikingMemoryClient): Promise<R
   if (!uri) {
     return Response.json({ error: "缺少 uri 字段" }, { status: 400 });
   }
-  const mode = body.mode === "replace" || body.mode === "create" ? body.mode : undefined;
+  const mode = body.mode === "replace" || body.mode === "create" || body.mode === "append" ? body.mode : undefined;
   await client.write(uri, content, { mode });
   return Response.json({ status: "ok" });
 }
@@ -122,6 +122,89 @@ async function handleRm(url: URL, client: IVikingMemoryClient): Promise<Response
   await client.rm(uri, recursive);
   return Response.json({ status: "ok" });
 }
+
+async function handleMkdir(req: Request, client: IVikingMemoryClient): Promise<Response> {
+  const body = (await req.json()) as Record<string, unknown>;
+  const uri = typeof body.uri === "string" ? body.uri : "";
+  if (!uri) {
+    return Response.json({ error: "缺少 uri 字段" }, { status: 400 });
+  }
+  const description = typeof body.description === "string" ? body.description : undefined;
+  await client.mkdir(uri, description);
+  return Response.json({ status: "ok", result: { uri } });
+}
+
+async function handleMv(req: Request, client: IVikingMemoryClient): Promise<Response> {
+  const body = (await req.json()) as Record<string, unknown>;
+  const fromUri = typeof body.fromUri === "string" ? body.fromUri : "";
+  const toUri = typeof body.toUri === "string" ? body.toUri : "";
+  if (!fromUri || !toUri) {
+    return Response.json({ error: "缺少 fromUri 或 toUri 字段" }, { status: 400 });
+  }
+  await client.mv(fromUri, toUri);
+  return Response.json({ status: "ok", result: { from: fromUri, to: toUri } });
+}
+
+async function handleAbstract(url: URL, client: IVikingMemoryClient): Promise<Response> {
+  const uri = url.searchParams.get("uri");
+  if (!uri) {
+    return Response.json({ error: "缺少 uri 参数" }, { status: 400 });
+  }
+  const result = await client.abstract(uri);
+  return Response.json({ status: "ok", result });
+}
+
+async function handleOverview(url: URL, client: IVikingMemoryClient): Promise<Response> {
+  const uri = url.searchParams.get("uri");
+  if (!uri) {
+    return Response.json({ error: "缺少 uri 参数" }, { status: 400 });
+  }
+  const result = await client.overview(uri);
+  return Response.json({ status: "ok", result });
+}
+
+async function handleGrep(req: Request, client: IVikingMemoryClient): Promise<Response> {
+  const body = (await req.json()) as Record<string, unknown>;
+  const uri = typeof body.uri === "string" ? body.uri : "";
+  const pattern = typeof body.pattern === "string" ? body.pattern : "";
+  if (!uri || !pattern) {
+    return Response.json({ error: "缺少 uri 或 pattern 字段" }, { status: 400 });
+  }
+  const caseInsensitive = body.caseInsensitive === true ? true : undefined;
+  const result = await client.grep(uri, pattern, { caseInsensitive });
+  return Response.json({ status: "ok", result });
+}
+
+async function handleGlob(req: Request, client: IVikingMemoryClient): Promise<Response> {
+  const body = (await req.json()) as Record<string, unknown>;
+  const pattern = typeof body.pattern === "string" ? body.pattern : "";
+  if (!pattern) {
+    return Response.json({ error: "缺少 pattern 字段" }, { status: 400 });
+  }
+  const uri = typeof body.uri === "string" ? body.uri : undefined;
+  const result = await client.glob(pattern, uri);
+  return Response.json({ status: "ok", result });
+}
+
+type PostHandler = (req: Request, client: IVikingMemoryClient) => Promise<Response>;
+type GetHandler = (url: URL, client: IVikingMemoryClient) => Promise<Response>;
+
+const POST_ROUTES = new Map<string, PostHandler>([
+  ["/api/viking/find", handleFind],
+  ["/api/viking/resource", handleAddResource],
+  ["/api/viking/write", handleWrite],
+  ["/api/viking/mkdir", handleMkdir],
+  ["/api/viking/mv", handleMv],
+  ["/api/viking/grep", handleGrep],
+  ["/api/viking/glob", handleGlob],
+]);
+
+const GET_ROUTES = new Map<string, GetHandler>([
+  ["/api/viking/read", handleRead],
+  ["/api/viking/ls", handleLs],
+  ["/api/viking/abstract", handleAbstract],
+  ["/api/viking/overview", handleOverview],
+]);
 
 /**
  * Viking 代理路由处理器
@@ -162,23 +245,16 @@ export async function handleVikingRoutes(
   if (!url.pathname.startsWith("/api/viking/")) return null;
 
   try {
-    if (req.method === "POST" && url.pathname === "/api/viking/find") {
-      return await handleFind(req, vikingClient);
-    }
-    if (req.method === "POST" && url.pathname === "/api/viking/resource") {
-      return await handleAddResource(req, vikingClient);
-    }
-    if (req.method === "GET" && url.pathname === "/api/viking/read") {
-      return await handleRead(url, vikingClient);
-    }
-    if (req.method === "GET" && url.pathname === "/api/viking/ls") {
-      return await handleLs(url, vikingClient);
-    }
-    if (req.method === "POST" && url.pathname === "/api/viking/write") {
-      return await handleWrite(req, vikingClient);
-    }
     if (req.method === "DELETE" && url.pathname === "/api/viking/fs") {
       return await handleRm(url, vikingClient);
+    }
+    const postHandler = POST_ROUTES.get(url.pathname);
+    if (req.method === "POST" && postHandler) {
+      return await postHandler(req, vikingClient);
+    }
+    const getHandler = GET_ROUTES.get(url.pathname);
+    if (req.method === "GET" && getHandler) {
+      return await getHandler(url, vikingClient);
     }
     return null;
   } catch (err: unknown) {
