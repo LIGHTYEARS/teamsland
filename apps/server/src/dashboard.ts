@@ -138,13 +138,23 @@ interface WsCoordinatorState {
   timestamp: number;
 }
 
+/** Ticket 状态变更推送 */
+interface WsTicketUpdate {
+  type: "ticket_update";
+  ticketId: string;
+  state: string;
+  previousState: string;
+  updatedAt: number;
+}
+
 type WsMessage =
   | WsAgentsUpdate
   | WsConnected
   | WsNormalizedMessage
   | WsCommandError
   | WsCommandAck
-  | WsCoordinatorState;
+  | WsCoordinatorState
+  | WsTicketUpdate;
 
 /** JSON 响应工具函数 */
 function jsonResponse(body: unknown, status = 200): Response {
@@ -249,6 +259,7 @@ function dispatchTicketRoutes(
     ticketStore: TicketStore | null | undefined;
     meegoGet: TicketRouteDeps["meegoGet"] | null | undefined;
     docRead: TicketRouteDeps["docRead"] | null | undefined;
+    clients: Set<unknown>;
   },
 ): Response | Promise<Response> | null {
   if (!ctx.ticketStore) return null;
@@ -264,6 +275,9 @@ function dispatchTicketRoutes(
       (async () => {
         throw new Error("docRead not configured");
       }),
+    onTransition: (event) => {
+      broadcast(ctx.clients, { type: "ticket_update", ...event });
+    },
   });
 }
 
@@ -365,6 +379,7 @@ async function routeRequest(
     larkSendDm: ((userId: string, text: string) => Promise<void>) | undefined;
     queue: PersistentQueue | null | undefined;
     coordinatorManager: CoordinatorProcess | null | undefined;
+    clients: Set<unknown>;
   },
 ): Promise<Response | null> {
   if (req.method === "GET" && url.pathname === "/health") {
@@ -609,45 +624,9 @@ function handleApiRoutes(
 /**
  * 启动 Dashboard HTTP/WebSocket 服务
  *
- * 基于 Bun.serve 启动一个轻量 HTTP 服务，提供以下路由：
- * - `GET /health` — 健康检查 (200)
- * - `GET /auth/lark` — 飞书 OAuth 授权跳转
- * - `GET /auth/lark/callback` — OAuth 回调
- * - `GET /auth/me` — 当前登录用户信息
- * - `POST /auth/logout` — 登出
- * - `GET /api/agents` — agent 列表 (需认证)
- * - `GET /api/sessions/:id/messages` — 会话消息 NDJSON (需认证)
- * - `GET /api/sessions/:id/normalized-messages` — 会话归一化消息 (需认证)
- * - `GET /api/projects` — 项目列表 (需认证)
- * - `GET /api/topology` — Agent 拓扑图 (需认证)
- * - `GET /api/files/tree` — 文件目录树 (需认证)
- * - `GET /api/files/read` — 读取文件 (需认证)
- * - `PUT /api/files/write` — 写入文件 (需认证)
- * - `GET /api/git/status` — Git 状态 (需认证)
- * - `GET /api/git/diff` — Git diff (需认证)
- * - `GET /api/git/branches` — 分支列表 (需认证)
- * - `POST /api/git/stage` — 暂存文件 (需认证)
- * - `POST /api/git/commit` — 提交变更 (需认证)
- * - `GET /api/hooks/status` — Hook 引擎状态 (需认证)
- * - `GET /api/hooks/metrics` — Hook 指标快照 (需认证)
- * - `GET /api/hooks/pending` — 待审批 Hook 列表 (需认证)
- * - `POST /api/hooks/:filename/approve` — 审批通过 Hook (需认证)
- * - `POST /api/hooks/:filename/reject` — 拒绝 Hook (需认证)
- * - `GET /api/hooks/evolution-log` — 进化日志 (需认证)
- * - `/api/viking/*` — OpenViking 代理路由 (需认证，详见 viking-routes.ts)
- * - `GET /api/ws` — WebSocket 升级（支持 terminal-start/input/resize/stop）
- *
  * @param deps - Dashboard 依赖
  * @param signal - 可选的 AbortSignal，用于优雅关闭
  * @returns Bun.serve 返回的 Server 实例
- *
- * @example
- * ```typescript
- * const server = startDashboard(
- *   { registry, sessionDb, config: dashboardConfig, authManager },
- *   controller.signal,
- * );
- * ```
  */
 export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): ReturnType<typeof Bun.serve> {
   const {
@@ -747,6 +726,7 @@ export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): Retur
         larkSendDm: deps.larkSendDm,
         queue: deps.queue,
         coordinatorManager: deps.coordinatorManager,
+        clients,
       };
       return (await routeRequest(req, url, ctx)) ?? jsonResponse({ error: "Not Found" }, 404);
     },

@@ -24,6 +24,7 @@ export interface TicketRouteDeps {
     message?: string;
   }>;
   docRead: (url: string) => Promise<string>;
+  onTransition?: (event: { ticketId: string; state: string; previousState: string; updatedAt: number }) => void;
 }
 
 type RouteResult = Response | Promise<Response> | null;
@@ -40,8 +41,16 @@ async function handleCreate(req: Request, issueId: string, deps: TicketRouteDeps
 
 async function handleTransition(req: Request, issueId: string, deps: TicketRouteDeps): Promise<Response> {
   const body = (await req.json()) as { to: string };
+  const before = deps.ticketStore.get(issueId);
+  const previousState = before?.state ?? "unknown";
   const result = deps.ticketStore.transition(issueId, body.to as TicketState);
   if (!result.ok) return json({ ok: false, error: result.error }, 400);
+  deps.onTransition?.({
+    ticketId: issueId,
+    state: body.to,
+    previousState,
+    updatedAt: Date.now(),
+  });
   return json({ ok: true, state: body.to });
 }
 

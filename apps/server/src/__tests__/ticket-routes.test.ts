@@ -142,6 +142,31 @@ describe("ticket routes", () => {
     });
   });
 
+  describe("ticket_update callback", () => {
+    it("calls onTransition after successful transition", async () => {
+      const onTransition = vi.fn();
+      const depsWithCallback = { ...deps, onTransition };
+      store.create("ISSUE-1", "evt-001", "meego_issue_created");
+      const req = makeRequest("POST", "/api/ticket/ISSUE-1/transition", { to: "enriching" });
+      await handleTicketRoutes(req, new URL(req.url), depsWithCallback);
+      expect(onTransition).toHaveBeenCalledWith({
+        ticketId: "ISSUE-1",
+        state: "enriching",
+        previousState: "received",
+        updatedAt: expect.any(Number),
+      });
+    });
+
+    it("does not call onTransition on failed transition", async () => {
+      const onTransition = vi.fn();
+      const depsWithCallback = { ...deps, onTransition };
+      store.create("ISSUE-1", "evt-001", "meego_issue_created");
+      const req = makeRequest("POST", "/api/ticket/ISSUE-1/transition", { to: "executing" });
+      await handleTicketRoutes(req, new URL(req.url), depsWithCallback);
+      expect(onTransition).not.toHaveBeenCalled();
+    });
+  });
+
   describe("extended TicketRecord fields", () => {
     it("create stores eventType from parameter", () => {
       store.create("ISSUE-1", "evt-001", "meego_issue_created");
