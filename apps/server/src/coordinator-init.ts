@@ -101,7 +101,6 @@ function createDirectories(basePath: string): void {
 async function writeWorkspaceFiles(basePath: string, config: AppConfig): Promise<void> {
   const files: Array<{ path: string; content: string }> = [
     { path: join(basePath, "CLAUDE.md"), content: generateClaudeMd(config) },
-    { path: join(basePath, ".claude", "settings.json"), content: generateSettingsJson() },
     {
       path: join(basePath, WORKSPACE_DIRS.teamslandSpawn, "SKILL.md"),
       content: generateTeamslandSpawnSkill(),
@@ -307,38 +306,6 @@ ${chatTable}
 **严禁在 post 消息中使用 \`| col1 | col2 |\` 表格语法** — 会原样显示为纯文本。
 需要表格时必须使用 feishu-card skill 的 structured-data 模板。
 `;
-}
-
-/**
- * 生成 Coordinator 的 Claude settings.json
- *
- * @returns settings.json 文件内容
- *
- * @example
- * ```typescript
- * const content = generateSettingsJson();
- * ```
- */
-function generateSettingsJson(): string {
-  const settings = {
-    permissions: {
-      allow: [
-        "Bash(teamsland *)",
-        "Bash(bytedcli *)",
-        "Bash(npx -y @bytedance-dev/bytedcli*)",
-        "Bash(lark-cli *)",
-        "Bash(curl *)",
-        "Bash(cat *)",
-        "Bash(echo *)",
-        "Bash(date *)",
-        "Read",
-        "Write",
-      ],
-      deny: ["Bash(rm *)", "Bash(sudo *)", "Bash(git push *)", "Bash(npm *)", "Bash(bun *)"],
-    },
-  };
-
-  return JSON.stringify(settings, null, 2);
 }
 
 /**
@@ -778,7 +745,6 @@ function generateCardTemplate(type: CardTemplateType): string {
 export async function verifyWorkspaceIntegrity(workspacePath: string): Promise<{ ok: boolean; missing: string[] }> {
   const required = [
     "CLAUDE.md",
-    ".claude/settings.json",
     join(WORKSPACE_DIRS.teamslandSpawn, "SKILL.md"),
     join(WORKSPACE_DIRS.meegoQuery, "SKILL.md"),
     join(WORKSPACE_DIRS.selfEvolve, "SKILL.md"),

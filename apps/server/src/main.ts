@@ -71,8 +71,16 @@ import { getVikingClient, initViking } from "./init/viking.js";
 
     // ── Phase 5.5: Coordinator ──
     const vikingClient = getVikingClient(viking);
-    const coordinator = await initCoordinator(config, queue, sidecar.registry, controller, logger, vikingClient);
-    if (coordinator.manager) {
+    const coordinator = await initCoordinator(
+      config,
+      queue,
+      sidecar.registry,
+      controller,
+      logger,
+      vikingClient,
+      lark.notifier,
+    );
+    if (coordinator.coordinator) {
       // Dead letter 告警
       queue.onDeadLetter(({ id, type, lastError }) => {
         logger.error({ msgId: id, type, lastError }, "消息进入死信队列");
@@ -85,7 +93,7 @@ import { getVikingClient, initViking } from "./init/viking.js";
         const event = toCoordinatorEvent(msg);
         logger.info({ msgId: msg.id, eventId: event.id, eventType: event.type }, "开始处理队列消息");
         try {
-          await coordinator.manager?.processEvent(event);
+          await coordinator.coordinator?.processEvent(event);
           logger.info({ msgId: msg.id, eventId: event.id }, "队列消息处理完成");
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
@@ -133,7 +141,7 @@ import { getVikingClient, initViking } from "./init/viking.js";
         ticketStore,
         queue,
         larkSendDm: (userId, text) => lark.larkCli.sendDm(userId, text),
-        coordinatorManager: coordinator.manager,
+        coordinatorManager: null, // TODO: update dashboard to accept CoordinatorProcess
       },
     );
 
@@ -149,8 +157,8 @@ import { getVikingClient, initViking } from "./init/viking.js";
       controller.abort();
       timers.clearAll();
       if (sidecar.orphanTimer) clearInterval(sidecar.orphanTimer);
-      if (coordinator.manager) coordinator.manager.reset();
-      if (coordinator.anomalyDetector) coordinator.anomalyDetector.stopAll();
+      if (coordinator.coordinator) await coordinator.coordinator.reset();
+      if (coordinator.workerManager) await coordinator.workerManager.terminateAll();
       if (hooks.engine) hooks.engine.stop();
       if (viking.healthMonitor) viking.healthMonitor.stop();
       dashboard.server.stop();

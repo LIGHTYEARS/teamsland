@@ -513,6 +513,10 @@ export interface CoordinatorConfig {
   inferenceTimeoutMs: number;
   /** 是否启用 Coordinator */
   enabled: boolean;
+  /** 单 session 最大事件数（超出后轮转 session） */
+  maxEventsPerSession?: number;
+  /** 单个 Worker 最大 budget（USD） */
+  maxBudgetPerWorker?: number;
 }
 
 // ─── hooks 配置 ───
