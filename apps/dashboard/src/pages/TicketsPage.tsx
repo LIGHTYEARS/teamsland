@@ -2,7 +2,12 @@ import { Inbox } from "lucide-react";
 import { useMemo, useState } from "react";
 import { TicketBoard } from "../components/tickets/TicketBoard.js";
 import { TicketDetailDrawer } from "../components/tickets/TicketDetailDrawer.js";
-import { type PhaseFilter, type SortBy, TicketFilters } from "../components/tickets/TicketFilters.js";
+import {
+  type PhaseFilter,
+  type PriorityFilter,
+  type SortBy,
+  TicketFilters,
+} from "../components/tickets/TicketFilters.js";
 import { useTickets } from "../hooks/useTickets.js";
 
 const PHASE_STATES: Record<string, string[]> = {
@@ -22,6 +27,7 @@ export function TicketsPage({
   const { tickets, loading, error } = useTickets();
   const [selectedId, setSelectedId] = useState<string | null>(initialIssueId ?? null);
   const [phase, setPhase] = useState<PhaseFilter>("all");
+  const [priority, setPriority] = useState<PriorityFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("updatedAt");
 
   const filtered = useMemo(() => {
@@ -30,11 +36,22 @@ export function TicketsPage({
       const allowed = PHASE_STATES[phase] ?? [];
       result = result.filter((t) => allowed.includes(t.state));
     }
+    if (priority !== "all") {
+      result = result.filter((t) => {
+        if (!t.context) return false;
+        try {
+          const ctx = JSON.parse(t.context) as { basic?: { priority?: string } };
+          return ctx.basic?.priority?.toLowerCase() === priority;
+        } catch {
+          return false;
+        }
+      });
+    }
     return result.slice().sort((a, b) => {
       if (sortBy === "dwell") return Date.now() - a.updatedAt - (Date.now() - b.updatedAt);
       return b[sortBy] - a[sortBy];
     });
-  }, [tickets, phase, sortBy]);
+  }, [tickets, phase, priority, sortBy]);
 
   const handleTicketClick = (id: string) => {
     setSelectedId(id);
@@ -55,7 +72,14 @@ export function TicketsPage({
             {loading ? "Loading..." : error ? error : `${tickets.length} tickets`}
           </p>
         </div>
-        <TicketFilters phase={phase} onPhaseChange={setPhase} sortBy={sortBy} onSortChange={setSortBy} />
+        <TicketFilters
+          phase={phase}
+          onPhaseChange={setPhase}
+          priority={priority}
+          onPriorityChange={setPriority}
+          sortBy={sortBy}
+          onSortChange={setSortBy}
+        />
       </header>
 
       <div className="flex-1 min-h-0">

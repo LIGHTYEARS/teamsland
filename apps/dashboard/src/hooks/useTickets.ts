@@ -67,6 +67,9 @@ export function useTickets(): {
   useEffect(() => {
     return subscribe((data) => {
       const msg = data as Record<string, unknown>;
+      if (msg.type === "connected") {
+        bump();
+      }
       if (msg.type === "ticket_update") {
         const update = msg as unknown as WsTicketUpdate;
         setTickets((prev) => {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useReducer, useState } from "react";
+import { useWebSocket } from "../contexts/WebSocketContext.js";
 
 export interface DeadLetterMessage {
   id: string;
@@ -19,6 +20,7 @@ export function useDeadLetters(): {
   error: string | null;
   refresh: () => void;
 } {
+  const { subscribe } = useWebSocket();
   const [messages, setMessages] = useState<DeadLetterMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +51,13 @@ export function useDeadLetters(): {
       cancelled = true;
     };
   }, [version]);
+
+  useEffect(() => {
+    return subscribe((data) => {
+      const msg = data as Record<string, unknown>;
+      if (msg.type === "connected") bump();
+    });
+  }, [subscribe]);
 
   return { messages, loading, error, refresh };
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import { useWebSocket } from "../contexts/WebSocketContext.js";
 
 export interface CoordinatorStatus {
@@ -27,6 +27,7 @@ export function useCoordinatorStatus(): {
   const [lastChangeAt, setLastChangeAt] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [version, bump] = useReducer((n: number) => n + 1, 0);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,11 +52,14 @@ export function useCoordinatorStatus(): {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [version]);
 
   useEffect(() => {
     return subscribe((data) => {
       const msg = data as Record<string, unknown>;
+      if (msg.type === "connected") {
+        bump();
+      }
       if (msg.type === "coordinator_state") {
         const ws = msg as unknown as WsCoordinatorState;
         setStatus((prev) => ({
