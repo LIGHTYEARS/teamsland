@@ -18,7 +18,7 @@ import type { TicketStore } from "@teamsland/ticket";
 import type { AgentRecord, AppConfig, DashboardConfig } from "@teamsland/types";
 import { handleExtendedApiRoutes } from "./api-routes.js";
 import { handleAskRoutes } from "./ask-routes.js";
-import type { CoordinatorSessionManager } from "./coordinator.js";
+import type { CoordinatorProcess } from "./coordinator-process.js";
 import { handleWsMessage, type WsHandlerContext } from "./dashboard-ws.js";
 import { handleFileRoutes } from "./file-routes.js";
 import { handleGitRoutes } from "./git-routes.js";
@@ -93,7 +93,7 @@ export interface DashboardDeps {
   /** 消息队列 (可选，ask 命令超时使用) */
   queue?: PersistentQueue | null;
   /** Coordinator Session Manager (可选, coordinator 未启用时为 null) */
-  coordinatorManager?: CoordinatorSessionManager | null;
+  coordinatorManager?: CoordinatorProcess | null;
 }
 
 /** WebSocket 推送消息类型 */
@@ -289,7 +289,7 @@ function dispatchObservabilityRoutes(
   url: URL,
   ctx: {
     queue: PersistentQueue | null | undefined;
-    coordinatorManager: CoordinatorSessionManager | null | undefined;
+    coordinatorManager: CoordinatorProcess | null | undefined;
   },
 ): Response | Promise<Response> | null {
   if (!ctx.queue) return null;
@@ -361,7 +361,7 @@ async function routeRequest(
     docRead: TicketRouteDeps["docRead"] | null | undefined;
     larkSendDm: ((userId: string, text: string) => Promise<void>) | undefined;
     queue: PersistentQueue | null | undefined;
-    coordinatorManager: CoordinatorSessionManager | null | undefined;
+    coordinatorManager: CoordinatorProcess | null | undefined;
   },
 ): Promise<Response | null> {
   if (req.method === "GET" && url.pathname === "/health") {

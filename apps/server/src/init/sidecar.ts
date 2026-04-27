@@ -5,7 +5,6 @@ import { createLogger } from "@teamsland/observability";
 import type { SessionDB } from "@teamsland/session";
 import {
   InterruptController,
-  ObservableMessageBus,
   ObserverController,
   ProcessController,
   SidecarDataPlane,
@@ -30,8 +29,6 @@ export interface SidecarResult {
   processController: ProcessController;
   /** Agent 注册表 */
   registry: SubagentRegistry;
-  /** 可观测消息总线 */
-  messageBus: ObservableMessageBus;
   /** Sidecar 数据平面 */
   dataPlane: SidecarDataPlane;
   /** 孤儿清理定时器（可能为 null） */
@@ -50,8 +47,7 @@ export interface SidecarResult {
  * 按顺序初始化以下组件：
  * 1. ProcessController — Claude Code 子进程管理
  * 2. SubagentRegistry — Agent 注册表，含启动恢复
- * 3. ObservableMessageBus — 可观测消息总线
- * 4. SidecarDataPlane — 数据平面（NDJSON 流消费）
+ * 3. SidecarDataPlane — 数据平面（NDJSON 流消费）
  *
  * @param config - 应用配置
  * @param notifier - 飞书通知器（用于 SubagentRegistry 告警）
@@ -85,12 +81,8 @@ export async function initSidecar(
   const orphanTimer = await registry.restoreOnStartup();
   logger.info("SubagentRegistry 启动恢复完成");
 
-  // ObservableMessageBus
-  const messageBus = new ObservableMessageBus({ logger: createLogger("sidecar:bus") });
-  logger.info("ObservableMessageBus 已初始化");
-
   // SidecarDataPlane
-  const dataPlane = new SidecarDataPlane({ registry, sessionDb, logger, messageBus });
+  const dataPlane = new SidecarDataPlane({ registry, sessionDb, logger });
   logger.info("SidecarDataPlane 已初始化");
 
   // TranscriptReader
@@ -115,7 +107,6 @@ export async function initSidecar(
   return {
     processController,
     registry,
-    messageBus,
     dataPlane,
     orphanTimer,
     interruptController,

@@ -17,7 +17,7 @@ import type {
 } from "@teamsland/sidecar";
 import { CapacityError } from "@teamsland/sidecar";
 import type { AppConfig, EventHandler, MeegoEvent, TaskConfig } from "@teamsland/types";
-import type { CoordinatorSessionManager } from "./coordinator.js";
+import type { CoordinatorProcess } from "./coordinator-process.js";
 import { handleWorkerAnomaly, handleWorkerCompleted } from "./worker-handlers.js";
 
 const logger = createLogger("server:events");
@@ -63,7 +63,7 @@ export interface EventHandlerDeps {
   /** 人工确认监视器 */
   confirmationWatcher: ConfirmationWatcher;
   /** Coordinator Session Manager（未启用时为 null） */
-  coordinatorManager: CoordinatorSessionManager | null;
+  coordinatorManager: CoordinatorProcess | null;
   /** 中断控制器（未启用时为 null） */
   interruptController?: InterruptController | null;
   /** 恢复控制器（未启用时为 null） */

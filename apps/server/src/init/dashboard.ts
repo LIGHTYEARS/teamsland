@@ -9,7 +9,7 @@ import type { SessionDB } from "@teamsland/session";
 import { ClaudeMdInjector, SkillInjector, type SubagentRegistry } from "@teamsland/sidecar";
 import type { TicketStore } from "@teamsland/ticket";
 import type { AppConfig } from "@teamsland/types";
-import type { CoordinatorSessionManager } from "../coordinator.js";
+import type { CoordinatorProcess } from "../coordinator-process.js";
 import { startDashboard } from "../dashboard.js";
 import { LarkAuthManager } from "../lark-auth.js";
 import type { ContextResult } from "./context.js";
@@ -100,7 +100,7 @@ export interface TicketDeps {
   ticketStore: TicketStore;
   queue: PersistentQueue;
   larkSendDm: (userId: string, text: string) => Promise<void>;
-  coordinatorManager?: CoordinatorSessionManager | null;
+  coordinatorManager?: CoordinatorProcess | null;
 }
 
 export function initDashboard(

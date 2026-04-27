@@ -1,5 +1,5 @@
 import { SessionDB } from "@teamsland/session";
-import { ObservableMessageBus, SidecarDataPlane, SubagentRegistry } from "@teamsland/sidecar";
+import { SidecarDataPlane, SubagentRegistry } from "@teamsland/sidecar";
 import type { AgentRecord, SidecarConfig } from "@teamsland/types";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -53,8 +53,7 @@ describe("DataPlane -> SessionDB 集成测试", () => {
     });
 
     const logger = { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn(), fatal: vi.fn() };
-    const messageBus = new ObservableMessageBus({ logger: logger as never });
-    dataPlane = new SidecarDataPlane({ registry, sessionDb, logger: logger as never, messageBus });
+    dataPlane = new SidecarDataPlane({ registry, sessionDb, logger: logger as never });
   }
 
   function makeStream(lines: string[]): ReadableStream<Uint8Array> {

@@ -11,17 +11,16 @@ vi.mock("@teamsland/observability", () => ({
 }));
 
 import type { PersistentQueue } from "@teamsland/queue";
-import type { CoordinatorSessionManager } from "../coordinator.js";
+import type { CoordinatorProcess } from "../coordinator-process.js";
 import { handleObservabilityRoutes, type ObservabilityRouteDeps } from "../observability-routes.js";
 
 // Mock coordinator manager
 function makeCoordinatorManager(overrides = {}) {
   return {
     getState: vi.fn().mockReturnValue("idle"),
-    getActiveSession: vi.fn().mockReturnValue(null),
-    getRecoveryCount: vi.fn().mockReturnValue(0),
+    getSessionId: vi.fn().mockReturnValue(null),
     ...overrides,
-  } as unknown as CoordinatorSessionManager;
+  } as unknown as CoordinatorProcess;
 }
 
 // Mock queue
@@ -72,7 +71,6 @@ describe("handleObservabilityRoutes", () => {
     it("should return coordinator status when enabled", async () => {
       const manager = makeCoordinatorManager({
         getState: vi.fn().mockReturnValue("running"),
-        getRecoveryCount: vi.fn().mockReturnValue(1),
       });
       const result = handleObservabilityRoutes(
         new Request("http://localhost/api/coordinator/status"),
@@ -83,7 +81,6 @@ describe("handleObservabilityRoutes", () => {
       const body = await res.json();
       expect(body.enabled).toBe(true);
       expect(body.state).toBe("running");
-      expect(body.recoveryCount).toBe(1);
     });
   });
 

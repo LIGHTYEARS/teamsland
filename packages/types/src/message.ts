@@ -15,7 +15,7 @@ export type TeamMessageType = "task_result" | "task_error" | "delegation" | "sta
 /**
  * 团队消息
  *
- * Agent 间传递的结构化消息，通过 `ObservableMessageBus` 路由。
+ * Agent 间传递的结构化消息。
  *
  * @example
  * ```typescript

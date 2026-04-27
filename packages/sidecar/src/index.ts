@@ -1,11 +1,9 @@
 // @teamsland/sidecar — ProcessController, SubagentRegistry, SidecarDataPlane,
-//                       ObservableMessageBus, Alerter, ClaudeMdInjector, SkillInjector, TranscriptReader, AnomalyDetector
-// Claude Code 子进程管理：进程控制 + Agent 注册 + NDJSON 流解析 + 消息总线 + 告警 + CLAUDE.md 注入 + Skill 注入 + Transcript 读取 + 异常检测
+//                       Alerter, ClaudeMdInjector, SkillInjector, TranscriptReader
+// Claude Code 子进程管理：进程控制 + Agent 注册 + NDJSON 流解析 + 告警 + CLAUDE.md 注入 + Skill 注入 + Transcript 读取
 
 export type { AlertNotifier } from "./alerter.js";
 export { Alerter } from "./alerter.js";
-export type { Anomaly, AnomalyDetectorOpts, AnomalyType } from "./anomaly-detector.js";
-export { AnomalyDetector } from "./anomaly-detector.js";
 export type { ClaudeMdContext } from "./claude-md-injector.js";
 export { ClaudeMdInjector } from "./claude-md-injector.js";
 export type { AssistantEvent, CliProcessOpts, ResultEvent, StreamEvent } from "./cli-process.js";
@@ -14,7 +12,6 @@ export type { InterceptedTool, RawEventListener, SidecarEventType } from "./data
 export { SidecarDataPlane } from "./data-plane.js";
 export type { InterruptRequest, InterruptResult } from "./interrupt-controller.js";
 export { InterruptController } from "./interrupt-controller.js";
-export { ObservableMessageBus } from "./message-bus.js";
 export type { ObserveRequest, ObserveResult } from "./observer-controller.js";
 export { buildObserverPrompt, ObserverController } from "./observer-controller.js";
 export type { ResumeSpawnParams, SpawnParams, SpawnResult } from "./process-controller.js";

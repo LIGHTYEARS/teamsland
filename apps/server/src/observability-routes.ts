@@ -1,9 +1,9 @@
 import type { PersistentQueue } from "@teamsland/queue";
-import type { CoordinatorSessionManager } from "./coordinator.js";
+import type { CoordinatorProcess } from "./coordinator-process.js";
 
 /** Observability API 路由依赖 */
 export interface ObservabilityRouteDeps {
-  coordinatorManager: CoordinatorSessionManager | null;
+  coordinatorManager: CoordinatorProcess | null;
   queue: PersistentQueue;
 }
 
@@ -32,8 +32,7 @@ export function handleObservabilityRoutes(
     return jsonResponse({
       enabled: true,
       state: deps.coordinatorManager.getState(),
-      activeSession: deps.coordinatorManager.getActiveSession(),
-      recoveryCount: deps.coordinatorManager.getRecoveryCount(),
+      activeSession: deps.coordinatorManager.getSessionId(),
     });
   }
 
