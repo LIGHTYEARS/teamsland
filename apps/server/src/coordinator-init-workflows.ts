@@ -54,7 +54,15 @@ teamsland lark send --to <相关人员/群> --text "已开始处理 <issue-id>: 
  * @returns SKILL.md 文件内容
  */
 export function generateTicketLifecycleSkill(): string {
-  return `# 工单生命周期管理
+  return `---
+name: ticket-lifecycle
+description: 管理 Meego 工单的处理流程，包括深度采集、智能分诊、异步追问和状态推进。
+allowed-tools:
+  - Bash(teamsland ticket *)
+  - Bash(teamsland ask *)
+---
+
+# 工单生命周期管理
 
 通过 \`teamsland ticket\` 和 \`teamsland ask\` 管理 Meego 工单的处理流程。
 
@@ -96,7 +104,5 @@ received → enriching → triaging → ready → executing → completed
 - 收到 meego issue.created → 先 \`ticket enrich\`，再 \`ticket status --set triaging\`
 - triaging 判定模糊 → \`ask\` 追问，等待 DM 事件
 - ready 后 → \`worker spawn\`，同时 \`ticket status --set executing\`
-
-allowed-tools: Bash(teamsland ticket *), Bash(teamsland ask *)
 `;
 }
