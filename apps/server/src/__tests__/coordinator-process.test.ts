@@ -180,4 +180,53 @@ describe("CoordinatorProcess", () => {
     // spawn called twice: initial + after rotation
     expect(spawnFn).toHaveBeenCalledTimes(2);
   });
+
+  it("processEvent: records tracker phases and inference result", async () => {
+    const spawnFn = createMockSpawnFn("task completed");
+    const contextLoader = createMockContextLoader();
+    const promptBuilder = createMockPromptBuilder();
+    const proc = new CoordinatorProcess({
+      config: {
+        workspacePath: "/tmp",
+        systemPromptPath: "/tmp/sp.md",
+        allowedTools: ["Read"],
+        sessionMaxLifetimeMs: 1_800_000,
+        maxEventsPerSession: 20,
+        resultTimeoutMs: 60_000,
+      },
+      contextLoader,
+      promptBuilder,
+      spawnFn,
+    });
+
+    const phasesRecorded: string[] = [];
+    const tracker = {
+      phase(name: string) {
+        phasesRecorded.push(name);
+      },
+      endPhase: vi.fn(),
+      subPhase: vi.fn(),
+      setInferenceResult: vi.fn(),
+      setSessionInfo: vi.fn(),
+      setOutcome: vi.fn(),
+      summarize: vi.fn(),
+    };
+
+    const event = {
+      type: "lark_dm" as const,
+      id: "evt-tracker",
+      timestamp: Date.now(),
+      priority: 1,
+      payload: {},
+    };
+    await proc.processEvent(event, tracker as unknown as import("../pipeline-tracker.js").PipelineTracker);
+
+    expect(phasesRecorded).toContain("contextLoad");
+    expect(phasesRecorded).toContain("promptBuild");
+    expect(phasesRecorded).toContain("inference");
+    expect(tracker.setInferenceResult).toHaveBeenCalledWith(
+      expect.objectContaining({ durationMs: expect.any(Number) }),
+    );
+    expect(tracker.setSessionInfo).toHaveBeenCalled();
+  });
 });

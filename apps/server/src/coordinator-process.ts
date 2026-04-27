@@ -7,6 +7,7 @@ import type {
   CoordinatorEvent,
   CoordinatorState,
 } from "@teamsland/types";
+import type { PipelineTracker } from "./pipeline-tracker.js";
 
 const logger = createLogger("server:coordinator-process");
 
@@ -50,18 +51,48 @@ export class CoordinatorProcess {
     this.spawnFn = opts.spawnFn;
   }
 
-  async processEvent(event: CoordinatorEvent): Promise<ResultEvent> {
+  async processEvent(event: CoordinatorEvent, tracker?: PipelineTracker): Promise<ResultEvent> {
     const cli = await this.ensureProcess();
 
     this.setState("running", event.id);
 
-    const context = await this.contextLoader.load(event);
+    tracker?.phase("contextLoad");
+    const context = await this.contextLoader.load(event, tracker);
+    tracker?.endPhase();
+
+    tracker?.phase("promptBuild");
     const prompt = this.promptBuilder.build(event, context);
+    tracker?.endPhase();
 
     try {
+      tracker?.phase("inference");
       const result = await cli.sendMessage(prompt);
+      tracker?.endPhase();
       this.eventCount++;
       this.setState("idle", event.id);
+
+      tracker?.setInferenceResult({
+        durationMs: result.duration_ms,
+        numTurns: result.num_turns,
+        costUsd: result.total_cost_usd,
+      });
+      if (tracker && this.sessionId) {
+        tracker.setSessionInfo(this.sessionId, this.eventCount);
+      }
+
+      logger.debug(
+        {
+          eventId: event.id,
+          eventType: event.type,
+          promptLength: prompt.length,
+          promptPreview: prompt.slice(0, 500),
+          resultText: result.result?.slice(0, 1000),
+          numTurns: result.num_turns,
+          costUsd: result.total_cost_usd,
+          sessionId: this.sessionId,
+        },
+        "Coordinator 决策审计",
+      );
 
       if (this.shouldRotateSession()) {
         await this.rotateSession();
@@ -69,6 +100,7 @@ export class CoordinatorProcess {
 
       return result;
     } catch (err) {
+      tracker?.endPhase();
       logger.error({ err, eventId: event.id }, "processEvent 失败");
       this.setState("failed", event.id);
       this.cli = null;
@@ -150,7 +182,15 @@ export class CoordinatorProcess {
   }
 
   private async rotateSession(): Promise<void> {
-    logger.info({ sessionId: this.sessionId, eventCount: this.eventCount }, "Session 有效期到达，轮转");
+    logger.info(
+      {
+        sessionId: this.sessionId,
+        eventCount: this.eventCount,
+        sessionAgeMs: Date.now() - this.startedAt,
+        reason: this.eventCount >= this.config.maxEventsPerSession ? "maxEvents" : "maxLifetime",
+      },
+      "Session 轮转",
+    );
     if (this.cli) {
       await this.cli.terminate();
       this.cli = null;

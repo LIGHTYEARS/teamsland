@@ -41,6 +41,7 @@ export type {
   CoordinatorEventType,
   CoordinatorSessionManagerConfig,
   CoordinatorState,
+  PipelineTrackerLike,
 } from "./coordinator.js";
 // Meego 事件
 export type { EventHandler, MeegoEvent, MeegoEventType } from "./meego.js";
