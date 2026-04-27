@@ -25,6 +25,12 @@ export interface SpawnParams {
   initialPrompt: string;
   /** 额外传递给子进程的环境变量（可选，会与 process.env 合并） */
   env?: Record<string, string>;
+  /** Worker ID（可选，用于生成结构化任务信封） */
+  workerId?: string;
+  /** 发起人名称（可选） */
+  senderName?: string;
+  /** 发起人 ID（可选） */
+  senderId?: string;
 }
 
 /**
@@ -158,6 +164,10 @@ export class ProcessController {
         prompt: params.initialPrompt,
         debugPath: `/tmp/req-${params.issueId}.jsonl`,
         env: params.env,
+        workerId: params.workerId,
+        issueId: params.issueId,
+        senderName: params.senderName,
+        senderId: params.senderId,
       });
 
       span.setAttribute("process.pid", result.pid);
@@ -210,6 +220,7 @@ export class ProcessController {
         prompt: params.prompt,
         debugPath: `/tmp/resume-${params.sessionId}.jsonl`,
         env: params.env,
+        issueId: "",
       });
 
       span.setAttribute("process.pid", result.pid);
@@ -268,6 +279,36 @@ export class ProcessController {
     }
   }
 
+  /** 构建结构化任务信封 */
+  private buildEnvelope(opts: {
+    prompt: string;
+    workerId?: string;
+    issueId: string;
+    senderName?: string;
+    senderId?: string;
+  }): string {
+    const sections: string[] = [];
+
+    sections.push("## 任务指令\n");
+    sections.push(opts.prompt);
+
+    if (opts.workerId || opts.issueId) {
+      sections.push("\n\n## 任务元数据\n");
+      if (opts.workerId) sections.push(`- Worker ID: ${opts.workerId}`);
+      sections.push(`- Issue ID: ${opts.issueId}`);
+      if (opts.senderName) sections.push(`- 发起人: ${opts.senderName} (${opts.senderId ?? "unknown"})`);
+      sections.push("- 回报方式: 完成后使用 teamsland-report skill 回报结果");
+      sections.push("- 超时: 此任务没有硬性超时，但请在合理时间内完成");
+    }
+
+    sections.push("\n\n## 工作规范\n");
+    sections.push("1. 在 worktree 中工作，不要切换到其他目录");
+    sections.push("2. 遇到阻塞性问题时，使用 teamsland-report 回报当前进展和阻塞原因，不要静默失败");
+    sections.push("3. 完成后必须使用 teamsland-report 回报最终结果");
+
+    return sections.join("\n");
+  }
+
   /** 共用的子进程启动逻辑 */
   private async spawnInternal(opts: {
     args: string[];
@@ -275,6 +316,10 @@ export class ProcessController {
     prompt: string;
     debugPath: string;
     env?: Record<string, string>;
+    workerId?: string;
+    issueId: string;
+    senderName?: string;
+    senderId?: string;
   }): Promise<SpawnResult> {
     const proc = Bun.spawn(opts.args, {
       cwd: opts.cwd,
@@ -284,7 +329,13 @@ export class ProcessController {
       env: opts.env ? { ...process.env, ...opts.env } : undefined,
     });
 
-    const envelope = opts.prompt;
+    const envelope = this.buildEnvelope({
+      prompt: opts.prompt,
+      workerId: opts.workerId,
+      issueId: opts.issueId,
+      senderName: opts.senderName,
+      senderId: opts.senderId,
+    });
     proc.stdin.write(`${envelope}\n`);
     proc.stdin.end();
 

@@ -219,6 +219,9 @@ async function handleCreateWorker(req: Request, deps: WorkerRouteDeps): Promise<
       issueId,
       worktreePath,
       initialPrompt: bodyResult.task,
+      workerId: agentId,
+      senderName: bodyResult.origin?.senderName,
+      senderId: bodyResult.origin?.senderId,
       env: {
         WORKER_ID: agentId,
         MEEGO_API_BASE: deps.meegoApiBase ?? "",
