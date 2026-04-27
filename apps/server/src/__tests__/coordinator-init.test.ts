@@ -114,10 +114,7 @@ describe("initCoordinatorWorkspace", () => {
 
     expect(result).toBe(workspacePath);
     expect(existsSync(join(workspacePath, "CLAUDE.md"))).toBe(true);
-    expect(existsSync(join(workspacePath, ".claude", "settings.json"))).toBe(true);
     expect(existsSync(join(workspacePath, ".claude", "skills", "teamsland-spawn", "SKILL.md"))).toBe(true);
-    expect(existsSync(join(workspacePath, ".claude", "skills", "lark-message", "SKILL.md"))).toBe(true);
-    expect(existsSync(join(workspacePath, ".claude", "skills", "lark-docs", "SKILL.md"))).toBe(true);
     expect(existsSync(join(workspacePath, ".claude", "skills", "meego-query", "SKILL.md"))).toBe(true);
   });
 
@@ -169,18 +166,13 @@ describe("initCoordinatorWorkspace", () => {
     expect(claudeMd).toContain("project_beta");
   });
 
-  it("settings.json 包含正确的权限配置", async () => {
+  it("工具白名单通过 --allowedTools 传递，不再生成 settings.json", async () => {
     const workspacePath = join(testDir, "coordinator");
     const config = createMinimalConfig(workspacePath);
 
     await initCoordinatorWorkspace(config);
-    const settingsContent = readFileSync(join(workspacePath, ".claude", "settings.json"), "utf-8");
-    const settings = JSON.parse(settingsContent) as { permissions: { allow: string[]; deny: string[] } };
-
-    expect(settings.permissions.allow).toContain("Bash(teamsland *)");
-    expect(settings.permissions.allow).toContain("Bash(lark-cli *)");
-    expect(settings.permissions.deny).toContain("Bash(rm *)");
-    expect(settings.permissions.deny).toContain("Bash(sudo *)");
+    const settingsPath = join(workspacePath, ".claude", "settings.json");
+    expect(existsSync(settingsPath)).toBe(false);
   });
 
   it("使用默认路径当 coordinator 配置为空时", async () => {
@@ -204,16 +196,6 @@ describe("initCoordinatorWorkspace", () => {
     const spawnSkill = readFileSync(join(workspacePath, ".claude", "skills", "teamsland-spawn", "SKILL.md"), "utf-8");
     expect(spawnSkill).toContain("teamsland-spawn");
     expect(spawnSkill).toContain("teamsland spawn");
-
-    const larkMessageSkill = readFileSync(
-      join(workspacePath, ".claude", "skills", "lark-message", "SKILL.md"),
-      "utf-8",
-    );
-    expect(larkMessageSkill).toContain("lark-message");
-    expect(larkMessageSkill).toContain("lark-cli im +messages-send");
-
-    const larkDocsSkill = readFileSync(join(workspacePath, ".claude", "skills", "lark-docs", "SKILL.md"), "utf-8");
-    expect(larkDocsSkill).toContain("lark-docs");
 
     const meegoQuerySkill = readFileSync(join(workspacePath, ".claude", "skills", "meego-query", "SKILL.md"), "utf-8");
     expect(meegoQuerySkill).toContain("meego-query");
