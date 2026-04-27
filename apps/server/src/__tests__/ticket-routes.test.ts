@@ -98,6 +98,50 @@ describe("ticket routes", () => {
     });
   });
 
+  describe("GET /api/tickets", () => {
+    it("returns all tickets", async () => {
+      store.create("ISSUE-1", "evt-001", "meego_issue_created");
+      store.create("ISSUE-2", "evt-002", "lark_mention");
+      store.transition("ISSUE-1", "enriching");
+      const req = makeRequest("GET", "/api/tickets");
+      const res = await handleTicketRoutes(req, new URL(req.url), deps);
+      expect(res).not.toBeNull();
+      const json = await res?.json();
+      expect(json).toHaveLength(2);
+      expect(json[0].issueId).toBeDefined();
+      expect(json[0].eventType).toBeDefined();
+    });
+
+    it("filters by state", async () => {
+      store.create("ISSUE-1", "evt-001", "meego_issue_created");
+      store.create("ISSUE-2", "evt-002", "lark_mention");
+      store.transition("ISSUE-1", "enriching");
+      const req = makeRequest("GET", "/api/tickets?state=enriching");
+      const res = await handleTicketRoutes(req, new URL(req.url), deps);
+      const json = await res?.json();
+      expect(json).toHaveLength(1);
+      expect(json[0].state).toBe("enriching");
+    });
+
+    it("filters by multiple states", async () => {
+      store.create("ISSUE-1", "evt-001", "meego_issue_created");
+      store.create("ISSUE-2", "evt-002", "lark_mention");
+      store.transition("ISSUE-1", "enriching");
+      const req = makeRequest("GET", "/api/tickets?state=received,enriching");
+      const res = await handleTicketRoutes(req, new URL(req.url), deps);
+      const json = await res?.json();
+      expect(json).toHaveLength(2);
+    });
+
+    it("supports limit and offset", async () => {
+      for (let i = 0; i < 5; i++) store.create(`ISSUE-${i}`, `evt-${i}`);
+      const req = makeRequest("GET", "/api/tickets?limit=2&offset=1");
+      const res = await handleTicketRoutes(req, new URL(req.url), deps);
+      const json = await res?.json();
+      expect(json).toHaveLength(2);
+    });
+  });
+
   describe("extended TicketRecord fields", () => {
     it("create stores eventType from parameter", () => {
       store.create("ISSUE-1", "evt-001", "meego_issue_created");

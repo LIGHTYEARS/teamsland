@@ -124,4 +124,36 @@ describe("handleObservabilityRoutes", () => {
       expect(queue.deadLetters).toHaveBeenCalledWith(10);
     });
   });
+
+  describe("GET /api/queue/recent", () => {
+    it("should return recent processed messages with default limit", async () => {
+      const queue = makeQueue({
+        recentProcessed: vi.fn().mockReturnValue([
+          { id: "msg-1", type: "lark_mention", status: "completed" },
+          { id: "msg-2", type: "meego_issue_created", status: "failed" },
+        ]),
+      });
+      const result = handleObservabilityRoutes(
+        new Request("http://localhost/api/queue/recent"),
+        new URL("http://localhost/api/queue/recent"),
+        makeDeps({ queue }),
+      );
+      const res = await getResponse(result);
+      const body = await res.json();
+      expect(body).toHaveLength(2);
+      expect(queue.recentProcessed).toHaveBeenCalledWith(20, undefined);
+    });
+
+    it("should pass limit and type filter", async () => {
+      const queue = makeQueue({
+        recentProcessed: vi.fn().mockReturnValue([]),
+      });
+      handleObservabilityRoutes(
+        new Request("http://localhost/api/queue/recent?limit=5&type=lark_mention"),
+        new URL("http://localhost/api/queue/recent?limit=5&type=lark_mention"),
+        makeDeps({ queue }),
+      );
+      expect(queue.recentProcessed).toHaveBeenCalledWith(5, ["lark_mention"]);
+    });
+  });
 });

@@ -103,4 +103,28 @@ export class TicketStore {
       .all(state) as Array<Record<string, unknown>>;
     return rows.map((row) => this.mapRow(row));
   }
+
+  listAll(opts?: { states?: TicketState[]; limit?: number; offset?: number }): TicketRecord[] {
+    const { states, limit = 200, offset = 0 } = opts ?? {};
+
+    if (states && states.length > 0) {
+      const placeholders = states.map(() => "?").join(",");
+      const rows = this.db
+        .query(
+          `SELECT issue_id, state, event_id, event_type, context, history, updated_at, created_at
+         FROM ticket_states WHERE state IN (${placeholders})
+         ORDER BY updated_at DESC LIMIT ? OFFSET ?`,
+        )
+        .all(...states, limit, offset) as Array<Record<string, unknown>>;
+      return rows.map((row) => this.mapRow(row));
+    }
+
+    const rows = this.db
+      .query(
+        `SELECT issue_id, state, event_id, event_type, context, history, updated_at, created_at
+       FROM ticket_states ORDER BY updated_at DESC LIMIT ? OFFSET ?`,
+      )
+      .all(limit, offset) as Array<Record<string, unknown>>;
+    return rows.map((row) => this.mapRow(row));
+  }
 }

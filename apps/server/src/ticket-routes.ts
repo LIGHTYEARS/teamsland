@@ -32,9 +32,53 @@ function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
-export function handleTicketRoutes(req: Request, url: URL, deps: TicketRouteDeps): RouteResult {
-  if (!url.pathname.startsWith("/api/ticket/")) return null;
+async function handleCreate(req: Request, issueId: string, deps: TicketRouteDeps): Promise<Response> {
+  const body = (await req.json()) as { eventId: string; eventType?: string };
+  deps.ticketStore.create(issueId, body.eventId, body.eventType);
+  return json(deps.ticketStore.get(issueId), 201);
+}
 
+async function handleTransition(req: Request, issueId: string, deps: TicketRouteDeps): Promise<Response> {
+  const body = (await req.json()) as { to: string };
+  const result = deps.ticketStore.transition(issueId, body.to as TicketState);
+  if (!result.ok) return json({ ok: false, error: result.error }, 400);
+  return json({ ok: true, state: body.to });
+}
+
+async function handleEnrich(req: Request, issueId: string, deps: TicketRouteDeps): Promise<Response> {
+  const body = (await req.json()) as { projectKey: string; workItemType: string };
+  try {
+    const result = await enrichTicket({
+      issueId,
+      projectKey: body.projectKey,
+      workItemType: body.workItemType,
+      meegoGet: deps.meegoGet,
+      docRead: deps.docRead,
+    });
+    deps.ticketStore.updateContext(issueId, JSON.stringify(result));
+    return json(result);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ issueId, err }, "Enrich failed");
+    return json({ error: message }, 500);
+  }
+}
+
+async function handleUpdateContext(req: Request, issueId: string, deps: TicketRouteDeps): Promise<Response> {
+  const body = (await req.json()) as { context: string };
+  deps.ticketStore.updateContext(issueId, body.context);
+  return json({ ok: true });
+}
+
+function handleListTickets(url: URL, deps: TicketRouteDeps): Response {
+  const stateParam = url.searchParams.get("state");
+  const states = stateParam ? (stateParam.split(",") as TicketState[]) : undefined;
+  const limit = Number(url.searchParams.get("limit") ?? "200");
+  const offset = Number(url.searchParams.get("offset") ?? "0");
+  return json(deps.ticketStore.listAll({ states, limit, offset }));
+}
+
+function handleSingleTicket(req: Request, url: URL, deps: TicketRouteDeps): RouteResult {
   const parts = url.pathname.split("/").filter(Boolean); // ["api", "ticket", "<id>", ...]
   if (parts.length < 3) return null;
   const issueId = parts[2];
@@ -47,57 +91,19 @@ export function handleTicketRoutes(req: Request, url: URL, deps: TicketRouteDeps
     return json(record);
   }
 
-  // POST /api/ticket/:id/create
-  if (req.method === "POST" && action === "create") {
-    return (async () => {
-      const body = (await req.json()) as { eventId: string; eventType?: string };
-      deps.ticketStore.create(issueId, body.eventId, body.eventType);
-      const record = deps.ticketStore.get(issueId);
-      return json(record, 201);
-    })();
-  }
-
-  // POST /api/ticket/:id/transition
-  if (req.method === "POST" && action === "transition") {
-    return (async () => {
-      const body = (await req.json()) as { to: string };
-      const result = deps.ticketStore.transition(issueId, body.to as TicketState);
-      if (!result.ok) return json({ ok: false, error: result.error }, 400);
-      return json({ ok: true, state: body.to });
-    })();
-  }
-
-  // POST /api/ticket/:id/enrich
-  if (req.method === "POST" && action === "enrich") {
-    return (async () => {
-      const body = (await req.json()) as { projectKey: string; workItemType: string };
-      try {
-        const result = await enrichTicket({
-          issueId,
-          projectKey: body.projectKey,
-          workItemType: body.workItemType,
-          meegoGet: deps.meegoGet,
-          docRead: deps.docRead,
-        });
-        // Store enriched context
-        deps.ticketStore.updateContext(issueId, JSON.stringify(result));
-        return json(result);
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        logger.error({ issueId, err }, "Enrich failed");
-        return json({ error: message }, 500);
-      }
-    })();
-  }
-
-  // POST /api/ticket/:id/context — update context
-  if (req.method === "POST" && action === "context") {
-    return (async () => {
-      const body = (await req.json()) as { context: string };
-      deps.ticketStore.updateContext(issueId, body.context);
-      return json({ ok: true });
-    })();
-  }
+  if (req.method === "POST" && action === "create") return handleCreate(req, issueId, deps);
+  if (req.method === "POST" && action === "transition") return handleTransition(req, issueId, deps);
+  if (req.method === "POST" && action === "enrich") return handleEnrich(req, issueId, deps);
+  if (req.method === "POST" && action === "context") return handleUpdateContext(req, issueId, deps);
 
   return null;
+}
+
+export function handleTicketRoutes(req: Request, url: URL, deps: TicketRouteDeps): RouteResult {
+  if (!url.pathname.startsWith("/api/ticket")) return null;
+
+  // GET /api/tickets — list all tickets
+  if (req.method === "GET" && url.pathname === "/api/tickets") return handleListTickets(url, deps);
+
+  return handleSingleTicket(req, url, deps);
 }
