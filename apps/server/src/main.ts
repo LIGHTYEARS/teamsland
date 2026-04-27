@@ -19,6 +19,7 @@ import { initScheduledTasks } from "./init/scheduled-tasks.js";
 import { initSidecar } from "./init/sidecar.js";
 import { initStorage } from "./init/storage.js";
 import { getVikingClient, initViking } from "./init/viking.js";
+import { PipelineTracker } from "./pipeline-tracker.js";
 
 (async () => {
   try {
@@ -134,12 +135,19 @@ import { getVikingClient, initViking } from "./init/viking.js";
       });
 
       queue.consume(async (msg) => {
+        const tracker = new PipelineTracker(msg.id, msg.type, msg.createdAt);
+
+        tracker.phase("eventMapping");
         const event = toCoordinatorEvent(msg);
+        tracker.endPhase();
+
         logger.info({ msgId: msg.id, eventId: event.id, eventType: event.type }, "开始处理队列消息");
         try {
-          await coordinator.coordinator?.processEvent(event);
+          await coordinator.coordinator?.processEvent(event, tracker);
+          tracker.setOutcome("success");
           logger.info({ msgId: msg.id, eventId: event.id }, "队列消息处理完成");
         } catch (err) {
+          tracker.setOutcome("failed");
           const errMsg = err instanceof Error ? err.message : String(err);
           logger.error(
             { msgId: msg.id, eventId: event.id, eventType: event.type, error: errMsg },
@@ -148,7 +156,10 @@ import { getVikingClient, initViking } from "./init/viking.js";
           lark.notifier
             .sendCard("Coordinator 处理失败", `事件类型: ${event.type}\n事件 ID: ${event.id}\n错误: ${errMsg}`, "error")
             .catch((sendErr) => logger.warn({ sendErr }, "Coordinator 失败告警发送失败"));
-          throw err; // Re-throw so queue nacks
+          throw err;
+        } finally {
+          const summary = tracker.summarize();
+          logger.info(summary, "消息处理链路完成");
         }
       });
       logger.info("Coordinator 队列消费者已注册");
