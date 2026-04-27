@@ -42,6 +42,10 @@ export interface ClaudeMdContext {
   meegoApiBase: string;
   /** Meego 插件认证 Token */
   meegoPluginToken: string;
+  /** teamsland 主服务 API 基础地址 */
+  teamslandApiBase: string;
+  /** Worker worktree 路径 */
+  worktreePath: string;
 }
 
 /**
@@ -176,28 +180,45 @@ export class ClaudeMdInjector {
 
 ## teamsland 任务上下文
 
-### 任务信息
-- **Worker ID**: ${ctx.workerId}
-- **任务类型**: ${ctx.taskType}
-- **发起人**: ${ctx.requester}
-- **关联工单**: ${ctx.issueId}
-- **群聊 ID**: ${ctx.chatId}
-- **消息 ID**: ${ctx.messageId}
-
-### 任务指令
-${ctx.taskPrompt}
+| 字段 | 值 |
+|------|-----|
+| 任务类型 | ${ctx.taskType} |
+| 发起人 | ${ctx.requester} |
+| 关联工单 | ${ctx.issueId} |
+| Worktree | ${ctx.worktreePath} |
 
 ### 工作约定
-- 完成后必须通过 \`teamsland-report\` skill 汇报结果
-- 如需回复群聊，使用 \`lark-reply\` skill
-- 如关联了 Meego 工单，完成后通过 \`meego-update\` skill 更新状态
-- 遇到无法解决的问题时，立即通过 \`teamsland-report\` 汇报 blocked 状态
+
+**身份**：你是 Teamsland 平台的 Worker 执行单元，负责完成分配的任务并回报结果。
+
+**回报纪律**：
+- 任务完成 → 必须调用 teamsland-report 回报（status: success）
+- 遇到阻塞 → 必须调用 teamsland-report 说明阻塞原因（status: blocked），不得静默退出
+- 部分完成 → 回报已完成的部分和剩余待做的部分（status: partial）
+- 如需回复群聊，使用 lark-reply skill
+- 如关联了 Meego 工单，完成后通过 meego-update skill 更新状态
+
+**工具约束**：
+- 禁止调用 delegate、spawn_agent、memory_write
+- 优先使用 skill 提供的 CLI 工具（teamsland、lark-cli）
+
+**异常处理**：
+- 权限不足 → 回报 blocked，说明需要的权限
+- 文件/路径不存在 → 回报 blocked，说明缺失的资源
+- 网络错误 → 重试一次，仍失败则回报 blocked
 - 不要自行 spawn 子进程或委派任务
 
 ### 环境变量
-- \`WORKER_ID=${ctx.workerId}\`
-- \`MEEGO_API_BASE=${ctx.meegoApiBase}\`
-- \`MEEGO_PLUGIN_TOKEN=${ctx.meegoPluginToken}\`
+
+| 变量 | 值 |
+|------|-----|
+| WORKER_ID | ${ctx.workerId} |
+| TEAMSLAND_API_BASE | ${ctx.teamslandApiBase} |
+| MEEGO_API_BASE | ${ctx.meegoApiBase} |
+| MEEGO_PLUGIN_TOKEN | ${ctx.meegoPluginToken} |
+| LARK_CHAT_ID | ${ctx.chatId} |
+| LARK_MESSAGE_ID | ${ctx.messageId} |
+| LARK_USER_ID | ${ctx.requester} |
 `;
   }
 }

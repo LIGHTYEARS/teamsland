@@ -16,6 +16,8 @@ function makeContext(overrides?: Partial<ClaudeMdContext>): ClaudeMdContext {
     taskPrompt: "修复登录页面的 CSRF 漏洞",
     meegoApiBase: "https://meego.example.com",
     meegoPluginToken: "token_xxx",
+    teamslandApiBase: "http://localhost:3001",
+    worktreePath: "/tmp/worktree-test",
     ...overrides,
   };
 }
@@ -131,12 +133,44 @@ describe("ClaudeMdInjector", () => {
     expect(content).toContain("CR-9999");
     expect(content).toContain("oc_chat_id");
     expect(content).toContain("om_msg_id");
-    expect(content).toContain("请审查这段代码的安全性");
     expect(content).toContain("https://meego.test.com");
     expect(content).toContain("plugin_token_abc");
     // 环境变量部分
-    expect(content).toContain("WORKER_ID=wk-unique-id");
-    expect(content).toContain("MEEGO_API_BASE=https://meego.test.com");
-    expect(content).toContain("MEEGO_PLUGIN_TOKEN=plugin_token_abc");
+    expect(content).toContain("WORKER_ID");
+    expect(content).toContain("MEEGO_API_BASE");
+    expect(content).toContain("MEEGO_PLUGIN_TOKEN");
+  });
+
+  it("新格式: context block 使用表格格式", async () => {
+    await injector.inject(tempDir, makeContext());
+    const content = await Bun.file(join(tempDir, "CLAUDE.md")).text();
+    expect(content).toContain("| 任务类型 | bugfix |");
+    expect(content).toContain("| 发起人 | 张三 |");
+    expect(content).toContain("| 关联工单 | BUG-1234 |");
+  });
+
+  it("新格式: 不再包含任务指令段落", async () => {
+    await injector.inject(tempDir, makeContext({ taskPrompt: "请审查代码" }));
+    const content = await Bun.file(join(tempDir, "CLAUDE.md")).text();
+    expect(content).not.toContain("### 任务指令");
+    expect(content).not.toContain("请审查代码");
+  });
+
+  it("新格式: 包含完整环境变量表", async () => {
+    await injector.inject(tempDir, makeContext());
+    const content = await Bun.file(join(tempDir, "CLAUDE.md")).text();
+    expect(content).toContain("TEAMSLAND_API_BASE");
+    expect(content).toContain("http://localhost:3001");
+    expect(content).toContain("LARK_CHAT_ID");
+    expect(content).toContain("LARK_USER_ID");
+  });
+
+  it("新格式: 包含增强版工作约定", async () => {
+    await injector.inject(tempDir, makeContext());
+    const content = await Bun.file(join(tempDir, "CLAUDE.md")).text();
+    expect(content).toContain("你是 Teamsland 平台的 Worker 执行单元");
+    expect(content).toContain("回报纪律");
+    expect(content).toContain("工具约束");
+    expect(content).toContain("异常处理");
   });
 });

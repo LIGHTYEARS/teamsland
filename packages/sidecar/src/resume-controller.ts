@@ -237,6 +237,8 @@ export class ResumeController {
       taskPrompt: resumePrompt,
       meegoApiBase: "",
       meegoPluginToken: "",
+      teamslandApiBase: "",
+      worktreePath: predecessor.worktreePath,
     });
 
     // Spawn 新进程

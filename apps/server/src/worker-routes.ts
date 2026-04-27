@@ -182,6 +182,8 @@ async function runPreSpawnInjections(
       taskPrompt: body.task,
       meegoApiBase: deps.meegoApiBase ?? "",
       meegoPluginToken: deps.meegoPluginToken ?? "",
+      teamslandApiBase: deps.teamslandApiBase ?? "http://localhost:3001",
+      worktreePath,
     });
     logger.info({ agentId }, "CLAUDE.md 任务上下文已注入");
   }
