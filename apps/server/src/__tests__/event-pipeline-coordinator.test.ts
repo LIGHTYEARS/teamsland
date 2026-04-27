@@ -189,7 +189,10 @@ describe("端到端集成: QueueMessage → toCoordinatorEvent → CoordinatorPr
     );
 
     // Step 4: Verify contextLoader was called with the coordinator event
-    expect(contextLoader.load).toHaveBeenCalledWith(expect.objectContaining({ type: "lark_mention", id: "msg-1" }));
+    expect(contextLoader.load).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "lark_mention", id: "msg-1" }),
+      undefined,
+    );
   });
 
   it("worker_completed 事件携带 chatId 和 senderId 到 Coordinator", async () => {
