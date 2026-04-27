@@ -25,6 +25,17 @@ import { getVikingClient, initViking } from "./init/viking.js";
     // ── Phase 0: 配置 + 日志 + Tracing ──
     const { config, logger, controller } = await initConfigAndLogging();
 
+    // ── Crash Guards ──
+    process.on("uncaughtException", (err) => {
+      logger.fatal({ err }, "未捕获异常，进程即将退出");
+      process.exit(1);
+    });
+
+    process.on("unhandledRejection", (reason) => {
+      logger.fatal({ reason }, "未处理 Promise 拒绝，进程即将退出");
+      process.exit(1);
+    });
+
     // ── Phase 1: 存储层 ──
     const storage = await initStorage(config, logger);
 
