@@ -37,3 +37,5 @@ export type {
   TranscriptSummary,
 } from "./transcript-reader.js";
 export { TranscriptReader } from "./transcript-reader.js";
+export type { SpawnWorkerParams, WorkerEvent, WorkerManagerOpts } from "./worker-manager.js";
+export { WorkerManager } from "./worker-manager.js";
