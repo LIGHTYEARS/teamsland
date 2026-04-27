@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { createLogger } from "@teamsland/observability";
 import type { AppConfig, RepoMappingEntry } from "@teamsland/types";
 import { generateHandleMeegoIssueWorkflow, generateTicketLifecycleSkill } from "./coordinator-init-workflows.js";
@@ -161,7 +161,11 @@ async function writeWorkspaceFiles(basePath: string, config: AppConfig): Promise
   ];
 
   for (const file of files) {
-    await writeFileIfNotExists(file.path, file.content);
+    if (file.path.endsWith(".md")) {
+      await writeFileIfChanged(file.path, file.content);
+    } else {
+      await writeFileIfNotExists(file.path, file.content);
+    }
   }
 }
 
@@ -183,6 +187,38 @@ async function writeFileIfNotExists(filePath: string, content: string): Promise<
   }
   await Bun.write(filePath, content);
   logger.info({ file: filePath }, "文件已创建");
+}
+
+/**
+ * 仅在内容哈希发生变化时写入文件（版本化写入）
+ *
+ * 使用 SHA-256 前 8 位作为内容指纹嵌入文件头。
+ * 若哈希匹配则跳过；若不匹配则备份旧版本并写入新内容。
+ *
+ * @param filePath - 文件绝对路径
+ * @param content - 新文件内容
+ */
+async function writeFileIfChanged(filePath: string, content: string): Promise<void> {
+  const HASH_PREFIX = "<!-- teamsland-content-hash: ";
+  const hash = new Bun.CryptoHasher("sha256").update(content).digest("hex").slice(0, 8);
+  const taggedContent = `${HASH_PREFIX}${hash} -->\n${content}`;
+
+  if (existsSync(filePath)) {
+    const existing = await Bun.file(filePath).text();
+    const match = existing.match(/<!-- teamsland-content-hash: (\w+) -->/);
+    if (match?.[1] === hash) {
+      logger.debug({ file: filePath }, "文件内容未变更，跳过");
+      return;
+    }
+    const backupDir = join(dirname(filePath), ".backup");
+    mkdirSync(backupDir, { recursive: true });
+    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+    await Bun.write(join(backupDir, `${basename(filePath)}.${ts}`), existing);
+    logger.info({ file: filePath }, "旧文件已备份，写入新版本");
+  }
+
+  await Bun.write(filePath, taggedContent);
+  logger.info({ file: filePath, hash }, "文件已写入（版本化）");
 }
 
 /**
