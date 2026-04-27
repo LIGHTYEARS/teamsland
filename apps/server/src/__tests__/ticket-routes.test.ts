@@ -51,6 +51,17 @@ describe("ticket routes", () => {
       expect(json.issueId).toBe("ISSUE-1");
       expect(json.state).toBe("received");
     });
+
+    it("forwards eventType to store", async () => {
+      const req = makeRequest("POST", "/api/ticket/ISSUE-2/create", {
+        eventId: "evt-002",
+        eventType: "meego_issue_created",
+      });
+      const res = await handleTicketRoutes(req, new URL(req.url), deps);
+      expect(res).not.toBeNull();
+      const json = await res?.json();
+      expect(json.eventType).toBe("meego_issue_created");
+    });
   });
 
   describe("GET /api/ticket/:id", () => {

@@ -50,8 +50,8 @@ export function handleTicketRoutes(req: Request, url: URL, deps: TicketRouteDeps
   // POST /api/ticket/:id/create
   if (req.method === "POST" && action === "create") {
     return (async () => {
-      const body = (await req.json()) as { eventId: string };
-      deps.ticketStore.create(issueId, body.eventId);
+      const body = (await req.json()) as { eventId: string; eventType?: string };
+      deps.ticketStore.create(issueId, body.eventId, body.eventType);
       const record = deps.ticketStore.get(issueId);
       return json(record, 201);
     })();
