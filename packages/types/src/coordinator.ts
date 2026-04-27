@@ -146,9 +146,20 @@ export interface CoordinatorContext {
  * };
  * ```
  */
+/**
+ * Pipeline 追踪器的最小接口
+ *
+ * 用于在不引入 server 包依赖的前提下，让 CoordinatorContextLoader
+ * 记录子阶段耗时。
+ */
+export interface PipelineTrackerLike {
+  /** 记录子阶段耗时 */
+  subPhase(parent: string, name: string, durationMs: number): void;
+}
+
 export interface CoordinatorContextLoader {
   /** 根据事件加载上下文 */
-  load(event: CoordinatorEvent): Promise<CoordinatorContext>;
+  load(event: CoordinatorEvent, tracker?: PipelineTrackerLike): Promise<CoordinatorContext>;
 }
 
 /**
