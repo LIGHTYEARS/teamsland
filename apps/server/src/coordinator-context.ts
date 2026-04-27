@@ -6,15 +6,6 @@ import type { SubagentRegistry } from "@teamsland/sidecar";
 import type { CoordinatorContext, CoordinatorContextLoader, CoordinatorEvent } from "@teamsland/types";
 
 /**
- * @deprecated Phase 2 的 Stub 实现，已被 LiveContextLoader 替代
- */
-export class StubContextLoader implements CoordinatorContextLoader {
-  async load(_event: CoordinatorEvent): Promise<CoordinatorContext> {
-    return { taskStateSummary: "", recentMessages: "", relevantMemories: "" };
-  }
-}
-
-/**
  * LiveContextLoader 构造参数
  *
  * @example
@@ -193,6 +184,7 @@ function extractRequesterId(event: CoordinatorEvent): string | undefined {
   const payload = event.payload;
   if (typeof payload.requesterId === "string") return payload.requesterId;
   if (typeof payload.userId === "string") return payload.userId;
+  if (typeof payload.senderId === "string") return payload.senderId;
   return undefined;
 }
 

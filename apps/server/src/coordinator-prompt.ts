@@ -75,11 +75,7 @@ export class CoordinatorPromptBuilder {
     meego_sprint_started: (e) => this.buildMeegoSprintStarted(e),
     worker_completed: (e) => this.buildWorkerCompleted(e),
     worker_anomaly: (e) => this.buildWorkerAnomaly(e),
-    worker_timeout: (e) => this.buildWorkerTimeout(e),
-    diagnosis_ready: (e) => this.buildDiagnosisReady(e),
     user_query: (e) => this.buildUserQuery(e),
-    worker_interrupted: (e) => this.buildWorkerInterrupted(e),
-    worker_resumed: (e) => this.buildWorkerResumed(e),
   };
 
   /**
@@ -344,21 +340,28 @@ export class CoordinatorPromptBuilder {
     const workerId = extractString(payload, "workerId");
     const issueId = extractString(payload, "issueId", "无关联工单");
     const resultSummary = extractString(payload, "resultSummary", "无结果摘要");
+    const chatId = extractString(payload, "chatId", "");
+    const senderId = extractString(payload, "senderId", "");
 
     return [
-      "## Worker 完成",
+      "## Worker 完成通知",
       "",
       `Worker ${workerId} 已完成任务。`,
       `- 关联任务: ${issueId}`,
       `- 运行时长: ${formatTimestamp(event.timestamp)}`,
+      chatId ? `- 来源聊天: ${chatId}` : "",
+      senderId ? `- 请求者: ${senderId}` : "",
       "",
       "执行结果:",
       `> ${resultSummary}`,
       "",
       "---",
       "",
-      "请整理结果摘要，通过 lark-cli 回复相关群聊。",
-    ].join("\n");
+      "请整理结果摘要，通过 lark-cli 回复相关聊天。",
+      chatId ? `回复目标: ${chatId}` : "无聊天上下文，发送到团队频道。",
+    ]
+      .filter(Boolean)
+      .join("\n");
   }
 
   /**
@@ -383,93 +386,6 @@ export class CoordinatorPromptBuilder {
       "1. 评估异常严重性",
       "2. 如果可恢复：teamsland cancel + teamsland spawn --worktree 接力",
       "3. 如果不可恢复：通过 lark-cli 通知相关人员",
-    ].join("\n");
-  }
-
-  /**
-   * 生成 Worker 超时事件的提示词
-   */
-  private buildWorkerTimeout(event: CoordinatorEvent): string {
-    const { payload } = event;
-    const workerId = extractString(payload, "workerId");
-    const timeoutSeconds = payload.timeoutSeconds;
-    const timeoutStr = typeof timeoutSeconds === "number" ? `${timeoutSeconds}s` : "N/A";
-
-    return [
-      "## Worker 超时",
-      "",
-      `Worker ${workerId} 已超时（限制: ${timeoutStr}）。`,
-      `时间: ${formatTimestamp(event.timestamp)}`,
-      "",
-      "---",
-      "",
-      "请决定是否取消并重新分配任务。",
-    ].join("\n");
-  }
-
-  /**
-   * 生成诊断就绪事件的提示词
-   */
-  private buildDiagnosisReady(event: CoordinatorEvent): string {
-    const { payload } = event;
-    const targetWorkerId = extractString(payload, "targetWorkerId");
-    const observerWorkerId = extractString(payload, "observerWorkerId");
-    const report = extractString(payload, "report");
-
-    return [
-      "## 诊断报告就绪",
-      "",
-      `目标 Worker: ${targetWorkerId}`,
-      `观察者 Worker: ${observerWorkerId}`,
-      `诊断报告:`,
-      report,
-      `时间: ${formatTimestamp(event.timestamp)}`,
-      "",
-      "---",
-      "",
-      "请审阅诊断结果并决定后续行动：中断并恢复 / 继续观察 / 注入提示。",
-    ].join("\n");
-  }
-
-  /**
-   * 生成 Worker 中断事件的提示词
-   */
-  private buildWorkerInterrupted(event: CoordinatorEvent): string {
-    const { payload } = event;
-    const workerId = extractString(payload, "workerId");
-    const reason = extractString(payload, "reason");
-
-    return [
-      "## Worker 已中断",
-      "",
-      `Worker ID: ${workerId}`,
-      `中断原因: ${reason}`,
-      `时间: ${formatTimestamp(event.timestamp)}`,
-      "",
-      "---",
-      "",
-      "Worker 已被中断，请确认是否需要进一步处理。",
-    ].join("\n");
-  }
-
-  /**
-   * 生成 Worker 恢复事件的提示词
-   */
-  private buildWorkerResumed(event: CoordinatorEvent): string {
-    const { payload } = event;
-    const workerId = extractString(payload, "workerId");
-    const predecessorId = extractString(payload, "predecessorId");
-
-    return [
-      "## Worker 已恢复",
-      "",
-      `新 Worker ID: ${workerId}`,
-      `前任 Worker ID: ${predecessorId}`,
-      `时间: ${formatTimestamp(event.timestamp)}`,
-      "",
-      "---",
-      "",
-      "中断的 Worker 已通过 relay 方式恢复运行，请持续关注。",
     ].join("\n");
   }
 

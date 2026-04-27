@@ -157,8 +157,25 @@ describe("CoordinatorPromptBuilder", () => {
 
       expect(prompt).toContain("worker-abc123");
       expect(prompt).toContain("已修复登录白屏问题，PR #42 已提交");
-      expect(prompt).toContain("## Worker 完成");
+      expect(prompt).toContain("## Worker 完成通知");
       expect(prompt).toContain("ISSUE-789");
+    });
+
+    it("buildWorkerCompleted: 包含 chatId 和 senderId", () => {
+      const event = createEvent({
+        type: "worker_completed",
+        payload: {
+          workerId: "w-1",
+          issueId: "ISS-1",
+          resultSummary: "bug fixed",
+          chatId: "oc_xxx",
+          senderId: "ou_yyy",
+        },
+      });
+      const context = createContext();
+      const prompt = builder.build(event, context);
+      expect(prompt).toContain("oc_xxx");
+      expect(prompt).toContain("ou_yyy");
     });
   });
 
@@ -182,24 +199,6 @@ describe("CoordinatorPromptBuilder", () => {
     });
   });
 
-  describe("worker_timeout 事件", () => {
-    it("输出包含超时信息", () => {
-      const event = createEvent({
-        type: "worker_timeout",
-        payload: {
-          workerId: "worker-timeout001",
-          timeoutSeconds: 300,
-        },
-      });
-      const context = createContext();
-      const prompt = builder.build(event, context);
-
-      expect(prompt).toContain("## Worker 超时");
-      expect(prompt).toContain("worker-timeout001");
-      expect(prompt).toContain("300s");
-    });
-  });
-
   describe("meego_issue_status_changed 事件", () => {
     it("输出包含状态变更信息", () => {
       const event = createEvent({
@@ -218,26 +217,6 @@ describe("CoordinatorPromptBuilder", () => {
       expect(prompt).toContain("ISSUE-100");
       expect(prompt).toContain("进行中");
       expect(prompt).toContain("已完成");
-    });
-  });
-
-  describe("diagnosis_ready 事件", () => {
-    it("输出包含诊断信息", () => {
-      const event = createEvent({
-        type: "diagnosis_ready",
-        payload: {
-          targetWorkerId: "worker-001",
-          observerWorkerId: "observer-001",
-          report: "发现 3 个潜在性能瓶颈",
-        },
-      });
-      const context = createContext();
-      const prompt = builder.build(event, context);
-
-      expect(prompt).toContain("## 诊断报告就绪");
-      expect(prompt).toContain("worker-001");
-      expect(prompt).toContain("observer-001");
-      expect(prompt).toContain("发现 3 个潜在性能瓶颈");
     });
   });
 
