@@ -72,6 +72,8 @@ export interface DashboardDeps {
   meegoApiBase?: string;
   /** Meego 插件认证 Token（用于 CLAUDE.md 注入） */
   meegoPluginToken?: string;
+  /** Teamsland API 基础地址（注入到 Worker 子进程环境变量） */
+  teamslandApiBase?: string;
   /** Hook 引擎（可选，用于 Hook 状态 API） */
   hookEngine?: HookEngine | null;
   /** Hook 指标收集器（可选，用于 Hook 指标 API） */
@@ -352,6 +354,7 @@ async function routeRequest(
     claudeMdInjector: ClaudeMdInjector | undefined;
     meegoApiBase: string | undefined;
     meegoPluginToken: string | undefined;
+    teamslandApiBase: string | undefined;
     hookEngine: HookEngine | null | undefined;
     hookMetricsCollector: HookMetricsCollector | null | undefined;
     appConfig: AppConfig | null | undefined;
@@ -389,6 +392,7 @@ async function routeRequest(
     claudeMdInjector: ctx.claudeMdInjector,
     meegoApiBase: ctx.meegoApiBase,
     meegoPluginToken: ctx.meegoPluginToken,
+    teamslandApiBase: ctx.teamslandApiBase,
   });
   if (workerResult) return workerResult;
 
@@ -664,6 +668,7 @@ export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): Retur
     vikingClient,
     coordinatorManager,
   } = deps;
+  const teamslandApiBase = deps.teamslandApiBase;
   const clients = new Set<unknown>();
   /** 追踪每个 WebSocket 连接关联的终端会话 ID，用于连接断开时自动清理 */
   const wsTerminals = new Map<unknown, Set<string>>();
@@ -731,6 +736,7 @@ export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): Retur
         claudeMdInjector,
         meegoApiBase,
         meegoPluginToken,
+        teamslandApiBase,
         hookEngine,
         hookMetricsCollector,
         appConfig,

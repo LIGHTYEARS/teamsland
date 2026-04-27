@@ -144,6 +144,7 @@ export function initDashboard(
       claudeMdInjector,
       meegoApiBase: config.meego.apiBaseUrl,
       meegoPluginToken: config.meego.pluginAccessToken,
+      teamslandApiBase: config.sidecar.teamslandApiBase ?? `http://localhost:${config.dashboard.port}`,
       hookEngine,
       hookMetricsCollector,
       appConfig: config,

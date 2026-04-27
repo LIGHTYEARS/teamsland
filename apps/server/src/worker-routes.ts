@@ -57,6 +57,8 @@ export interface WorkerRouteDeps {
   meegoApiBase?: string;
   /** Meego 插件认证 Token（用于 CLAUDE.md 注入） */
   meegoPluginToken?: string;
+  /** Teamsland API 基础地址（注入到 Worker 子进程环境变量） */
+  teamslandApiBase?: string;
   /** 中断控制器（可选） */
   interruptController?: InterruptController | null;
   /** 恢复控制器（可选） */
@@ -221,6 +223,10 @@ async function handleCreateWorker(req: Request, deps: WorkerRouteDeps): Promise<
         WORKER_ID: agentId,
         MEEGO_API_BASE: deps.meegoApiBase ?? "",
         MEEGO_PLUGIN_TOKEN: deps.meegoPluginToken ?? "",
+        TEAMSLAND_API_BASE: deps.teamslandApiBase ?? "http://localhost:3001",
+        LARK_CHAT_ID: bodyResult.origin?.chatId ?? "",
+        LARK_MESSAGE_ID: bodyResult.origin?.messageId ?? "",
+        LARK_USER_ID: bodyResult.origin?.senderId ?? "",
       },
     });
 
