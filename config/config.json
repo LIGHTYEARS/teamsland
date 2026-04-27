@@ -83,14 +83,6 @@
     }
   ],
   "skillRouting": {
-    "frontend_dev": ["figma-reader", "lark-docs", "git-tools", "architect-template"],
-    "tech_spec": ["lark-docs", "git-tools", "architect-template"],
-    "design": ["figma-reader", "lark-docs", "architect-template"],
-    "code_review": ["git-diff", "lark-comment"],
-    "bot_query": ["lark-docs", "lark-base"],
-    "confirm": ["lark-docs"],
-    "status_sync": ["lark-docs", "lark-base"],
-    "query": ["lark-docs", "lark-base"],
     "coding": ["lark-reply", "meego-update", "teamsland-report"],
     "research": ["lark-reply", "teamsland-report"],
     "review": ["lark-reply", "meego-update", "teamsland-report"],
