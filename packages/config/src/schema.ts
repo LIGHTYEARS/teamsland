@@ -70,6 +70,7 @@ const SidecarConfigSchema = z.object({
   workerTimeoutSeconds: z.number().positive(),
   healthCheckTimeoutMs: z.number().int().positive(),
   minSwarmSuccessRatio: z.number().min(0).max(1),
+  teamslandApiBase: z.string().default("http://localhost:3001"),
 });
 
 const ConfirmationConfigSchema = z.object({
@@ -172,6 +173,8 @@ export const AppConfigSchema = z.object({
       maxRecoveryRetries: z.number().default(3),
       inferenceTimeoutMs: z.number().default(60_000),
       enabled: z.boolean().default(false),
+      maxEventsPerSession: z.number().int().positive().default(20),
+      resultTimeoutMs: z.number().int().positive().default(300_000),
     })
     .optional(),
   openViking: z

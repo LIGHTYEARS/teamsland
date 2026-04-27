@@ -50,7 +50,8 @@
     "maxDelegateDepth": 2,
     "workerTimeoutSeconds": 300,
     "healthCheckTimeoutMs": 30000,
-    "minSwarmSuccessRatio": 0.5
+    "minSwarmSuccessRatio": 0.5,
+    "teamslandApiBase": "http://localhost:3001"
   },
   "confirmation": {
     "reminderIntervalMin": 30,
@@ -112,12 +113,14 @@
   },
   "coordinator": {
     "workspacePath": "~/.teamsland/coordinator",
-    "sessionIdleTimeoutMs": 300000,
-    "sessionMaxLifetimeMs": 1800000,
+    "sessionIdleTimeoutMs": 7200000,
+    "sessionMaxLifetimeMs": 7200000,
     "sessionReuseWindowMs": 300000,
     "maxRecoveryRetries": 3,
     "inferenceTimeoutMs": 300000,
-    "enabled": true
+    "enabled": true,
+    "maxEventsPerSession": 20,
+    "resultTimeoutMs": 300000
   },
   "hooks": {
     "hooksDir": "~/.teamsland/coordinator/hooks",

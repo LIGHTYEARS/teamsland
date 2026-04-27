@@ -266,6 +266,8 @@ export interface SidecarConfig {
   healthCheckTimeoutMs: number;
   /** Swarm 最低成功率 */
   minSwarmSuccessRatio: number;
+  /** teamsland 主服务 API 基础地址，供 Worker 环境变量注入 */
+  teamslandApiBase?: string;
 }
 
 // ─── confirmation.yaml ───
@@ -517,6 +519,8 @@ export interface CoordinatorConfig {
   maxEventsPerSession?: number;
   /** 单个 Worker 最大 budget（USD） */
   maxBudgetPerWorker?: number;
+  /** Worker 任务结果等待超时（ms） */
+  resultTimeoutMs?: number;
 }
 
 // ─── hooks 配置 ───

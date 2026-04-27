@@ -83,7 +83,7 @@ export async function initCoordinator(
       ],
       sessionMaxLifetimeMs: coordConfig.sessionMaxLifetimeMs ?? 30 * 60 * 1000,
       maxEventsPerSession: coordConfig.maxEventsPerSession ?? 20,
-      resultTimeoutMs: coordConfig.inferenceTimeoutMs ?? 5 * 60 * 1000,
+      resultTimeoutMs: coordConfig.resultTimeoutMs ?? coordConfig.inferenceTimeoutMs ?? 5 * 60 * 1000,
     },
     contextLoader,
     promptBuilder,
