@@ -25,7 +25,7 @@ function TabsTrigger({ className, active, ...props }: React.ComponentProps<"butt
       aria-selected={active}
       data-state={active ? "active" : "inactive"}
       className={cn(
-        "inline-flex items-center justify-center gap-1.5 whitespace-nowrap px-3 py-1.5 text-sm font-medium transition-colors outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px] rounded-md disabled:pointer-events-none disabled:opacity-50",
+        "inline-flex items-center justify-center gap-1.5 whitespace-nowrap px-3 py-1.5 text-sm font-medium transition-colors outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px] rounded-t-md disabled:pointer-events-none disabled:opacity-50",
         "text-muted-foreground hover:text-foreground",
         "data-[state=active]:text-foreground data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:-mb-px",
         className,
