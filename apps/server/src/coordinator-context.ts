@@ -211,12 +211,15 @@ function formatFindResult(result: FindResult, label: string): string {
 }
 
 /**
- * 格式化 SessionContext 为可读的对话历史摘要
+ * 格式化 SessionContext 为语义化 XML 标记的对话历史
+ *
+ * 使用 custom semantic XML tags 区分不同消息角色，
+ * 便于 LLM 准确解析消息边界和角色归属。
  */
 function formatSessionContext(ctx: SessionContext): string {
   const parts: string[] = [];
   if (ctx.latest_archive_overview) {
-    parts.push(`[对话历史概要] ${ctx.latest_archive_overview}`);
+    parts.push(`<chat_history_overview>\n${ctx.latest_archive_overview}\n</chat_history_overview>`);
   }
   for (const msg of ctx.messages) {
     const content = msg.parts
@@ -226,7 +229,8 @@ function formatSessionContext(ctx: SessionContext): string {
         return typeof obj.text === "string" ? obj.text : "";
       })
       .join("");
-    parts.push(`- [${msg.role}] ${content.slice(0, 200)}`);
+    const tag = `${msg.role}_message`;
+    parts.push(`<${tag}>\n${content.slice(0, 200)}\n</${tag}>`);
   }
   return parts.join("\n");
 }

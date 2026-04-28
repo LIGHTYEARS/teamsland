@@ -293,9 +293,15 @@ describe("LiveContextLoader", () => {
       });
 
       const ctx = await loader.load(makeEvent());
-      expect(ctx.recentMessages).toContain("[对话历史概要] 之前讨论了部署计划");
-      expect(ctx.recentMessages).toContain("[user] 请帮我检查代码");
-      expect(ctx.recentMessages).toContain("[assistant] 好的，我来检查");
+      expect(ctx.recentMessages).toContain("<chat_history_overview>");
+      expect(ctx.recentMessages).toContain("之前讨论了部署计划");
+      expect(ctx.recentMessages).toContain("</chat_history_overview>");
+      expect(ctx.recentMessages).toContain("<user_message>");
+      expect(ctx.recentMessages).toContain("请帮我检查代码");
+      expect(ctx.recentMessages).toContain("</user_message>");
+      expect(ctx.recentMessages).toContain("<assistant_message>");
+      expect(ctx.recentMessages).toContain("好的，我来检查");
+      expect(ctx.recentMessages).toContain("</assistant_message>");
     });
 
     it("无归档概要时只显示消息", async () => {
@@ -316,8 +322,10 @@ describe("LiveContextLoader", () => {
       });
 
       const ctx = await loader.load(makeEvent());
-      expect(ctx.recentMessages).not.toContain("[对话历史概要]");
-      expect(ctx.recentMessages).toContain("[user] hello");
+      expect(ctx.recentMessages).not.toContain("<chat_history_overview>");
+      expect(ctx.recentMessages).toContain("<user_message>");
+      expect(ctx.recentMessages).toContain("hello");
+      expect(ctx.recentMessages).toContain("</user_message>");
     });
 
     it("空会话上下文时返回空字符串", async () => {
