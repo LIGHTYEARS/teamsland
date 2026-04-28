@@ -63,13 +63,9 @@ export function useCoordinatorStatus(): {
       }
       if (msg.type === "coordinator_state") {
         const ws = msg as unknown as WsCoordinatorState;
-        setStatus((prev) => ({
-          enabled: prev?.enabled ?? true,
-          state: ws.state,
-          activeSession: prev?.activeSession,
-        }));
         setLastEventId(ws.eventId ?? null);
         setLastChangeAt(ws.timestamp);
+        bump();
       }
     });
   }, [subscribe]);
