@@ -78,15 +78,15 @@ export function SessionsListPage({ onNavigate }: { onNavigate: (path: string) =>
   }, [flatSessions, typeFilter, search]);
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden bg-muted/40">
       {/* 页面标题 */}
-      <header className="shrink-0 border-b border-border px-6 py-4">
+      <header className="shrink-0 px-6 py-4">
         <h1 className="text-xl font-semibold text-foreground">会话</h1>
         <p className="text-sm text-muted-foreground">浏览所有项目的 Agent 会话</p>
       </header>
 
       {/* 过滤栏 */}
-      <div className="shrink-0 flex items-center gap-3 border-b border-border px-6 py-3">
+      <div className="shrink-0 flex items-center gap-3 px-6 py-3">
         {/* 类型过滤 */}
         <div className="flex items-center gap-1">
           {FILTER_OPTIONS.map(({ value, label }) => (

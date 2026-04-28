@@ -111,9 +111,9 @@ export function MemoryPage({ selectedUri, onUriChange }: { selectedUri?: string;
   }, [search]);
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden bg-muted/40">
       {/* 页面标题 */}
-      <header className="shrink-0 border-b border-border px-6 py-4 flex items-start justify-between">
+      <header className="shrink-0 px-6 py-4 flex items-start justify-between">
         <div>
           <h1 className="text-xl font-semibold text-foreground">记忆</h1>
           <p className="text-sm text-muted-foreground">浏览与搜索 OpenViking 语义记忆库</p>
@@ -125,7 +125,7 @@ export function MemoryPage({ selectedUri, onUriChange }: { selectedUri?: string;
       </header>
 
       {/* 搜索栏 */}
-      <div className="shrink-0 flex items-center gap-2 border-b border-border px-6 py-3">
+      <div className="shrink-0 flex items-center gap-2 px-6 py-3">
         <div className="relative flex-1 max-w-lg">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -400,7 +400,7 @@ function SearchResultsView({ results, onSelect }: { results: SearchResult[]; onS
           key={r.uri}
           type="button"
           onClick={() => onSelect(r.uri)}
-          className="block w-full text-left rounded-md border border-border p-3 hover:bg-accent/50 transition-colors outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+          className="block w-full text-left rounded-md bg-card p-3 hover:bg-accent/50 transition-colors outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px]"
         >
           <p className="font-mono text-xs text-foreground truncate">{r.uri}</p>
           {r.abstract && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{r.abstract}</p>}
@@ -477,9 +477,7 @@ function AddMemoryDialog({
         <div className="space-y-4">
           <div>
             <p className="text-sm text-muted-foreground mb-1.5">位置</p>
-            <div className="rounded-md border border-border bg-muted/50 px-3 py-2 font-mono text-xs text-muted-foreground">
-              {location}
-            </div>
+            <div className="rounded-md bg-muted/50 px-3 py-2 font-mono text-xs text-muted-foreground">{location}</div>
           </div>
 
           <div>
@@ -497,7 +495,7 @@ function AddMemoryDialog({
                 placeholder="my-memory"
                 className="rounded-r-none"
               />
-              <span className="inline-flex items-center rounded-r-md border border-l-0 border-border bg-muted/50 px-3 text-sm text-muted-foreground">
+              <span className="inline-flex items-center rounded-r-md bg-muted/50 px-3 text-sm text-muted-foreground">
                 .md
               </span>
             </div>

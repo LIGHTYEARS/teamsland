@@ -54,8 +54,8 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto">
-      <header className="shrink-0 border-b border-border px-6 py-4">
+    <div className="flex h-full flex-col overflow-y-auto bg-muted/40">
+      <header className="shrink-0 px-6 py-4">
         <h1 className="text-xl font-semibold text-foreground">设置</h1>
         <p className="text-sm text-muted-foreground">系统配置与状态</p>
       </header>

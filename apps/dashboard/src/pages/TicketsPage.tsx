@@ -66,8 +66,8 @@ export function TicketsPage({
   };
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <header className="shrink-0 border-b border-border px-6 py-4 flex items-center justify-between">
+    <div className="flex h-full flex-col overflow-hidden bg-muted/40">
+      <header className="shrink-0 px-6 py-4 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">工单</h1>
           <p className="text-sm text-muted-foreground">
