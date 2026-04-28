@@ -1,6 +1,9 @@
 import { Badge } from "@teamsland/ui/components/ui/badge";
 import { Button } from "@teamsland/ui/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@teamsland/ui/components/ui/card";
+import { EmptyState } from "@teamsland/ui/components/ui/empty-state";
+import { MetricCard } from "@teamsland/ui/components/ui/metric-card";
+import { Skeleton } from "@teamsland/ui/components/ui/skeleton";
 import { StatusDot } from "@teamsland/ui/components/ui/status-dot";
 import {
   Table,
@@ -55,20 +58,20 @@ export function HooksPage({ activeTab, onTabChange }: { activeTab?: string; onTa
     <div className="flex h-full flex-col overflow-hidden">
       <header className="shrink-0 border-b border-border px-6 py-4">
         <h1 className="text-lg font-semibold text-foreground">Hooks</h1>
-        <p className="text-sm text-muted-foreground">Manage the three-layer event processing system</p>
+        <p className="text-sm text-muted-foreground">管理三层事件处理系统</p>
       </header>
 
       <div className="shrink-0 px-6 pt-3">
         <Tabs>
           <TabsList>
             <TabsTrigger active={tab === "status"} onClick={() => onTabChange("status")}>
-              Status
+              状态
             </TabsTrigger>
             <TabsTrigger active={tab === "pending"} onClick={() => onTabChange("pending")}>
-              Pending Review
+              待审核
             </TabsTrigger>
             <TabsTrigger active={tab === "evolution"} onClick={() => onTabChange("evolution")}>
-              Evolution Log
+              演化日志
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -92,6 +95,7 @@ export function HooksPage({ activeTab, onTabChange }: { activeTab?: string; onTa
 function HooksStatusTab() {
   const [status, setStatus] = useState<HooksStatusData | null>(null);
   const [metrics, setMetrics] = useState<HooksMetrics | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([fetch("/api/hooks/status"), fetch("/api/hooks/metrics")])
@@ -99,7 +103,8 @@ function HooksStatusTab() {
         if (sRes.ok) setStatus(await sRes.json());
         if (mRes.ok) setMetrics(await mRes.json());
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   return (
@@ -107,15 +112,15 @@ function HooksStatusTab() {
       {/* Engine Status */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Engine Status</CardTitle>
+          <CardTitle className="text-sm">引擎状态</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-3">
             <StatusDot variant={status?.enabled ? "success" : "warning"} size="lg" />
-            <span className="text-sm font-medium">{status?.enabled ? "Enabled" : "Disabled"}</span>
+            <span className="text-sm font-medium">{status?.enabled ? "已启用" : "已禁用"}</span>
             {status?.loadedHooks !== undefined && (
               <Badge variant="secondary" className="text-xs">
-                {status.loadedHooks} hooks loaded
+                已加载 {status.loadedHooks} 个 Hook
               </Badge>
             )}
           </div>
@@ -123,34 +128,35 @@ function HooksStatusTab() {
       </Card>
 
       {/* Metrics */}
-      {metrics && (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <MetricCard label="Total Triggers" value={metrics.totalTriggers ?? 0} />
-          <MetricCard label="Total Matches" value={metrics.totalMatches ?? 0} />
-          <MetricCard label="Executions" value={metrics.totalExecutions ?? 0} />
-          <MetricCard
-            label="Match Rate"
-            value={metrics.matchRate != null ? `${(metrics.matchRate * 100).toFixed(1)}%` : "—"}
-          />
-          <MetricCard
-            label="Avg Latency"
-            value={metrics.avgLatencyMs != null ? `${metrics.avgLatencyMs.toFixed(0)}ms` : "—"}
-          />
-          <MetricCard label="Errors" value={metrics.errors ?? 0} />
-        </div>
-      )}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        {loading ? (
+          Array.from({ length: 6 }).map((_, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton placeholders, no reordering
+            <Card key={`skeleton-metric-${i}`}>
+              <CardContent className="pt-4">
+                <Skeleton className="h-3 w-16 mb-2" />
+                <Skeleton className="h-7 w-12" />
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          <>
+            <MetricCard label="总触发数" value={metrics?.totalTriggers ?? 0} />
+            <MetricCard label="总匹配数" value={metrics?.totalMatches ?? 0} />
+            <MetricCard label="执行次数" value={metrics?.totalExecutions ?? 0} />
+            <MetricCard
+              label="匹配率"
+              value={metrics?.matchRate != null ? `${(metrics.matchRate * 100).toFixed(1)}%` : "—"}
+            />
+            <MetricCard
+              label="平均延迟"
+              value={metrics?.avgLatencyMs != null ? `${metrics.avgLatencyMs.toFixed(0)}ms` : "—"}
+            />
+            <MetricCard label="错误数" value={metrics?.errors ?? 0} />
+          </>
+        )}
+      </div>
     </div>
-  );
-}
-
-function MetricCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <Card>
-      <CardContent className="pt-4">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-xl font-bold tabular-nums mt-1">{value}</p>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -185,15 +191,30 @@ function HooksPendingTab() {
     setPending((prev) => prev.filter((p) => p.filename !== filename));
   }, []);
 
-  if (loading) return <p className="text-sm text-muted-foreground">Loading…</p>;
-
-  if (pending.length === 0) {
+  if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-        <p className="text-sm">No pending hooks.</p>
-        <p className="text-xs mt-1">The brain hasn't proposed any new automation recently.</p>
+      <div className="space-y-4">
+        {Array.from({ length: 2 }).map((_, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton placeholders, no reordering
+          <Card key={`skeleton-pending-${i}`}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+              <Skeleton className="h-4 w-40" />
+              <div className="flex gap-2">
+                <Skeleton className="h-8 w-16 rounded-md" />
+                <Skeleton className="h-8 w-16 rounded-md" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-3 w-64" />
+            </CardContent>
+          </Card>
+        ))}
       </div>
     );
+  }
+
+  if (pending.length === 0) {
+    return <EmptyState title="暂无待审核的 Hook" description="Brain 近期没有提出新的自动化方案。" />;
   }
 
   return (
@@ -205,11 +226,11 @@ function HooksPendingTab() {
             <div className="flex items-center gap-2">
               <Button size="sm" variant="outline" onClick={() => handleReject(hook.filename)}>
                 <X size={14} />
-                Reject
+                拒绝
               </Button>
               <Button size="sm" onClick={() => handleApprove(hook.filename)}>
                 <Check size={14} />
-                Approve
+                通过
               </Button>
             </div>
           </CardHeader>
@@ -242,17 +263,35 @@ function HooksEvolutionTab() {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Timestamp</TableHead>
-          <TableHead>Action</TableHead>
+          <TableHead>时间</TableHead>
+          <TableHead>操作</TableHead>
           <TableHead>Hook</TableHead>
-          <TableHead>Reason</TableHead>
+          <TableHead>原因</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {loading ? (
-          <TableEmpty colSpan={4}>Loading…</TableEmpty>
+          Array.from({ length: 4 }).map((_, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton placeholders, no reordering
+            <TableRow key={`skeleton-row-${i}`}>
+              <TableCell>
+                <Skeleton className="h-4 w-28" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-5 w-16 rounded-full" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-32" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-40" />
+              </TableCell>
+            </TableRow>
+          ))
         ) : entries.length === 0 ? (
-          <TableEmpty colSpan={4}>No evolution events recorded.</TableEmpty>
+          <TableEmpty colSpan={4}>
+            <EmptyState title="暂无演化事件记录" />
+          </TableEmpty>
         ) : (
           entries.map((e) => (
             <TableRow key={`${e.timestamp}-${e.hookPath}-${e.action}`}>
