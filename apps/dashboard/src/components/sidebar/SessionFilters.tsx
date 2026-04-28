@@ -3,9 +3,9 @@ import { Filter } from "lucide-react";
 /** 所有可用的会话类型过滤选项 */
 const FILTER_OPTIONS = [
   { key: "all", label: "全部" },
-  { key: "coordinator", label: "Coordinator" },
-  { key: "task_worker", label: "Task Worker" },
-  { key: "observer_worker", label: "Observer" },
+  { key: "coordinator", label: "协调器" },
+  { key: "task_worker", label: "任务 Worker" },
+  { key: "observer_worker", label: "监听 Worker" },
 ] as const;
 
 /**

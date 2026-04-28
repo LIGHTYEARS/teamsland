@@ -88,7 +88,7 @@ function MetricCardsGrid({
             variant={stats.running > 0 ? "success" : "default"}
           />
           <MetricCard label="任务 Worker" value={stats.taskWorkers} icon={<Activity size={16} />} />
-          <MetricCard label="观察者" value={stats.observers} icon={<Activity size={16} />} />
+          <MetricCard label="监听 Worker" value={stats.observers} icon={<Activity size={16} />} />
           <MetricCard
             label="Hooks"
             value={hooksDisplay}
@@ -272,9 +272,9 @@ export function OverviewPage({ onNavigate }: { onNavigate: (path: string) => voi
   );
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto">
+    <div className="flex h-full flex-col overflow-y-auto bg-muted/40">
       {/* 页面标题 */}
-      <header className="shrink-0 border-b border-border px-6 py-4">
+      <header className="shrink-0 px-6 py-4">
         <h1 className="text-xl font-semibold text-foreground">Overview</h1>
         <p className="text-sm text-muted-foreground">
           System health at a glance

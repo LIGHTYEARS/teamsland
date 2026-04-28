@@ -31,17 +31,15 @@ export function CoordinatorPage() {
     return (
       <div className="flex h-full flex-col items-center justify-center text-muted-foreground gap-3">
         <Activity size={48} strokeWidth={1} />
-        <h2 className="text-lg font-semibold">Coordinator Not Enabled</h2>
-        <p className="text-sm max-w-md text-center">
-          The coordinator process is not running. Enable it in your server settings and restart.
-        </p>
+        <h2 className="text-lg font-semibold">协调器未启用</h2>
+        <p className="text-sm max-w-md text-center">协调器进程未运行，请在服务器配置中启用并重启服务。</p>
       </div>
     );
   }
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto">
-      <header className="shrink-0 border-b border-border px-6 py-4">
+    <div className="flex h-full flex-col overflow-y-auto bg-muted/40">
+      <header className="shrink-0 px-6 py-4">
         <h1 className="text-xl font-semibold">协调器</h1>
         <p className="text-sm text-muted-foreground">系统监控仪表盘</p>
       </header>
@@ -54,11 +52,11 @@ export function CoordinatorPage() {
         ) : null}
 
         <div className="space-y-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Queue</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">队列</h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <ErrorBoundary
               fallbackRender={({ error, resetErrorBoundary }) => (
-                <ErrorCard title="Queue 加载失败" message={(error as Error).message} onRetry={resetErrorBoundary} />
+                <ErrorCard title="队列加载失败" message={(error as Error).message} onRetry={resetErrorBoundary} />
               )}
             >
               <div>
@@ -74,11 +72,7 @@ export function CoordinatorPage() {
             </ErrorBoundary>
             <ErrorBoundary
               fallbackRender={({ error, resetErrorBoundary }) => (
-                <ErrorCard
-                  title="Dead Letter 加载失败"
-                  message={(error as Error).message}
-                  onRetry={resetErrorBoundary}
-                />
+                <ErrorCard title="失败消息加载失败" message={(error as Error).message} onRetry={resetErrorBoundary} />
               )}
             >
               <DeadLetterTable messages={deadLetters} />
@@ -87,10 +81,10 @@ export function CoordinatorPage() {
         </div>
 
         <div className="space-y-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Recent Events</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">最近事件</h2>
           <ErrorBoundary
             fallbackRender={({ error, resetErrorBoundary }) => (
-              <ErrorCard title="Events 加载失败" message={(error as Error).message} onRetry={resetErrorBoundary} />
+              <ErrorCard title="事件加载失败" message={(error as Error).message} onRetry={resetErrorBoundary} />
             )}
           >
             {eventsLoading ? (
@@ -108,7 +102,7 @@ export function CoordinatorPage() {
 
         <div>
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">工单状态机</h2>
-          <div className="border border-border rounded-lg p-4 bg-muted/10">
+          <div className="rounded-lg p-4 bg-card">
             <TicketStateMachine activeStates={activeStates} />
           </div>
         </div>

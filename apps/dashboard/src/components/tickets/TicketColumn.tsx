@@ -3,9 +3,9 @@ import { TicketCard } from "./TicketCard.js";
 
 const STATE_LABELS: Record<string, string> = {
   received: "已接收",
-  enriching: "充实中",
-  triaging: "分诊中",
-  awaiting_clarification: "待澄清",
+  enriching: "补全信息中",
+  triaging: "分类中",
+  awaiting_clarification: "待补充信息",
   ready: "就绪",
   executing: "执行中",
   completed: "已完成",
