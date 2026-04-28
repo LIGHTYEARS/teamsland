@@ -6,14 +6,14 @@ import { useWebSocket } from "../../contexts/WebSocketContext";
 import type { PageName } from "../../hooks/useRouter";
 
 /** 导航项配置 */
-const NAV_ITEMS: { page: PageName; label: string; icon: typeof Home }[] = [
-  { page: "overview", label: "Overview", icon: Home },
-  { page: "sessions", label: "Sessions", icon: Cpu },
-  { page: "tickets", label: "Tickets", icon: TicketCheck },
-  { page: "coordinator", label: "Coordinator", icon: Activity },
-  { page: "hooks", label: "Hooks", icon: Waypoints },
-  { page: "memory", label: "Memory", icon: Brain },
-  { page: "settings", label: "Settings", icon: Settings },
+const NAV_ITEMS: { page: PageName; label: string; icon: typeof Home; group: "monitor" | "manage" }[] = [
+  { page: "overview", label: "总览", icon: Home, group: "monitor" },
+  { page: "sessions", label: "会话", icon: Cpu, group: "monitor" },
+  { page: "coordinator", label: "协调器", icon: Activity, group: "monitor" },
+  { page: "tickets", label: "工单", icon: TicketCheck, group: "manage" },
+  { page: "hooks", label: "Hooks", icon: Waypoints, group: "manage" },
+  { page: "memory", label: "记忆", icon: Brain, group: "manage" },
+  { page: "settings", label: "设置", icon: Settings, group: "manage" },
 ];
 
 export interface NavSidebarProps {
@@ -43,26 +43,35 @@ export function NavSidebar({ activePage, onNavigate, onLogout }: NavSidebarProps
 
       {/* Nav items */}
       <nav className="flex flex-1 flex-col items-center gap-1">
-        {NAV_ITEMS.map(({ page, label, icon: Icon }) => (
-          <Tooltip key={page}>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label={label}
-                onClick={() => onNavigate(page)}
-                className={cn(
-                  "flex h-9 w-9 items-center justify-center rounded-md transition-colors outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px]",
-                  activePage === page
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                )}
-              >
-                <Icon size={18} />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="right">{label}</TooltipContent>
-          </Tooltip>
-        ))}
+        {NAV_ITEMS.map(({ page, label, icon: Icon, group }, index) => {
+          const prevGroup = index > 0 ? NAV_ITEMS[index - 1].group : group;
+          return (
+            <div key={page} className="w-full flex flex-col items-center">
+              {group !== prevGroup && <div className="my-1 h-px w-6 bg-border" />}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={label}
+                    onClick={() => onNavigate(page)}
+                    className={cn(
+                      "relative flex h-9 w-9 items-center justify-center rounded-md transition-colors outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px]",
+                      activePage === page
+                        ? "bg-accent text-accent-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                    )}
+                  >
+                    {activePage === page && (
+                      <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-primary" />
+                    )}
+                    <Icon size={18} />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right">{label}</TooltipContent>
+              </Tooltip>
+            </div>
+          );
+        })}
       </nav>
 
       {/* Bottom: status + logout */}
@@ -88,7 +97,7 @@ export function NavSidebar({ activePage, onNavigate, onLogout }: NavSidebarProps
                 <LogOut size={16} />
               </button>
             </TooltipTrigger>
-            <TooltipContent side="right">Logout</TooltipContent>
+            <TooltipContent side="right">登出</TooltipContent>
           </Tooltip>
         )}
       </div>
