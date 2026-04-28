@@ -15,10 +15,7 @@ export interface SessionDetailLayoutProps {
 }
 
 /**
- * Session 详情布局
- *
- * 三面板：左侧 session 树 + 中间聊天 + 右侧详情面板。
- * 从旧 AppLayout 提取而来。
+ * Session 详情布局 — 三面板：左侧 session 树 + 中间聊天 + 右侧详情面板。
  */
 export function SessionDetailLayout({ sessionId, projectName, onNavigate }: SessionDetailLayoutProps) {
   const { status, send, subscribe } = useWebSocket();
@@ -84,7 +81,7 @@ export function SessionDetailLayout({ sessionId, projectName, onNavigate }: Sess
 
   return (
     <div className="flex h-full w-full overflow-hidden">
-      <ResizablePanelGroup direction="horizontal">
+      <ResizablePanelGroup direction="horizontal" autoSaveId="session-detail-panels">
         {/* 左侧 session 树 */}
         <ResizablePanel defaultSize={15} minSize={10} maxSize={25} className="min-w-0 overflow-hidden">
           <Sidebar
@@ -162,9 +159,9 @@ export function SessionDetailLayout({ sessionId, projectName, onNavigate }: Sess
 }
 
 function getStatusLabel(status: string): string {
-  if (status === "connected") return "Connected";
-  if (status === "connecting") return "Connecting…";
-  return "Disconnected";
+  if (status === "connected") return "已连接";
+  if (status === "connecting") return "连接中…";
+  return "已断开";
 }
 
 function getStatusColor(status: string): string {
