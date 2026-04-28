@@ -31,6 +31,8 @@ export interface SpawnParams {
   senderName?: string;
   /** 发起人 ID（可选） */
   senderId?: string;
+  /** 追加到 system prompt 的文本（可选，传递给 claude --append-system-prompt） */
+  systemPrompt?: string;
 }
 
 /**
@@ -157,6 +159,10 @@ export class ProcessController {
         "--permission-mode",
         "bypassPermissions",
       ];
+
+      if (params.systemPrompt) {
+        baseArgs.push("--append-system-prompt", params.systemPrompt);
+      }
 
       const result = await this.spawnInternal({
         args: baseArgs,
