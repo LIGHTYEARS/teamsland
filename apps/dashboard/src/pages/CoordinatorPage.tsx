@@ -1,5 +1,8 @@
+import { ErrorCard } from "@teamsland/ui/components/ui/error-card";
+import { Skeleton } from "@teamsland/ui/components/ui/skeleton";
 import { Activity } from "lucide-react";
 import { useMemo } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 import { CoordinatorStatusBar } from "../components/coordinator/CoordinatorStatusBar";
 import { DeadLetterTable } from "../components/coordinator/DeadLetterTable";
 import { EventTimeline } from "../components/coordinator/EventTimeline";
@@ -39,32 +42,72 @@ export function CoordinatorPage() {
   return (
     <div className="flex h-full flex-col overflow-y-auto">
       <header className="shrink-0 border-b border-border px-6 py-4">
-        <h1 className="text-lg font-semibold">Coordinator</h1>
-        <p className="text-sm text-muted-foreground">System monitoring dashboard</p>
+        <h1 className="text-lg font-semibold">协调器</h1>
+        <p className="text-sm text-muted-foreground">系统监控仪表盘</p>
       </header>
 
       <div className="flex-1 p-6 space-y-6">
-        {status && !statusLoading && (
+        {statusLoading ? (
+          <Skeleton className="h-12 w-full rounded-lg" />
+        ) : status ? (
           <CoordinatorStatusBar status={status} lastEventId={lastEventId} lastChangeAt={lastChangeAt} />
-        )}
+        ) : null}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="space-y-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Queue</h2>
-            {stats && !statsLoading && <QueueDashboard stats={stats} />}
-            <DeadLetterTable messages={deadLetters} />
-          </div>
-
-          <div className="space-y-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Recent Events</h2>
-            <EventTimeline events={events} loading={eventsLoading} />
+        <div className="space-y-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Queue</h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <ErrorBoundary
+              fallbackRender={({ error, resetErrorBoundary }) => (
+                <ErrorCard title="Queue 加载失败" message={(error as Error).message} onRetry={resetErrorBoundary} />
+              )}
+            >
+              <div>
+                {statsLoading ? (
+                  <div className="space-y-3">
+                    <Skeleton className="h-6 w-32" />
+                    <Skeleton className="h-24 w-full rounded-lg" />
+                  </div>
+                ) : stats ? (
+                  <QueueDashboard stats={stats} />
+                ) : null}
+              </div>
+            </ErrorBoundary>
+            <ErrorBoundary
+              fallbackRender={({ error, resetErrorBoundary }) => (
+                <ErrorCard
+                  title="Dead Letter 加载失败"
+                  message={(error as Error).message}
+                  onRetry={resetErrorBoundary}
+                />
+              )}
+            >
+              <DeadLetterTable messages={deadLetters} />
+            </ErrorBoundary>
           </div>
         </div>
 
+        <div className="space-y-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Recent Events</h2>
+          <ErrorBoundary
+            fallbackRender={({ error, resetErrorBoundary }) => (
+              <ErrorCard title="Events 加载失败" message={(error as Error).message} onRetry={resetErrorBoundary} />
+            )}
+          >
+            {eventsLoading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton placeholders, no reordering
+                  <Skeleton key={i} className="h-10 w-full rounded-lg" />
+                ))}
+              </div>
+            ) : (
+              <EventTimeline events={events} loading={false} />
+            )}
+          </ErrorBoundary>
+        </div>
+
         <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-            Ticket State Machine
-          </h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">工单状态机</h2>
           <div className="border border-border rounded-lg p-4 bg-muted/10">
             <TicketStateMachine activeStates={activeStates} />
           </div>

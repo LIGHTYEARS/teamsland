@@ -27,6 +27,7 @@ const THEME_DESCRIPTIONS: Record<string, string> = {
  *
  * 只读系统配置查看，连接状态，基本信息。
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: theme + connection state logic is inherently multi-branch
 export function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { status: wsStatus } = useWebSocket();
