@@ -114,8 +114,6 @@ function createCoordinator(opts: {
   return new CoordinatorProcess({
     config: {
       workspacePath: "/tmp/coord",
-      systemPromptPath: "/tmp/coord/system.md",
-      allowedTools: ["Read"],
       sessionMaxLifetimeMs: 30 * 60 * 1000,
       maxEventsPerSession: 20,
       resultTimeoutMs: 10_000,

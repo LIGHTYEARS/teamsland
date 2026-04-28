@@ -17,8 +17,6 @@ export interface CoordinatorPromptBuilderLike {
 
 export interface CoordinatorProcessConfig {
   workspacePath: string;
-  systemPromptPath: string;
-  allowedTools: string[];
   sessionMaxLifetimeMs: number;
   maxEventsPerSession: number;
   resultTimeoutMs: number;
@@ -140,14 +138,7 @@ export class CoordinatorProcess {
       this.sessionId = newSessionId;
     }
 
-    const args = [
-      "--bare",
-      "--append-system-prompt-file",
-      this.config.systemPromptPath,
-      "--allowedTools",
-      this.config.allowedTools.join(","),
-      "--dangerously-skip-permissions",
-    ];
+    const args = ["--dangerously-skip-permissions"];
 
     const sid = this.sessionId as string;
 

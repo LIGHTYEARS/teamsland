@@ -116,8 +116,6 @@ describe("CoordinatorProcess", () => {
     const coord = new CoordinatorProcess({
       config: {
         workspacePath: "/tmp/coord",
-        systemPromptPath: "/tmp/coord/system.md",
-        allowedTools: ["Bash(teamsland *)", "Read"],
         sessionMaxLifetimeMs: 30 * 60 * 1000,
         maxEventsPerSession: 20,
         resultTimeoutMs: 10_000,
@@ -138,8 +136,6 @@ describe("CoordinatorProcess", () => {
     const coord = new CoordinatorProcess({
       config: {
         workspacePath: "/tmp/coord",
-        systemPromptPath: "/tmp/coord/system.md",
-        allowedTools: ["Read"],
         sessionMaxLifetimeMs: 30 * 60 * 1000,
         maxEventsPerSession: 20,
         resultTimeoutMs: 10_000,
@@ -161,8 +157,6 @@ describe("CoordinatorProcess", () => {
     const coord = new CoordinatorProcess({
       config: {
         workspacePath: "/tmp/coord",
-        systemPromptPath: "/tmp/coord/system.md",
-        allowedTools: ["Read"],
         sessionMaxLifetimeMs: 30 * 60 * 1000,
         maxEventsPerSession: 2, // Rotate after 2 events
         resultTimeoutMs: 10_000,
@@ -188,8 +182,6 @@ describe("CoordinatorProcess", () => {
     const proc = new CoordinatorProcess({
       config: {
         workspacePath: "/tmp",
-        systemPromptPath: "/tmp/sp.md",
-        allowedTools: ["Read"],
         sessionMaxLifetimeMs: 1_800_000,
         maxEventsPerSession: 20,
         resultTimeoutMs: 60_000,
