@@ -275,14 +275,14 @@ export function OverviewPage({ onNavigate }: { onNavigate: (path: string) => voi
     <div className="flex h-full flex-col overflow-y-auto">
       {/* 页面标题 */}
       <header className="shrink-0 border-b border-border px-6 py-4">
-        <h1 className="text-lg font-semibold text-foreground">Overview</h1>
+        <h1 className="text-xl font-semibold text-foreground">Overview</h1>
         <p className="text-sm text-muted-foreground">
           System health at a glance
           {lastUpdated && <span className="ml-2 text-xs">· 更新于 {new Date(lastUpdated).toLocaleTimeString()}</span>}
         </p>
       </header>
 
-      <div className="flex-1 p-6 space-y-6">
+      <div className="flex-1 p-6 space-y-4">
         {error ? (
           <ErrorCard message={error} onRetry={fetchData} />
         ) : (

@@ -56,11 +56,11 @@ export function SettingsPage() {
   return (
     <div className="flex h-full flex-col overflow-y-auto">
       <header className="shrink-0 border-b border-border px-6 py-4">
-        <h1 className="text-lg font-semibold text-foreground">设置</h1>
+        <h1 className="text-xl font-semibold text-foreground">设置</h1>
         <p className="text-sm text-muted-foreground">系统配置与状态</p>
       </header>
 
-      <div className="flex-1 p-6 space-y-6 max-w-2xl">
+      <div className="flex-1 p-6 space-y-4 max-w-2xl">
         {/* 连接状态 */}
         <Card>
           <CardHeader>

@@ -42,11 +42,11 @@ export function CoordinatorPage() {
   return (
     <div className="flex h-full flex-col overflow-y-auto">
       <header className="shrink-0 border-b border-border px-6 py-4">
-        <h1 className="text-lg font-semibold">协调器</h1>
+        <h1 className="text-xl font-semibold">协调器</h1>
         <p className="text-sm text-muted-foreground">系统监控仪表盘</p>
       </header>
 
-      <div className="flex-1 p-6 space-y-6">
+      <div className="flex-1 p-6 space-y-4">
         {statusLoading ? (
           <Skeleton className="h-12 w-full rounded-lg" />
         ) : status ? (

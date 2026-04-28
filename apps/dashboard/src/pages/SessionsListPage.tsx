@@ -81,7 +81,7 @@ export function SessionsListPage({ onNavigate }: { onNavigate: (path: string) =>
     <div className="flex h-full flex-col overflow-hidden">
       {/* 页面标题 */}
       <header className="shrink-0 border-b border-border px-6 py-4">
-        <h1 className="text-lg font-semibold text-foreground">会话</h1>
+        <h1 className="text-xl font-semibold text-foreground">会话</h1>
         <p className="text-sm text-muted-foreground">浏览所有项目的 Agent 会话</p>
       </header>
 

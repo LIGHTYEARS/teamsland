@@ -115,7 +115,7 @@ export function MemoryPage({ selectedUri, onUriChange }: { selectedUri?: string;
       {/* 页面标题 */}
       <header className="shrink-0 border-b border-border px-6 py-4 flex items-start justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-foreground">记忆</h1>
+          <h1 className="text-xl font-semibold text-foreground">记忆</h1>
           <p className="text-sm text-muted-foreground">浏览与搜索 OpenViking 语义记忆库</p>
         </div>
         <Button size="sm" variant="outline" onClick={handleNewMemory}>

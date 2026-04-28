@@ -57,7 +57,7 @@ export function HooksPage({ activeTab, onTabChange }: { activeTab?: string; onTa
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <header className="shrink-0 border-b border-border px-6 py-4">
-        <h1 className="text-lg font-semibold text-foreground">Hooks</h1>
+        <h1 className="text-xl font-semibold text-foreground">Hooks</h1>
         <p className="text-sm text-muted-foreground">管理三层事件处理系统</p>
       </header>
 
@@ -108,7 +108,7 @@ function HooksStatusTab() {
   }, []);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Engine Status */}
       <Card>
         <CardHeader>
