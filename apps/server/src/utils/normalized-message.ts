@@ -402,7 +402,7 @@ function normalizeTextBlock(
   base: { id: string | undefined; timestamp: string | undefined; sessionId: string },
   role: "user" | "assistant" | undefined,
 ): NormalizedMessage | null {
-  if (typeof block.text !== "string") return null;
+  if (typeof block.text !== "string" || block.text === "") return null;
   return createNormalizedMessage({ ...base, kind: "text", role, content: block.text });
 }
 
