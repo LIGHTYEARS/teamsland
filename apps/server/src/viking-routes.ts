@@ -18,6 +18,8 @@ async function handleFind(req: Request, client: IVikingMemoryClient): Promise<Re
   const result = await client.find(query, {
     targetUri: typeof body.targetUri === "string" ? body.targetUri : undefined,
     limit: typeof body.limit === "number" ? body.limit : undefined,
+    since: typeof body.since === "string" ? body.since : undefined,
+    until: typeof body.until === "string" ? body.until : undefined,
   });
   return Response.json({ status: "ok", result });
 }
@@ -99,7 +101,8 @@ async function handleWrite(req: Request, client: IVikingMemoryClient): Promise<R
     return Response.json({ error: "缺少 uri 字段" }, { status: 400 });
   }
   const mode = body.mode === "replace" || body.mode === "create" || body.mode === "append" ? body.mode : undefined;
-  await client.write(uri, content, { mode });
+  const wait = typeof body.wait === "boolean" ? body.wait : undefined;
+  await client.write(uri, content, { mode, wait });
   return Response.json({ status: "ok" });
 }
 

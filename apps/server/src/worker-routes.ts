@@ -94,6 +94,8 @@ interface CreateWorkerRequest {
   parentAgentId?: string;
   /** 任务类型（用于 Skill 路由，默认 "coding"） */
   taskType?: string;
+  /** 追加到 worker 的 system prompt */
+  systemPrompt?: string;
 }
 
 /** JSON 响应工具函数 */
@@ -224,6 +226,7 @@ async function handleCreateWorker(req: Request, deps: WorkerRouteDeps): Promise<
       workerId: agentId,
       senderName: bodyResult.origin?.senderName,
       senderId: bodyResult.origin?.senderId,
+      systemPrompt: bodyResult.systemPrompt,
       env: {
         WORKER_ID: agentId,
         MEEGO_API_BASE: deps.meegoApiBase ?? "",
