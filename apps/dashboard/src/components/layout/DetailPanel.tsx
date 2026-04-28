@@ -101,7 +101,7 @@ export function DetailPanel({ sessionId: _sessionId, projectPath }: DetailPanelP
   return (
     <div className="flex h-full flex-col bg-background">
       {/* 标签栏 */}
-      <div className="flex items-center border-b border-border px-2">
+      <div className="flex items-center bg-muted/30 px-2">
         {TABS.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -130,7 +130,7 @@ export function DetailPanel({ sessionId: _sessionId, projectPath }: DetailPanelP
 
         {activeTab === "files" && editingFile && (
           <div className="flex h-full flex-col">
-            <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
+            <div className="flex items-center justify-between bg-muted/30 px-3 py-1.5">
               <span className="truncate text-xs text-muted-foreground">{editingFile}</span>
               <button
                 type="button"
