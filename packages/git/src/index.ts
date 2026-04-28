@@ -4,5 +4,8 @@
 export type { CommandResult, CommandRunner } from "./command-runner.js";
 export { BunCommandRunner } from "./command-runner.js";
 
+export type { CloneResult, CloneStatus, RepoManagerConfig, ResolvedRepo } from "./repo-manager.js";
+export { RepoManager } from "./repo-manager.js";
+
 export type { ReapAction, ReapableAgent, ReapResult } from "./worktree-manager.js";
 export { WorktreeError, WorktreeManager } from "./worktree-manager.js";
