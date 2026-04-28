@@ -21,6 +21,7 @@ export async function runSpawn(client: TeamslandClient, args: string[], jsonOutp
   const parentAgentId = getFlagValue(args, "--parent");
   const originChat = getFlagValue(args, "--origin-chat");
   const originSender = getFlagValue(args, "--origin-sender");
+  const systemPrompt = getFlagValue(args, "--append-system-prompt");
 
   if (!task) {
     printError("--task is required");
@@ -52,6 +53,9 @@ export async function runSpawn(client: TeamslandClient, args: string[], jsonOutp
       senderId: originSender ?? undefined,
       source: "coordinator",
     };
+  }
+  if (systemPrompt) {
+    params.systemPrompt = systemPrompt;
   }
 
   const resp = await client.spawnWorker(params);
