@@ -125,7 +125,7 @@ export function ToolDiffViewer({ toolName, toolInput, result }: ToolDiffViewerPr
       <Tool defaultOpen>
         <ToolHeader type="tool-invocation" state={state} title={`Edit: ${filePath}`} icon={icon} />
         <ToolContent>
-          <div className="rounded-md border border-border overflow-hidden">
+          <div className="rounded-md bg-muted/50 overflow-hidden">
             <InlineDiff oldText={oldString} newText={newString} />
           </div>
         </ToolContent>

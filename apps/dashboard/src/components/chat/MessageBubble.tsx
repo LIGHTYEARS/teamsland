@@ -6,18 +6,11 @@ import {
   ConfirmationRequest,
   ConfirmationTitle,
 } from "@teamsland/ui/elements/confirmation";
-import { Message, MessageContent, MessageResponse } from "@teamsland/ui/elements/message";
-import {
-  Plan,
-  PlanAction,
-  PlanContent,
-  PlanDescription,
-  PlanHeader,
-  PlanTitle,
-  PlanTrigger,
-} from "@teamsland/ui/elements/plan";
+import { MessageResponse } from "@teamsland/ui/elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@teamsland/ui/elements/reasoning";
-import { AlertCircle, Clock, Coins, Hash, ShieldCheck } from "lucide-react";
+import { cn } from "@teamsland/ui/lib/utils";
+import { AlertCircle, ShieldCheck } from "lucide-react";
+import { useRef, useState } from "react";
 import { ToolRenderer } from "./tools/ToolRenderer";
 
 export interface MessageBubbleProps {
@@ -26,60 +19,25 @@ export interface MessageBubbleProps {
   onPermissionResponse?: (messageId: string, action: "allow" | "deny") => void;
 }
 
-function StatusBubble({ text }: { text: string }) {
-  return (
-    <div className="text-center">
-      <span className="inline-block rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">{text}</span>
-    </div>
-  );
+export type TimelineDotColor = "default" | "blue" | "green" | "red" | "muted";
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 function CompleteBubble({ message }: { message: NormalizedMessage }) {
   const { cost, durationMs, tokens } = message;
-  const hasMeta = cost !== undefined || durationMs !== undefined || tokens !== undefined;
-
-  if (!hasMeta) {
-    return <StatusBubble text="会话完成" />;
-  }
-
-  const formatDuration = (ms: number): string => {
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(1)}s`;
-  };
+  const parts: string[] = [];
+  if (durationMs !== undefined) parts.push(formatDuration(durationMs));
+  if (cost !== undefined) parts.push(`$${cost.toFixed(4)}`);
+  if (tokens !== undefined) parts.push(`${tokens.toLocaleString()} tok`);
 
   return (
-    <div className="text-center">
-      <span className="inline-flex items-center gap-3 rounded-full bg-secondary px-4 py-1.5 text-xs text-muted-foreground">
-        {durationMs !== undefined && (
-          <span className="inline-flex items-center gap-1">
-            <Clock className="size-3" />
-            {formatDuration(durationMs)}
-          </span>
-        )}
-        {cost !== undefined && (
-          <span className="inline-flex items-center gap-1">
-            <Coins className="size-3" />${cost.toFixed(4)}
-          </span>
-        )}
-        {tokens !== undefined && (
-          <span className="inline-flex items-center gap-1">
-            <Hash className="size-3" />
-            {tokens.toLocaleString()} tokens
-          </span>
-        )}
-      </span>
-    </div>
-  );
-}
-
-function ErrorBubble({ content }: { content: string }) {
-  return (
-    <div className="mr-auto max-w-[80%] rounded-lg border-2 border-destructive/30 bg-destructive/5 px-4 py-2">
-      <div className="flex items-center gap-2 text-sm font-medium text-destructive">
-        <AlertCircle size={16} />
-        <span>错误</span>
-      </div>
-      <p className="mt-1 text-sm text-destructive/80">{content}</p>
+    <div className="flex items-center gap-2 text-[11px] text-muted-foreground/60 my-2">
+      <div className="h-px flex-1 bg-border" />
+      <span>{parts.length > 0 ? parts.join(" · ") : "Done"}</span>
+      <div className="h-px flex-1 bg-border" />
     </div>
   );
 }
@@ -91,19 +49,19 @@ function PermissionBubble({
   message: NormalizedMessage;
   onRespond?: (action: "allow" | "deny") => void;
 }) {
-  const toolName = typeof message.toolName === "string" ? message.toolName : "操作";
+  const toolName = typeof message.toolName === "string" ? message.toolName : "Action";
   return (
     <Confirmation state="approval-requested" approval={{ id: message.id }}>
       <ConfirmationTitle>
-        <ShieldCheck size={14} className="mr-1.5 inline" />
-        权限请求: {toolName}
+        <ShieldCheck size={12} className="mr-1 inline" />
+        Permission: {toolName}
       </ConfirmationTitle>
       <ConfirmationRequest>
-        <p className="text-sm text-muted-foreground">该工具请求执行权限，请确认是否允许。</p>
+        <p className="text-xs text-muted-foreground">This tool requires permission to execute.</p>
         <ConfirmationActions>
-          <ConfirmationAction onClick={() => onRespond?.("allow")}>允许</ConfirmationAction>
+          <ConfirmationAction onClick={() => onRespond?.("allow")}>Allow</ConfirmationAction>
           <ConfirmationAction variant="outline" onClick={() => onRespond?.("deny")}>
-            拒绝
+            Deny
           </ConfirmationAction>
         </ConfirmationActions>
       </ConfirmationRequest>
@@ -111,46 +69,74 @@ function PermissionBubble({
   );
 }
 
+function CollapsibleUserMessage({ content }: { content: string }) {
+  const MAX_HEIGHT = 72;
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [needsCollapse, setNeedsCollapse] = useState(false);
+
+  const checkOverflow = (el: HTMLDivElement | null) => {
+    contentRef.current = el;
+    if (el) setNeedsCollapse(el.scrollHeight > MAX_HEIGHT);
+  };
+
+  return (
+    <div className="w-full overflow-hidden rounded-lg bg-card">
+      <div className="relative">
+        <div
+          ref={checkOverflow}
+          className={cn("px-3 py-2 text-sm text-foreground overflow-hidden", !expanded && "max-h-[72px]")}
+        >
+          <MessageResponse>{content}</MessageResponse>
+        </div>
+        {needsCollapse && !expanded && (
+          <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-card to-transparent" />
+        )}
+      </div>
+      {needsCollapse && (
+        <div className="flex justify-end px-2 py-1">
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="rounded px-2 py-0.5 text-[11px] font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+          >
+            {expanded ? "Show less" : "Show more"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 type BubbleRenderFn = (props: { message: NormalizedMessage; toolResult?: NormalizedMessage }) => React.ReactNode;
 
 const KIND_RENDERERS: Record<string, BubbleRenderFn> = {
-  text: ({ message }) => (
-    <Message from={message.role ?? "assistant"}>
-      <MessageContent>
+  text: ({ message }) =>
+    message.role === "user" ? (
+      <CollapsibleUserMessage content={message.content ?? ""} />
+    ) : (
+      <div className="px-2 text-sm text-foreground">
         <MessageResponse>{message.content ?? ""}</MessageResponse>
-      </MessageContent>
-    </Message>
-  ),
+      </div>
+    ),
   stream_delta: ({ message }) => (
-    <Message from={message.role ?? "assistant"}>
-      <MessageContent>
-        <MessageResponse>{message.content ?? ""}</MessageResponse>
-      </MessageContent>
-    </Message>
-  ),
-  tool_use: ({ message, toolResult }) => (
-    <div className="w-full max-w-[95%]">
-      <ToolRenderer message={message} result={toolResult} />
+    <div className="px-2 text-sm text-foreground">
+      <MessageResponse>{message.content ?? ""}</MessageResponse>
     </div>
   ),
+  tool_use: ({ message, toolResult }) => <ToolRenderer message={message} result={toolResult} />,
   tool_result: ({ message }) => {
     const isError = message.toolResult?.isError === true;
     const resultContent = message.toolResult?.content;
     if (!resultContent) return null;
     return (
-      <div className="w-full max-w-[95%]">
-        <div
-          className={`rounded-lg border px-3 py-2 text-xs font-mono ${
-            isError
-              ? "border-destructive/20 bg-destructive/5 text-destructive"
-              : "border-border bg-secondary text-secondary-foreground"
-          }`}
-        >
-          <pre className="whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
-            {resultContent.length > 500 ? `${resultContent.slice(0, 500)}...` : resultContent}
-          </pre>
-        </div>
-      </div>
+      <pre
+        className={`rounded px-2 py-1 font-mono text-[11px] whitespace-pre-wrap break-words max-h-32 overflow-y-auto ${
+          isError ? "text-destructive bg-destructive/5" : "text-muted-foreground bg-muted"
+        }`}
+      >
+        {resultContent.length > 500 ? `${resultContent.slice(0, 500)}…` : resultContent}
+      </pre>
     );
   },
   thinking: ({ message }) => (
@@ -159,46 +145,34 @@ const KIND_RENDERERS: Record<string, BubbleRenderFn> = {
       <ReasoningContent>{message.content ?? ""}</ReasoningContent>
     </Reasoning>
   ),
-  error: ({ message }) => <ErrorBubble content={message.content ?? "未知错误"} />,
-  status: ({ message }) => <StatusBubble text={message.text ?? message.content ?? ""} />,
+  error: ({ message }) => (
+    <div className="flex items-start gap-1.5 text-xs text-destructive">
+      <AlertCircle size={12} className="mt-0.5 shrink-0" />
+      <span>{message.content ?? "Unknown error"}</span>
+    </div>
+  ),
+  status: () => null,
   stream_start: () => null,
   stream_end: () => null,
-  user_message: ({ message }) => (
-    <Message from="user">
-      <MessageContent>
-        <MessageResponse>{message.content ?? ""}</MessageResponse>
-      </MessageContent>
-    </Message>
-  ),
+  user_message: ({ message }) => <CollapsibleUserMessage content={message.content ?? ""} />,
   assistant_message: ({ message }) => (
-    <Message from="assistant">
-      <MessageContent>
-        <MessageResponse>{message.content ?? ""}</MessageResponse>
-      </MessageContent>
-    </Message>
+    <div className="px-2 text-sm text-foreground">
+      <MessageResponse>{message.content ?? ""}</MessageResponse>
+    </div>
   ),
   complete: ({ message }) => <CompleteBubble message={message} />,
-  system: ({ message }) => <StatusBubble text={message.content ?? "系统消息"} />,
+  system: () => null,
   task_notification: ({ message }) => {
-    const title = message.text ?? "任务通知";
+    const title = message.text ?? "Task";
     const description = message.content ?? "";
-
     return (
-      <div className="w-full max-w-[95%]">
-        <Plan defaultOpen>
-          <PlanHeader>
-            <PlanTitle>{title}</PlanTitle>
-            {description && <PlanDescription>{description}</PlanDescription>}
-            <PlanAction>
-              <PlanTrigger />
-            </PlanAction>
-          </PlanHeader>
-          {description && (
-            <PlanContent>
-              <MessageResponse>{description}</MessageResponse>
-            </PlanContent>
-          )}
-        </Plan>
+      <div className="rounded bg-muted/50 px-2 py-1.5 text-xs">
+        <div className="font-medium text-foreground">{title}</div>
+        {description && (
+          <div className="mt-1 text-muted-foreground">
+            <MessageResponse>{description}</MessageResponse>
+          </div>
+        )}
       </div>
     );
   },

@@ -17,13 +17,7 @@ export interface MessageInputProps {
   placeholder?: string;
 }
 
-export function MessageInput({
-  onSend,
-  onAbort,
-  isStreaming,
-  disabled,
-  placeholder = "Ask a question...",
-}: MessageInputProps) {
+export function MessageInput({ onSend, onAbort, isStreaming, disabled, placeholder = "输入问题…" }: MessageInputProps) {
   const handleSubmit = useCallback(
     (message: PromptInputMessage) => {
       const trimmed = message.text.trim();
@@ -34,7 +28,7 @@ export function MessageInput({
   );
 
   return (
-    <div className="relative grid w-auto shrink-0 gap-4 p-4">
+    <div className="shrink-0 bg-muted/30 px-4 py-2">
       <PromptInput onSubmit={handleSubmit}>
         <PromptInputBody>
           <PromptInputTextarea placeholder={placeholder} disabled={disabled} />
@@ -44,10 +38,10 @@ export function MessageInput({
             <button
               type="button"
               onClick={onAbort}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-accent transition-colors"
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent transition-colors"
             >
               <Square className="size-2.5 fill-current" />
-              停止
+              Stop
             </button>
           ) : (
             <PromptInputSubmit disabled={disabled} />
