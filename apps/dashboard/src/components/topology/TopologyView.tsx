@@ -171,7 +171,7 @@ export function TopologyView({ graph, onNodeClick }: TopologyViewProps) {
   const hasNodes = graph.nodes.length > 0;
 
   return (
-    <div ref={containerRef} className="relative w-full min-h-[300px] bg-muted rounded-lg border border-border p-6">
+    <div ref={containerRef} className="relative w-full min-h-[300px] bg-muted/50 rounded-lg p-6">
       {/* 无节点状态 */}
       {!hasNodes && (
         <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">暂无拓扑节点</div>

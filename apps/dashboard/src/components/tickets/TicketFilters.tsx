@@ -1,16 +1,16 @@
 const PHASES = [
-  { label: "All", value: "all" },
-  { label: "Intake", value: "intake" },
-  { label: "Triage", value: "triage" },
-  { label: "Execution", value: "execution" },
-  { label: "Terminal", value: "terminal" },
+  { label: "全部", value: "all" },
+  { label: "收集", value: "intake" },
+  { label: "分类", value: "triage" },
+  { label: "执行", value: "execution" },
+  { label: "已结束", value: "terminal" },
 ] as const;
 
 const PRIORITIES = [
-  { label: "All Priority", value: "all" },
-  { label: "High", value: "high" },
-  { label: "Medium", value: "medium" },
-  { label: "Low", value: "low" },
+  { label: "全部优先级", value: "all" },
+  { label: "高", value: "high" },
+  { label: "中", value: "medium" },
+  { label: "低", value: "low" },
 ] as const;
 
 export type PhaseFilter = (typeof PHASES)[number]["value"];
@@ -71,9 +71,9 @@ export function TicketFilters({
         onChange={(e) => onSortChange(e.target.value as SortBy)}
         className="text-xs bg-muted border border-border rounded px-2 py-1"
       >
-        <option value="updatedAt">Updated</option>
-        <option value="createdAt">Created</option>
-        <option value="dwell">Dwell Time</option>
+        <option value="updatedAt">更新时间</option>
+        <option value="createdAt">创建时间</option>
+        <option value="dwell">停留时间</option>
       </select>
     </div>
   );

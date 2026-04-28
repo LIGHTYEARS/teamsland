@@ -10,31 +10,31 @@ export function DeadLetterTable({ messages }: { messages: DeadLetterMessage[] })
   if (messages.length === 0) return null;
 
   return (
-    <div className="border border-border rounded-lg">
+    <div className="rounded-lg bg-card">
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium hover:bg-accent/50 transition-colors"
       >
         {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        Dead Letters ({messages.length})
+        失败消息 ({messages.length})
       </button>
 
       {expanded && (
-        <div className="border-t border-border">
+        <div>
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border text-xs text-muted-foreground">
-                <th className="text-left px-3 py-1.5 font-medium">Type</th>
-                <th className="text-left px-3 py-1.5 font-medium">Priority</th>
-                <th className="text-left px-3 py-1.5 font-medium">Error</th>
-                <th className="text-left px-3 py-1.5 font-medium">Retries</th>
-                <th className="text-left px-3 py-1.5 font-medium">Created</th>
+              <tr className="bg-muted/50 text-xs text-muted-foreground">
+                <th className="text-left px-3 py-1.5 font-medium">类型</th>
+                <th className="text-left px-3 py-1.5 font-medium">优先级</th>
+                <th className="text-left px-3 py-1.5 font-medium">错误</th>
+                <th className="text-left px-3 py-1.5 font-medium">重试次数</th>
+                <th className="text-left px-3 py-1.5 font-medium">创建时间</th>
               </tr>
             </thead>
             <tbody>
               {messages.map((msg) => (
-                <tr key={msg.id} className="border-b border-border last:border-0 hover:bg-accent/30">
+                <tr key={msg.id} className="border-b border-border/30 last:border-0 hover:bg-accent/30">
                   <td className="px-3 py-1.5 font-mono text-xs">{msg.type}</td>
                   <td className="px-3 py-1.5">
                     <Badge variant="outline" className="text-[10px]">
@@ -47,7 +47,7 @@ export function DeadLetterTable({ messages }: { messages: DeadLetterMessage[] })
                         <span className="text-xs text-red-500 truncate block">{msg.lastError ?? "\u2014"}</span>
                       </TooltipTrigger>
                       <TooltipContent className="max-w-[400px] break-all text-xs">
-                        {msg.lastError ?? "No error message"}
+                        {msg.lastError ?? "无错误信息"}
                       </TooltipContent>
                     </Tooltip>
                   </td>

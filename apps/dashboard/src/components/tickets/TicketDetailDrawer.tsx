@@ -34,8 +34,8 @@ export function TicketDetailDrawer({ issueId, onClose }: { issueId: string; onCl
   const { ticket, enrichResult, loading, error } = useTicketDetail(issueId);
 
   return (
-    <div className="fixed inset-y-0 right-0 w-[480px] bg-background border-l border-border shadow-lg z-50 flex flex-col">
-      <div className="shrink-0 flex items-center justify-between border-b border-border px-4 py-3">
+    <div className="fixed inset-y-0 right-0 w-[480px] bg-background shadow-lg z-50 flex flex-col">
+      <div className="shrink-0 flex items-center justify-between bg-muted/30 px-4 py-3">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-sm font-mono text-muted-foreground">{issueId}</span>
           {ticket && (
@@ -50,7 +50,7 @@ export function TicketDetailDrawer({ issueId, onClose }: { issueId: string; onCl
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {loading && <p className="text-sm text-muted-foreground">Loading...</p>}
+        {loading && <p className="text-sm text-muted-foreground">加载中...</p>}
         {error && (
           <div className="flex items-center gap-2 text-red-500 text-sm">
             <AlertCircle size={14} />
@@ -63,26 +63,24 @@ export function TicketDetailDrawer({ issueId, onClose }: { issueId: string; onCl
 
             {enrichResult && (
               <Card className="p-3 space-y-1.5 text-sm">
-                <Row label="Status" value={enrichResult.basic.status} />
-                <Row label="Priority" value={enrichResult.basic.priority} />
-                <Row label="Assignee" value={enrichResult.basic.assignee} />
-                <Row label="Creator" value={enrichResult.basic.creator} />
-                <Row label="Source" value={ticket.eventType} />
+                <Row label="状态" value={enrichResult.basic.status} />
+                <Row label="优先级" value={enrichResult.basic.priority} />
+                <Row label="负责人" value={enrichResult.basic.assignee} />
+                <Row label="创建者" value={enrichResult.basic.creator} />
+                <Row label="来源" value={ticket.eventType} />
               </Card>
             )}
 
             {enrichResult?.description && (
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-                  Description
-                </h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">描述</h3>
                 <p className="text-sm whitespace-pre-wrap">{enrichResult.description}</p>
               </div>
             )}
 
             {enrichResult?.documents && enrichResult.documents.length > 0 && (
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Documents</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">文档</h3>
                 <div className="space-y-2">
                   {enrichResult.documents.map((doc) => (
                     <Card key={doc.url} className="p-2 text-sm">
@@ -99,7 +97,7 @@ export function TicketDetailDrawer({ issueId, onClose }: { issueId: string; onCl
                         <ExternalLink size={10} className="shrink-0" />
                         {!doc.ok && (
                           <Badge variant="destructive" className="text-[10px] h-4 px-1">
-                            Error
+                            错误
                           </Badge>
                         )}
                       </div>
@@ -113,9 +111,7 @@ export function TicketDetailDrawer({ issueId, onClose }: { issueId: string; onCl
 
             {enrichResult?.customFields && enrichResult.customFields.length > 0 && (
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-                  Custom Fields
-                </h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">自定义字段</h3>
                 <Card className="p-3 text-sm space-y-1">
                   {enrichResult.customFields.map((f) => (
                     <Row key={f.fieldKey} label={f.fieldName} value={String(f.value ?? "\u2014")} />
@@ -128,11 +124,9 @@ export function TicketDetailDrawer({ issueId, onClose }: { issueId: string; onCl
 
             {ticket.history.length > 0 && (
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-                  State Timeline
-                </h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">状态时间线</h3>
                 <div className="space-y-2 border-l-2 border-border pl-4 ml-1">
-                  <TimelineEntry label="Created" timestamp={ticket.createdAt} />
+                  <TimelineEntry label="创建" timestamp={ticket.createdAt} />
                   {ticket.history.map((h) => (
                     <TimelineEntry
                       key={`${h.from}-${h.to}-${h.timestamp}`}

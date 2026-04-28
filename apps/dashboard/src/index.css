@@ -159,6 +159,68 @@
   @apply tracking-tight;
 }
 
+/* Scale down Streamdown headings for compact chat context */
+[data-session-id] .mt-6.mb-2.font-semibold {
+  margin-top: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+[data-session-id] .mt-6.mb-2.font-semibold.text-3xl {
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+[data-session-id] .mt-6.mb-2.font-semibold.text-2xl {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+[data-session-id] .mt-6.mb-2.font-semibold.text-xl {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+[data-session-id] .mt-6.mb-2.font-semibold.text-lg {
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+[data-session-id] .mt-6.mb-2.font-semibold.text-base {
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+[data-session-id] .mt-6.mb-2.font-semibold.text-sm {
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+/* Tighten Streamdown block spacing in chat */
+[data-session-id] .space-y-4 > * + * {
+  margin-top: 0.5rem;
+}
+
+/* Compact Streamdown code blocks in chat */
+[data-session-id] [data-streamdown="code-block"] {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+  padding: 0;
+  gap: 0;
+  border-radius: 0.375rem;
+}
+[data-session-id] [data-streamdown="code-block-header"] {
+  height: auto;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.6875rem;
+}
+[data-session-id] [data-streamdown="code-block-actions"] {
+  margin-right: 0.5rem;
+}
+[data-session-id] [data-streamdown="code-block-download-button"] {
+  display: none;
+}
+[data-session-id] [data-streamdown="code-block-body"] {
+  padding: 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  border: none;
+  border-radius: 0;
+}
+
 @layer utilities {
   .line-numbers code {
     counter-reset: step;

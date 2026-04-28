@@ -35,8 +35,8 @@ export function Sidebar({ projects, selectedSessionId, onSelectSession }: Sideba
   return (
     <aside className="flex h-full w-full flex-col overflow-hidden bg-background">
       {/* 标题 */}
-      <div className="shrink-0 border-b border-border px-4 py-3">
-        <h2 className="text-sm font-semibold text-foreground">Sessions</h2>
+      <div className="shrink-0 px-4 py-3">
+        <h2 className="text-sm font-semibold text-foreground">会话</h2>
       </div>
 
       {/* 会话过滤器 */}

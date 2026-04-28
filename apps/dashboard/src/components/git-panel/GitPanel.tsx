@@ -251,7 +251,7 @@ export function GitPanel({ projectPath }: GitPanelProps) {
 
   return (
     <div className="flex flex-col h-full bg-background text-foreground">
-      <div className="flex items-center justify-between p-3 border-b border-border">
+      <div className="flex items-center justify-between p-3 bg-muted/30">
         <div className="relative">
           <button
             type="button"
@@ -262,7 +262,7 @@ export function GitPanel({ projectPath }: GitPanelProps) {
             <span className="font-mono">{gitStatus?.branch ?? "—"}</span>
           </button>
           {showBranchSelector && branches.length > 0 && (
-            <div className="absolute top-full left-0 mt-1 w-48 bg-popover border border-border rounded-md shadow-lg z-10 max-h-48 overflow-y-auto">
+            <div className="absolute top-full left-0 mt-1 w-48 bg-popover rounded-md shadow-lg z-10 max-h-48 overflow-y-auto">
               {branches.map((branch) => (
                 <button
                   key={branch}
@@ -289,11 +289,7 @@ export function GitPanel({ projectPath }: GitPanelProps) {
         </button>
       </div>
 
-      {error && (
-        <div className="px-3 py-2 bg-destructive/10 border-b border-destructive/30 text-destructive text-xs">
-          {error}
-        </div>
-      )}
+      {error && <div className="px-3 py-2 bg-destructive/10 text-destructive text-xs">{error}</div>}
 
       <div className="flex-1 overflow-y-auto">
         {stagedFiles.length > 0 && (
@@ -349,7 +345,7 @@ export function GitPanel({ projectPath }: GitPanelProps) {
         </div>
       </div>
 
-      <div className="border-t border-border p-3">
+      <div className="bg-muted/30 p-3">
         <textarea
           value={commitMessage}
           onChange={(e) => setCommitMessage(e.target.value)}

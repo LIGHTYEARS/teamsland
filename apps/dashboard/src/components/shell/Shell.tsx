@@ -125,7 +125,7 @@ export function Shell({ send, subscribe, cwd }: ShellProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 px-3 py-1 border-b border-border text-xs text-muted-foreground">
+      <div className="flex items-center gap-2 px-3 py-1 bg-muted/30 text-xs text-muted-foreground">
         <span className={`inline-block size-1.5 rounded-full ${dotClass}`} />
         <span>{label}</span>
       </div>

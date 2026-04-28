@@ -4,10 +4,10 @@ import type { TicketRecord } from "../../hooks/useTickets.js";
 import { TicketColumn } from "./TicketColumn.js";
 
 const PHASE_GROUPS = [
-  { label: "Intake", states: ["received", "enriching"] },
-  { label: "Triage", states: ["triaging", "awaiting_clarification"] },
-  { label: "Execution", states: ["ready", "executing"] },
-  { label: "Terminal", states: ["completed", "failed", "suspended", "skipped"] },
+  { label: "收集", states: ["received", "enriching"] },
+  { label: "分类", states: ["triaging", "awaiting_clarification"] },
+  { label: "执行", states: ["ready", "executing"] },
+  { label: "已结束", states: ["completed", "failed", "suspended", "skipped"] },
 ] as const;
 
 function groupByState(tickets: TicketRecord[]): Map<string, TicketRecord[]> {
@@ -31,24 +31,24 @@ export function TicketBoard({
   const [terminalExpanded, setTerminalExpanded] = useState(false);
 
   return (
-    <div className="flex h-full gap-1 overflow-x-auto p-2">
+    <div className="flex h-full gap-2 overflow-x-auto p-2">
       {PHASE_GROUPS.map((group, gi) => {
-        const isTerminal = group.label === "Terminal";
+        const isTerminal = group.label === "已结束";
         const totalCount = group.states.reduce((sum, s) => sum + (byState.get(s)?.length ?? 0), 0);
 
         return (
-          <div key={group.label} className="flex gap-1">
-            {gi > 0 && <div className="w-px bg-border shrink-0 mx-1" />}
+          <div key={group.label} className="flex gap-2">
+            {gi > 0 && <div className="w-px bg-border/50 shrink-0" />}
 
             {isTerminal && !terminalExpanded ? (
               <button
                 type="button"
                 onClick={() => setTerminalExpanded(true)}
-                className="flex flex-col items-center justify-start w-16 shrink-0 pt-2 text-muted-foreground hover:text-foreground transition-colors"
+                className="flex flex-col items-center justify-start w-16 shrink-0 pt-2 text-muted-foreground hover:text-foreground transition-colors bg-card rounded-lg"
               >
                 <ChevronRight size={14} />
                 <span className="text-xs font-semibold uppercase tracking-wide mt-1 [writing-mode:vertical-lr]">
-                  Terminal
+                  已结束
                 </span>
                 <span className="text-xs mt-2 bg-muted rounded-full px-1.5">{totalCount}</span>
               </button>

@@ -122,9 +122,9 @@ export function TopologyNodeCard({ node, onClick }: TopologyNodeProps) {
       onClick={onClick}
       className={`
         relative flex flex-col gap-1.5 p-3 w-48
-        bg-gray-800/80 border border-gray-700 border-l-4 ${borderColor}
-        rounded-lg shadow-sm
-        hover:bg-gray-750 hover:border-gray-600 hover:shadow-md
+        bg-gray-800/80 border-l-4 ${borderColor}
+        rounded-lg
+        hover:bg-gray-750
         transition-all cursor-pointer text-left
       `}
     >
