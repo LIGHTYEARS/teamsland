@@ -26,6 +26,7 @@ export function useSessionMessages(sessionId: string | null): {
 
   const refresh = useCallback(() => bump(), []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: version counter triggers re-fetch
   useEffect(() => {
     if (!sessionId) {
       setMessages([]);

@@ -29,6 +29,7 @@ export function useCoordinatorStatus(): {
   const [error, setError] = useState<string | null>(null);
   const [version, bump] = useReducer((n: number) => n + 1, 0);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: version counter triggers re-fetch
   useEffect(() => {
     let cancelled = false;
     fetch("/api/coordinator/status")

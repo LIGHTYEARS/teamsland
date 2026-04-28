@@ -39,6 +39,7 @@ export function useTickets(): {
   const [version, bump] = useReducer((n: number) => n + 1, 0);
   const refresh = useCallback(() => bump(), []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: version counter triggers re-fetch
   useEffect(() => {
     let cancelled = false;
     setLoading(true);

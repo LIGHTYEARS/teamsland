@@ -96,7 +96,7 @@ function buildLlmStack(llmConfig: LlmConfig | undefined, logger: ReturnType<type
  */
 export function initContext(
   config: AppConfig,
-  storage: StorageResult,
+  _storage: StorageResult,
   _sidecar: SidecarResult,
   lark: LarkResult,
   logger: ReturnType<typeof createLogger>,
