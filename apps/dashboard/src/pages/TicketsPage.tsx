@@ -1,3 +1,5 @@
+import { EmptyState } from "@teamsland/ui/components/ui/empty-state";
+import { Skeleton } from "@teamsland/ui/components/ui/skeleton";
 import { Inbox } from "lucide-react";
 import { useMemo, useState } from "react";
 import { TicketBoard } from "../components/tickets/TicketBoard.js";
@@ -67,9 +69,9 @@ export function TicketsPage({
     <div className="flex h-full flex-col overflow-hidden">
       <header className="shrink-0 border-b border-border px-6 py-4 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold">Tickets</h1>
+          <h1 className="text-lg font-semibold">工单</h1>
           <p className="text-sm text-muted-foreground">
-            {loading ? "Loading..." : error ? error : `${tickets.length} tickets`}
+            {loading ? "加载中..." : error ? error : `${tickets.length} 个工单`}
           </p>
         </div>
         <TicketFilters
@@ -83,11 +85,30 @@ export function TicketsPage({
       </header>
 
       <div className="flex-1 min-h-0">
-        {!loading && tickets.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
-            <Inbox size={48} strokeWidth={1} />
-            <p className="text-sm">No tickets yet</p>
+        {loading ? (
+          <div className="flex h-full gap-1 p-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton columns, no reordering
+              <div key={i} className="flex flex-col w-64 shrink-0">
+                <div className="px-2 py-1.5 mb-2">
+                  <Skeleton className="h-4 w-16" />
+                </div>
+                <div className="space-y-2 px-1">
+                  {Array.from({ length: 2 }).map((_, j) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton cards, no reordering
+                    <Skeleton key={j} className="h-24 w-full rounded-lg" />
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
+        ) : tickets.length === 0 ? (
+          <EmptyState
+            icon={<Inbox size={48} strokeWidth={1} />}
+            title="暂无工单"
+            description="工单将在 Meego 事件触发后自动创建"
+            className="h-full"
+          />
         ) : (
           <TicketBoard tickets={filtered} onTicketClick={handleTicketClick} />
         )}

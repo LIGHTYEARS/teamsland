@@ -3,11 +3,24 @@ import { Card, CardContent, CardHeader, CardTitle } from "@teamsland/ui/componen
 import { StatusDot } from "@teamsland/ui/components/ui/status-dot";
 import { useEffect, useState } from "react";
 import { useWebSocket } from "../contexts/WebSocketContext";
+import { useTheme } from "../hooks/useTheme";
 
 interface HealthData {
   status: string;
   uptime: number;
 }
+
+const THEME_LABELS: Record<string, string> = {
+  auto: "自动",
+  light: "浅色",
+  dark: "深色",
+};
+
+const THEME_DESCRIPTIONS: Record<string, string> = {
+  auto: "跟随系统设置",
+  light: "始终使用浅色主题",
+  dark: "始终使用深色主题",
+};
 
 /**
  * Settings 页面
@@ -15,6 +28,7 @@ interface HealthData {
  * 只读系统配置查看，连接状态，基本信息。
  */
 export function SettingsPage() {
+  const { theme, setTheme } = useTheme();
   const { status: wsStatus } = useWebSocket();
   const [health, setHealth] = useState<HealthData | null>(null);
   const [vikingOk, setVikingOk] = useState<boolean | null>(null);
@@ -42,8 +56,8 @@ export function SettingsPage() {
   return (
     <div className="flex h-full flex-col overflow-y-auto">
       <header className="shrink-0 border-b border-border px-6 py-4">
-        <h1 className="text-lg font-semibold text-foreground">Settings</h1>
-        <p className="text-sm text-muted-foreground">System configuration and status</p>
+        <h1 className="text-lg font-semibold text-foreground">设置</h1>
+        <p className="text-sm text-muted-foreground">系统配置与状态</p>
       </header>
 
       <div className="flex-1 p-6 space-y-6 max-w-2xl">
@@ -61,26 +75,52 @@ export function SettingsPage() {
             <StatusRow
               label="OpenViking"
               variant={vikingOk === null ? "default" : vikingOk ? "success" : "error"}
-              detail={vikingOk === null ? "Checking…" : vikingOk ? "Connected" : "Unavailable"}
+              detail={vikingOk === null ? "检查中…" : vikingOk ? "已连接" : "不可用"}
             />
             <StatusRow
-              label="Server"
+              label="服务器"
               variant={health ? "success" : "default"}
-              detail={health ? `Up ${formatUptime(health.uptime)}` : "Checking…"}
+              detail={health ? `已运行 ${formatUptime(health.uptime)}` : "检查中…"}
             />
+          </CardContent>
+        </Card>
+
+        {/* 外观 */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">外观</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2">
+              {(["auto", "light", "dark"] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setTheme(t)}
+                  className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
+                    theme === t
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border text-muted-foreground hover:bg-accent"
+                  }`}
+                >
+                  {THEME_LABELS[t]}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">{THEME_DESCRIPTIONS[theme]}</p>
           </CardContent>
         </Card>
 
         {/* 服务信息 */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">About</CardTitle>
+            <CardTitle className="text-sm">关于</CardTitle>
           </CardHeader>
           <CardContent>
             <dl className="space-y-2 text-sm">
-              <DefinitionRow label="Platform" value="Teamsland" />
-              <DefinitionRow label="Server Status" value={health?.status ?? "—"} />
-              <DefinitionRow label="Uptime" value={health ? formatUptime(health.uptime) : "—"} />
+              <DefinitionRow label="平台" value="Teamsland" />
+              <DefinitionRow label="服务器状态" value={health?.status ?? "—"} />
+              <DefinitionRow label="运行时间" value={health ? formatUptime(health.uptime) : "—"} />
             </dl>
           </CardContent>
         </Card>
@@ -88,7 +128,7 @@ export function SettingsPage() {
         {/* 认证 */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Authentication</CardTitle>
+            <CardTitle className="text-sm">认证</CardTitle>
           </CardHeader>
           <CardContent>
             <Button variant="outline" size="sm" onClick={handleLogout}>
