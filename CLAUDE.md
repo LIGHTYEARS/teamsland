@@ -14,11 +14,11 @@ bun run dev
 
 This runs `overmind start -f Procfile.dev`, which launches three services:
 
-| Service     | What it does                         | Port  |
-|-------------|--------------------------------------|-------|
-| `viking`    | OpenViking vector DB for memory      | 1933  |
-| `server`    | Backend API (Bun + Hono)             | 3001  |
-| `dashboard` | Frontend dev server (Rspack)         | 5173  |
+| Service     | What it does                    | Port |
+| ----------- | ------------------------------- | ---- |
+| `viking`    | OpenViking vector DB for memory | 1933 |
+| `server`    | Backend API (Bun + Hono)        | 3001 |
+| `dashboard` | Frontend dev server (Rspack)    | 5173 |
 
 ### Prerequisites
 
@@ -30,17 +30,17 @@ This runs `overmind start -f Procfile.dev`, which launches three services:
 
 ### Environment Variables (.env)
 
-| Variable                    | Purpose                                      |
-|-----------------------------|----------------------------------------------|
-| `LARK_APP_ID`              | Lark app credentials                          |
-| `LARK_APP_SECRET`          | Lark app credentials                          |
-| `LARK_TEAM_CHANNEL_ID`    | Default team notification channel              |
-| `MEEGO_WEBHOOK_SECRET`    | Webhook signature verification                 |
-| `MEEGO_PLUGIN_ACCESS_TOKEN`| Meego plugin auth (`X-PLUGIN-TOKEN` header)   |
-| `MEEGO_USER_KEY`          | Meego user identity (`X-USER-KEY` header)      |
-| `ANTHROPIC_AUTH_TOKEN`    | LLM API key                                    |
-| `ANTHROPIC_MODEL`         | LLM model ID                                   |
-| `ANTHROPIC_BASE_URL`      | LLM API base URL                               |
+| Variable                    | Purpose                                     |
+| --------------------------- | ------------------------------------------- |
+| `LARK_APP_ID`               | Lark app credentials                        |
+| `LARK_APP_SECRET`           | Lark app credentials                        |
+| `LARK_TEAM_CHANNEL_ID`      | Default team notification channel           |
+| `MEEGO_WEBHOOK_SECRET`      | Webhook signature verification              |
+| `MEEGO_PLUGIN_ACCESS_TOKEN` | Meego plugin auth (`X-PLUGIN-TOKEN` header) |
+| `MEEGO_USER_KEY`            | Meego user identity (`X-USER-KEY` header)   |
+| `ANTHROPIC_AUTH_TOKEN`      | LLM API key                                 |
+| `ANTHROPIC_MODEL`           | LLM model ID                                |
+| `ANTHROPIC_BASE_URL`        | LLM API base URL                            |
 
 ### Running Individual Services
 
@@ -105,6 +105,7 @@ When completing UI/frontend changes, use `/screenshot-to-feishu` to capture the 
 ## Troubleshooting
 
 **Port already in use** — Kill stale processes before restarting:
+
 ```bash
 lsof -ti:5173 | xargs kill -9   # dashboard
 lsof -ti:3001 | xargs kill -9   # server
@@ -114,3 +115,5 @@ lsof -ti:1933 | xargs kill -9   # viking
 **Viking health check fails** — Server starts fine without Viking (falls back to `NullVikingMemoryClient`), but memory features won't work. Ensure `openviking-server` is installed and `config/openviking.conf` is correct.
 
 **`环境变量未定义: XXX`** — A required env var is missing from `.env`. Check the table above and ensure all variables are set.
+
+**Large file writes** — The `write` tool can malform parameters with very long content. Chunk the text and append via `cat <<'EOF'` heredocs instead, then verify with `read`.
