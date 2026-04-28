@@ -86,21 +86,37 @@ export function TicketsPage({
 
       <div className="flex-1 min-h-0">
         {loading ? (
-          <div className="flex h-full gap-1 p-2">
-            {Array.from({ length: 4 }).map((_, i) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton columns, no reordering
-              <div key={i} className="flex flex-col w-64 shrink-0">
-                <div className="px-2 py-1.5 mb-2">
-                  <Skeleton className="h-4 w-16" />
+          <div className="flex h-full gap-2 p-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton columns
+              <div key={i} className="flex flex-1 flex-col bg-card rounded-lg overflow-hidden">
+                <div className="px-3 py-2.5 border-b border-border/50 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="h-4 w-[3px] rounded-full" />
+                    <Skeleton className="h-4 w-12" />
+                  </div>
+                  <Skeleton className="h-5 w-6 rounded-full" />
                 </div>
-                <div className="space-y-2 px-1">
+                <div className="p-2 space-y-2">
                   {Array.from({ length: 2 }).map((_, j) => (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton cards, no reordering
-                    <Skeleton key={j} className="h-24 w-full rounded-lg" />
+                    // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton sections
+                    <div key={j} className="space-y-1.5">
+                      <div className="flex items-center justify-between px-1.5 py-1">
+                        <Skeleton className="h-3 w-16" />
+                        <Skeleton className="h-3 w-4 rounded-full" />
+                      </div>
+                      <Skeleton className="h-20 w-full rounded-lg" />
+                    </div>
                   ))}
                 </div>
               </div>
             ))}
+            <div className="flex flex-col items-center w-12 shrink-0 bg-card rounded-lg pt-3 pb-4">
+              <Skeleton className="w-[3px] h-4 rounded-full mb-2" />
+              <Skeleton className="h-3 w-3 rounded mb-1" />
+              <Skeleton className="h-16 w-3 rounded" />
+              <Skeleton className="h-4 w-5 rounded-full mt-2" />
+            </div>
           </div>
         ) : tickets.length === 0 ? (
           <EmptyState
