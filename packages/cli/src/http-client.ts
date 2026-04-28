@@ -32,6 +32,8 @@ export interface CreateWorkerRequest {
   };
   /** 父 Agent ID */
   parentAgentId?: string;
+  /** 追加到 worker 的 system prompt（传递给 claude --append-system-prompt） */
+  systemPrompt?: string;
 }
 
 /**
@@ -332,6 +334,63 @@ export class TeamslandClient {
 
   async ask(to: string, ticketId: string, text: string): Promise<{ ok: boolean; ticketId: string; state: string }> {
     return this.request("POST", "/api/ask", { to, ticketId, text });
+  }
+
+  // ─── Viking Memory API ───
+
+  async vikingWrite(uri: string, content: string, opts?: { mode?: string; wait?: boolean }): Promise<unknown> {
+    return this.request("POST", "/api/viking/write", { uri, content, ...opts });
+  }
+
+  async vikingRead(uri: string): Promise<{ status: string; result: string }> {
+    return this.request("GET", `/api/viking/read?uri=${encodeURIComponent(uri)}`);
+  }
+
+  async vikingLs(
+    uri: string,
+    opts?: { recursive?: boolean; simple?: boolean },
+  ): Promise<{ status: string; result: unknown[] }> {
+    const params = new URLSearchParams({ uri });
+    if (opts?.recursive) params.set("recursive", "true");
+    if (opts?.simple) params.set("simple", "true");
+    return this.request("GET", `/api/viking/ls?${params.toString()}`);
+  }
+
+  async vikingMkdir(uri: string, description?: string): Promise<unknown> {
+    return this.request("POST", "/api/viking/mkdir", { uri, description });
+  }
+
+  async vikingRm(uri: string, recursive?: boolean): Promise<unknown> {
+    const params = new URLSearchParams({ uri });
+    if (recursive) params.set("recursive", "true");
+    return this.request("DELETE", `/api/viking/fs?${params.toString()}`);
+  }
+
+  async vikingMv(fromUri: string, toUri: string): Promise<unknown> {
+    return this.request("POST", "/api/viking/mv", { fromUri, toUri });
+  }
+
+  async vikingAbstract(uri: string): Promise<{ status: string; result: string }> {
+    return this.request("GET", `/api/viking/abstract?uri=${encodeURIComponent(uri)}`);
+  }
+
+  async vikingOverview(uri: string): Promise<{ status: string; result: string }> {
+    return this.request("GET", `/api/viking/overview?uri=${encodeURIComponent(uri)}`);
+  }
+
+  async vikingFind(
+    query: string,
+    opts?: { targetUri?: string; limit?: number; since?: string; until?: string },
+  ): Promise<unknown> {
+    return this.request("POST", "/api/viking/find", { query, ...opts });
+  }
+
+  async vikingGrep(uri: string, pattern: string, opts?: { caseInsensitive?: boolean }): Promise<unknown> {
+    return this.request("POST", "/api/viking/grep", { uri, pattern, ...opts });
+  }
+
+  async vikingGlob(pattern: string, uri?: string): Promise<unknown> {
+    return this.request("POST", "/api/viking/glob", { pattern, uri });
   }
 
   /**
