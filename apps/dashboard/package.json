@@ -15,6 +15,7 @@
     "@teamsland/types": "workspace:*",
     "@teamsland/ui": "workspace:*",
     "@uiw/react-codemirror": "^4.25.9",
+    "@uiw/react-json-view": "^2.0.0-alpha.42",
     "@wterm/dom": "^0.1.9",
     "@wterm/react": "^0.1.9",
     "ansi-to-react": "^6.2.6",
