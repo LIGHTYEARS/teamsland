@@ -1,5 +1,6 @@
 // @teamsland/server — Coordinator 初始化模块
 
+import { homedir } from "node:os";
 import type { LarkNotifier } from "@teamsland/lark";
 import type { IVikingMemoryClient } from "@teamsland/memory";
 import { createLogger } from "@teamsland/observability";
@@ -12,6 +13,73 @@ import { CoordinatorProcess } from "../coordinator-process.js";
 import { CoordinatorPromptBuilder } from "../coordinator-prompt.js";
 
 const logger = createLogger("init:coordinator");
+
+/**
+ * 确保 bytedcli CLI 二进制和对应的 skill 都可用
+ *
+ * 1. 检查 bytedcli 是否在 PATH 中，不在则通过 npm 全局安装
+ * 2. 检查是否已全局安装 bytedcli skill，不在则通过 npx skills -g 安装
+ *
+ * 安装失败不阻塞启动，仅降级（飞书卡片等功能可能不可用）。
+ */
+async function ensureBytedcli(parentLogger: ReturnType<typeof createLogger>): Promise<void> {
+  const env = { ...process.env, npm_config_registry: "https://bnpm.byted.org" };
+
+  // 1. 确保 bytedcli 二进制可用
+  if (Bun.which("bytedcli")) {
+    parentLogger.info("bytedcli 已在 PATH 中");
+  } else {
+    parentLogger.info("bytedcli 未找到，正在安装...");
+    const proc = Bun.spawn(["npm", "install", "-g", "@bytedance-dev/bytedcli@latest"], {
+      env,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const exitCode = await proc.exited;
+    if (exitCode !== 0) {
+      const stderr = await new Response(proc.stderr).text();
+      parentLogger.warn({ exitCode, stderr }, "bytedcli 安装失败，飞书卡片等功能可能不可用");
+    } else {
+      parentLogger.info("bytedcli 安装完成");
+    }
+  }
+
+  // 2. 确保 bytedcli skill 已全局安装（~/.claude/skills/）
+  const skillMarker = `${homedir()}/.claude/skills/bytedcli/SKILL.md`;
+  const skillExists = await Bun.file(skillMarker).exists();
+  if (skillExists) {
+    parentLogger.info("bytedcli skill 已安装");
+    return;
+  }
+
+  parentLogger.info("bytedcli skill 未找到，正在安装...");
+  const skillProc = Bun.spawn(
+    [
+      "npx",
+      "skills@latest",
+      "add",
+      "code.byted.org/byteapi/bytedcli",
+      "--skill",
+      "bytedcli",
+      "--version",
+      "1.0.28",
+      "-g",
+      "-y",
+    ],
+    {
+      env,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  const skillExitCode = await skillProc.exited;
+  if (skillExitCode !== 0) {
+    const stderr = await new Response(skillProc.stderr).text();
+    parentLogger.warn({ exitCode: skillExitCode, stderr }, "bytedcli skill 安装失败");
+  } else {
+    parentLogger.info("bytedcli skill 安装完成");
+  }
+}
 
 /**
  * Coordinator 初始化结果
@@ -62,25 +130,17 @@ export async function initCoordinator(
   const workspacePath = await initCoordinatorWorkspace(config);
   parentLogger.info({ workspacePath }, "Coordinator 工作区已初始化");
 
-  // 2. 创建 LiveContextLoader + PromptBuilder
+  // 2. 确保 bytedcli 二进制和 skill 可用（非阻塞 — 失败仅 warn）
+  await ensureBytedcli(parentLogger);
+
+  // 3. 创建 LiveContextLoader + PromptBuilder
   const contextLoader = new LiveContextLoader({ registry, vikingClient });
   const promptBuilder = new CoordinatorPromptBuilder();
 
-  // 3. 创建 CoordinatorProcess
+  // 4. 创建 CoordinatorProcess
   const coordinator = new CoordinatorProcess({
     config: {
       workspacePath,
-      systemPromptPath: `${workspacePath}/CLAUDE.md`,
-      allowedTools: [
-        "Bash(teamsland *)",
-        "Bash(lark-cli *)",
-        "Bash(bytedcli *)",
-        "Bash(curl *)",
-        "Bash(cat *)",
-        "Bash(echo *)",
-        "Bash(date *)",
-        "Read",
-      ],
       sessionMaxLifetimeMs: coordConfig.sessionMaxLifetimeMs ?? 30 * 60 * 1000,
       maxEventsPerSession: coordConfig.maxEventsPerSession ?? 20,
       resultTimeoutMs: coordConfig.resultTimeoutMs ?? coordConfig.inferenceTimeoutMs ?? 5 * 60 * 1000,
@@ -89,7 +149,7 @@ export async function initCoordinator(
     promptBuilder,
   });
 
-  // 4. 创建 WorkerManager
+  // 5. 创建 WorkerManager
   const workerManager = new WorkerManager({
     registry,
     queue: queue as unknown as WorkerManagerOpts["queue"],
