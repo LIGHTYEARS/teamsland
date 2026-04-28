@@ -147,6 +147,12 @@ interface WsTicketUpdate {
   updatedAt: number;
 }
 
+/** 队列数据变更推送（事件处理完成后触发） */
+interface WsQueueUpdate {
+  type: "queue_update";
+  timestamp: number;
+}
+
 type WsMessage =
   | WsAgentsUpdate
   | WsConnected
@@ -154,7 +160,8 @@ type WsMessage =
   | WsCommandError
   | WsCommandAck
   | WsCoordinatorState
-  | WsTicketUpdate;
+  | WsTicketUpdate
+  | WsQueueUpdate;
 
 /** JSON 响应工具函数 */
 function jsonResponse(body: unknown, status = 200): Response {
@@ -621,14 +628,19 @@ function handleApiRoutes(
   return null;
 }
 
+export interface DashboardServer {
+  server: ReturnType<typeof Bun.serve>;
+  broadcastQueueUpdate: () => void;
+}
+
 /**
  * 启动 Dashboard HTTP/WebSocket 服务
  *
  * @param deps - Dashboard 依赖
  * @param signal - 可选的 AbortSignal，用于优雅关闭
- * @returns Bun.serve 返回的 Server 实例
+ * @returns Server 实例和广播函数
  */
-export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): ReturnType<typeof Bun.serve> {
+export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): DashboardServer {
   const {
     registry,
     sessionDb,
@@ -776,5 +788,10 @@ export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): Retur
     });
   }
 
-  return server;
+  return {
+    server,
+    broadcastQueueUpdate: () => {
+      broadcast(clients, { type: "queue_update", timestamp: Date.now() });
+    },
+  };
 }

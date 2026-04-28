@@ -68,7 +68,7 @@ import { PipelineTracker } from "./pipeline-tracker.js";
 
     // ── Phase 1.5: OpenViking 连接 ──
     t0 = performance.now();
-    const viking = initViking(config, logger);
+    const viking = await initViking(config, logger);
     timePhase("viking", t0);
 
     // ── Phase 2: 飞书组件 ──
@@ -125,6 +125,8 @@ import { PipelineTracker } from "./pipeline-tracker.js";
       vikingClient,
       lark.notifier,
     );
+    let onQueueProcessed: (() => void) | undefined;
+
     if (coordinator.coordinator) {
       // Dead letter 告警
       queue.onDeadLetter(({ id, type, lastError }) => {
@@ -160,6 +162,7 @@ import { PipelineTracker } from "./pipeline-tracker.js";
         } finally {
           const summary = tracker.summarize();
           logger.info(summary, "消息处理链路完成");
+          onQueueProcessed?.();
         }
       });
       logger.info("Coordinator 队列消费者已注册");
@@ -198,10 +201,11 @@ import { PipelineTracker } from "./pipeline-tracker.js";
         ticketStore,
         queue,
         larkSendDm: (userId, text) => lark.larkCli.sendDm(userId, text),
-        coordinatorManager: null, // TODO: update dashboard to accept CoordinatorProcess
+        coordinatorManager: coordinator.coordinator,
       },
     );
     timePhase("dashboard", t0);
+    onQueueProcessed = dashboard.broadcastQueueUpdate;
 
     // ── Phase 7: 定时任务 ──
     t0 = performance.now();

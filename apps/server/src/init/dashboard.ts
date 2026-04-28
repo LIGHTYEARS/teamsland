@@ -32,6 +32,8 @@ export interface DashboardResult {
   server: ReturnType<typeof Bun.serve>;
   /** Lark OAuth 管理器（未启用时为 undefined） */
   authManager: LarkAuthManager | undefined;
+  /** 广播队列数据变更到所有 WebSocket 客户端 */
+  broadcastQueueUpdate: () => void;
 }
 
 /** Worker Skill 名称列表 */
@@ -131,7 +133,7 @@ export function initDashboard(
   const claudeMdInjector = new ClaudeMdInjector();
   logger.info("ClaudeMdInjector 已初始化");
 
-  const server = startDashboard(
+  const { server, broadcastQueueUpdate } = startDashboard(
     {
       registry,
       sessionDb,
@@ -160,5 +162,5 @@ export function initDashboard(
 
   logger.info({ port: config.dashboard.port }, "Dashboard 服务初始化完成");
 
-  return { server, authManager };
+  return { server, authManager, broadcastQueueUpdate };
 }
