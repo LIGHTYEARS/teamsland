@@ -3,6 +3,14 @@ import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { createLogger } from "@teamsland/observability";
 import type { AppConfig, RepoMappingEntry } from "@teamsland/types";
+import {
+  generateCardTemplate,
+  generateFeishuCardSkill,
+  generateMeegoQuerySkill,
+  generateMemoryManagementSkill,
+  generateSelfEvolveSkill,
+  generateTeamslandSpawnSkill,
+} from "./coordinator-init-skills.js";
 import { generateHandleMeegoIssueWorkflow, generateTicketLifecycleSkill } from "./coordinator-init-workflows.js";
 
 const logger = createLogger("server:coordinator-init");
@@ -14,9 +22,10 @@ const WORKSPACE_DIRS = {
   teamslandSpawn: ".claude/skills/teamsland-spawn",
   meegoQuery: ".claude/skills/meego-query",
   selfEvolve: ".claude/skills/self-evolve",
+  memoryManagement: ".claude/skills/memory-management",
   feishuCard: ".claude/skills/feishu-card",
   feishuCardTemplates: ".claude/skills/feishu-card/templates",
-  workflows: "workflows",
+  rules: ".claude/rules",
   ticketLifecycle: ".claude/skills/ticket-lifecycle",
 } as const;
 
@@ -96,6 +105,10 @@ async function writeWorkspaceFiles(basePath: string, config: AppConfig): Promise
       content: generateSelfEvolveSkill(),
     },
     {
+      path: join(basePath, WORKSPACE_DIRS.memoryManagement, "SKILL.md"),
+      content: generateMemoryManagementSkill(),
+    },
+    {
       path: join(basePath, WORKSPACE_DIRS.feishuCard, "SKILL.md"),
       content: generateFeishuCardSkill(),
     },
@@ -120,7 +133,7 @@ async function writeWorkspaceFiles(basePath: string, config: AppConfig): Promise
       content: generateCardTemplate("worker-result"),
     },
     {
-      path: join(basePath, WORKSPACE_DIRS.workflows, "handle-meego-issue.md"),
+      path: join(basePath, WORKSPACE_DIRS.rules, "handle-meego-issue.md"),
       content: generateHandleMeegoIssueWorkflow(),
     },
     {
@@ -164,10 +177,22 @@ async function writeFileIfNotExists(filePath: string, content: string): Promise<
 }
 
 /**
+ * 找到 YAML frontmatter 闭合 `---` 的位置（返回第二个 `---` 末尾的索引）。
+ * 如果内容不以 `---` 开头或没有闭合，返回 -1。
+ */
+function findFrontmatterEnd(content: string): number {
+  if (!content.startsWith("---")) return -1;
+  const closeIdx = content.indexOf("\n---", 3);
+  if (closeIdx === -1) return -1;
+  return closeIdx + 4;
+}
+
+/**
  * 仅在内容哈希发生变化时写入文件（版本化写入）
  *
- * 使用 SHA-256 前 8 位作为内容指纹嵌入文件头。
- * 若哈希匹配则跳过；若不匹配则备份旧版本并写入新内容。
+ * 使用 SHA-256 前 8 位作为内容指纹。
+ * 对含 YAML frontmatter 的文件，hash 注释插入到 frontmatter 之后，
+ * 避免破坏 frontmatter 解析；其他文件仍插入到文件头。
  *
  * @param filePath - 文件绝对路径
  * @param content - 新文件内容
@@ -175,7 +200,15 @@ async function writeFileIfNotExists(filePath: string, content: string): Promise<
 async function writeFileIfChanged(filePath: string, content: string): Promise<void> {
   const HASH_PREFIX = "<!-- teamsland-content-hash: ";
   const hash = new Bun.CryptoHasher("sha256").update(content).digest("hex").slice(0, 8);
-  const taggedContent = `${HASH_PREFIX}${hash} -->\n${content}`;
+  const hashTag = `${HASH_PREFIX}${hash} -->`;
+
+  let taggedContent: string;
+  const frontmatterEnd = findFrontmatterEnd(content);
+  if (frontmatterEnd !== -1) {
+    taggedContent = `${content.slice(0, frontmatterEnd)}\n${hashTag}${content.slice(frontmatterEnd)}`;
+  } else {
+    taggedContent = `${hashTag}\n${content}`;
+  }
 
   if (existsSync(filePath)) {
     const existing = await Bun.file(filePath).text();
@@ -338,430 +371,50 @@ Spawn Worker 时，task prompt 必须包含以下结构：
 - 主要技术栈是 React + TypeScript
 
 注意：不要在 prompt 中重复 Worker 已通过 CLAUDE.md 获得的信息（如 Worker ID、回报方式等）。
+
+## 记忆管理
+
+你有两套记忆系统，协同工作：
+
+### 内置记忆（本文件 + .claude/memory/）
+
+这就是你正在读的 CLAUDE.md 以及 \`.claude/memory/\` 目录下的文件。它们是**主动记忆**——每次对话启动时自动全量加载。
+
+适合存放：
+- 身份、角色、行为约束（即本文件的内容）
+- 团队组织结构和项目映射
+- 高频需要的协作规则和决策流程
+
+**管理方式**：直接编辑本文件或 \`.claude/memory/\` 下的文件。内容应保持精简，只放每次对话都需要的信息。
+
+### 外挂记忆（OpenViking，通过 memory-management skill 管理）
+
+这是基于 OpenViking 向量数据库的**被动记忆**——不会自动加载，需要你主动检索。
+
+适合存放：
+- 具体事件经历和问题-方案案例
+- 用户的偏好细节
+- 项目事实和技术决策背景
+- 工作流经验和踩坑记录
+
+**管理方式**：使用 \`teamsland memory\` 命令（详见 memory-management skill）：
+- 写入：\`teamsland memory write <uri> --content "..." --mode create\`
+- 检索：\`teamsland memory find "关键词" --scope agent --limit 5\`
+- 浏览：\`teamsland memory ls --scope agent --recursive\`
+- 删除：\`teamsland memory rm <uri>\`
+
+### 何时用哪个
+
+| 场景 | 内置记忆 | 外挂记忆 |
+| --- | --- | --- |
+| 几乎每次对话都需要 | ✓ | |
+| 身份、约束、决策规则 | ✓ | |
+| 具体事件、案例、经验 | | ✓ |
+| 内容会持续积累 | | ✓ |
+| 需要语义检索才能找到 | | ✓ |
+
+**关键原则**：内置记忆求精不求多；外挂记忆正常积累。遇到有价值的经验时主动记忆，处理任务前主动检索相关记忆。
 `;
-}
-
-/**
- * 生成 teamsland-spawn SKILL.md 内容
- *
- * @returns SKILL.md 文件内容
- *
- * @example
- * ```typescript
- * const content = generateTeamslandSpawnSkill();
- * ```
- */
-function generateTeamslandSpawnSkill(): string {
-  return `---
-name: teamsland-spawn
-description: Spawn and manage teamsland workers. Use when you need to delegate a task to a worker agent, check worker status, get results, or cancel a running worker.
-allowed-tools: Bash(teamsland *)
----
-
-# teamsland Worker Management
-
-## Spawning a Worker
-
-\`\`\`bash
-teamsland spawn --repo <repo-path> --task "$(cat <<'EOF'
-<task prompt here>
-EOF
-)"
-\`\`\`
-
-## Resume in Existing Worktree
-
-\`\`\`bash
-teamsland spawn --worktree <worktree-path> --task "$(cat <<'EOF'
-<task prompt here>
-EOF
-)"
-\`\`\`
-
-## With Metadata
-
-\`\`\`bash
-teamsland spawn --repo <repo-path> \\
-  --task-brief "简短描述" \\
-  --origin-chat "oc_xxx" \\
-  --origin-sender "ou_xxx" \\
-  --task "$(cat <<'EOF'
-<task prompt here>
-EOF
-)"
-\`\`\`
-
-## Checking Status
-
-\`\`\`bash
-teamsland list
-teamsland status <worker-id>
-teamsland result <worker-id>
-\`\`\`
-
-## Cancelling
-
-\`\`\`bash
-teamsland cancel <worker-id>
-teamsland cancel <worker-id> --force
-\`\`\`
-
-## CRITICAL: Always use single-quoted EOF
-
-Always use \`'EOF'\` (single-quoted) to prevent shell expansion of \`$variables\` and backticks.
-`;
-}
-
-/**
- * 生成 meego-query SKILL.md 内容
- *
- * @returns SKILL.md 文件内容
- *
- * @example
- * ```typescript
- * const content = generateMeegoQuerySkill();
- * ```
- */
-function generateMeegoQuerySkill(): string {
-  return `---
-name: meego-query
-description: Query Meego issues and project information. Use when you need to look up issue details, search for issues, or get project status.
-allowed-tools: Bash(curl *)
----
-
-# Meego Query Skill
-
-通过 API 查询 Meego 工单和项目信息。
-
-## 查询工单详情
-
-\`\`\`bash
-curl -s "http://localhost:3000/api/meego/issues/<issue-id>" | cat
-\`\`\`
-
-## 搜索工单
-
-\`\`\`bash
-curl -s "http://localhost:3000/api/meego/issues?project=<project-key>&status=open" | cat
-\`\`\`
-
-## 获取项目工单统计
-
-\`\`\`bash
-curl -s "http://localhost:3000/api/meego/projects/<project-key>/stats" | cat
-\`\`\`
-
-## 获取指派给某人的工单
-
-\`\`\`bash
-curl -s "http://localhost:3000/api/meego/issues?assignee=<user-id>&status=open" | cat
-\`\`\`
-
-## 注意事项
-
-- 所有 API 请求通过本地代理访问
-- 响应为 JSON 格式，可结合 jq 处理
-- 大量结果会分页返回，注意 pagination 参数
-`;
-}
-
-/**
- * 生成 self-evolve SKILL.md 内容
- *
- * @returns SKILL.md 文件内容
- *
- * @example
- * ```typescript
- * const content = generateSelfEvolveSkill();
- * ```
- */
-function generateSelfEvolveSkill(): string {
-  return `---
-name: self-evolve
-description: >
-  分析重复事件模式并创建自动化产物（hook、skill 或 subagent），
-  减少 LLM 开销。当你发现同类事件已处理 3 次以上且决策模式相同时使用。
----
-
-# 自我进化指南
-
-你是 teamsland 的 Coordinator（大脑）。你的工作是处理团队事件并做出决策。
-随着时间推移，你应该识别模式并将其自动化，减少自身的 LLM 开销。
-
-## 三个层级
-
-1. **Hook**（零 LLM）— \`~/.teamsland/coordinator/hooks/\` 中的 TypeScript 文件，由 server 直接执行
-2. **Skill**（轻量 LLM）— \`.claude/skills/\` 中的 SKILL.md，为你提供 playbook
-3. **Subagent**（隔离 LLM）— \`.claude/agents/\` 中的 .md，委托给子会话
-
-## 何时创建什么
-
-### 创建 Hook：
-- 事件类型和动作 100% 确定性（不需要判断）
-- 动作简单：发通知、spawn worker、调用 API
-- 你已经以完全相同方式处理了 3+ 次
-- 例如："issue.assigned 总是给 assignee 发 DM" → Hook
-
-### 创建 Skill：
-- 模式大致固定但需要轻微 LLM 判断
-- 你需要 playbook 但细节因事件不同
-- 例如："sprint.started → 汇总 sprint 项目并发到群聊" → Skill
-
-### 创建 Subagent：
-- 任务需要多步推理但属于已知类别
-- 应在隔离环境中运行以避免污染上下文
-- 例如："CI 失败分诊 → 读日志、定位根因、建议修复" → Subagent
-
-## 审批模式
-
-读取 \`~/.teamsland/coordinator/evolution-config.json\`：
-- 若 \`requireApproval: true\`：写入 \`hooks-pending/\` 而非 \`hooks/\`，然后通过 Lark DM 通知管理员
-- 若 \`requireApproval: false\` 或文件不存在：直接写入 \`hooks/\`
-
-## Hook 文件模板
-
-\`\`\`typescript
-import type { MeegoEvent } from "@teamsland/types";
-import type { HookContext } from "@teamsland/hooks";
-
-export const description = "[描述这个 hook 做什么]";
-export const priority = 100;
-
-export const match = (event: MeegoEvent): boolean => {
-  return event.type === "[EVENT_TYPE]";
-};
-
-export const handle = async (event: MeegoEvent, ctx: HookContext): Promise<void> => {
-  // ctx.lark      — 发消息、搜联系人、读文档
-  // ctx.notifier  — 发结构化通知
-  // ctx.spawn()   — spawn worker（绕过队列）
-  // ctx.queue     — 入队到 Coordinator
-  // ctx.registry  — 查询 worker 状态
-  // ctx.config    — 读配置
-  // ctx.log       — 结构化日志
-};
-\`\`\`
-
-## 进化日志
-
-创建新 hook/skill/subagent 时，追加到 \`~/.teamsland/coordinator/evolution-log.jsonl\`：
-
-\`\`\`json
-{"timestamp": "ISO8601", "action": "create_hook", "path": "hooks/meego/xxx.ts", "reason": "处理了 5 次相同的 issue.assigned 通知", "patternCount": 5}
-\`\`\`
-
-## 安全规则
-
-1. **永远不要创建直接修改代码仓库的 hook。** Hook 只能发通知、spawn worker 或入队事件。
-2. **始终在 hook handler 中包含错误处理。**
-3. **保持 match() 简单快速。**
-4. **创建前测试。** 回顾最近 3+ 次处理决策，若有不同则不适合创建 hook。
-5. **记录进化决策。** 创建新产物时记录原因和观察到的模式。
-6. **永远不要创建调用 LLM API 的 hook。**
-7. **一个文件一个 hook。**
-`;
-}
-
-/**
- * 生成 feishu-card SKILL.md 内容
- *
- * 轻量入口文件：校验规则 + 发送命令 + 模板索引。
- * 模板 JSON 单独存放在 templates/ 目录，大脑按需 Read。
- */
-function generateFeishuCardSkill(): string {
-  return `---
-name: feishu-card
-description: >
-  Use when sending Feishu/Lark messages that need rich formatting —
-  tables, colored headers, status badges, structured data.
-  Provides card templates, validation checklist, and send commands.
-allowed-tools: Bash(lark-cli *), Bash(bytedcli *), Read
----
-
-# 飞书卡片消息
-
-普通 post 消息（--markdown）不支持表格和复杂排版。
-需要丰富格式时，使用 **interactive 卡片消息**。
-
-## 发送命令
-
-\`\`\`bash
-# lark-cli
-lark-cli im +messages-send --as bot --chat-id "<chat_id>" \\
-  --msg-type interactive --content '<card_json>'
-
-# bytedcli
-bytedcli feishu message send --chat-id "<chat_id>" \\
-  --msg-type interactive --content-json '<card_json>'
-
-# 私聊
-lark-cli im +messages-send --as bot --user-id "<user_id>" \\
-  --msg-type interactive --content '<card_json>'
-\`\`\`
-
-## 发送前校验清单
-
-发送卡片 JSON 前，逐项检查：
-
-1. **JSON 合法** — 能被 JSON.parse 解析
-2. **有 header.title** — 必须包含 \`header.title.content\`
-3. **body.elements 非空** — 至少一个元素
-4. **元素 tag 合法** — 见下方合法列表
-5. **表格约束** — 表格数 ≤ 5，列 ≤ 10，行 ≤ 50
-6. **总大小 ≤ 30KB**
-7. **嵌套 ≤ 6 层**
-
-合法元素 tag：\`markdown\`、\`div\`、\`table\`、\`hr\`、\`note\`、\`img\`、
-\`column_set\`、\`column\`、\`collapsible_panel\`、\`form\`、\`action\`、
-\`button\`、\`select_static\`、\`multi_select_static\`、\`date_picker\`、
-\`input\`、\`overflow\`、\`checker\`、\`chart\`、\`progress\`、
-\`person_list\`、\`icon\`
-
-Header template 颜色：\`blue\`、\`wathet\`、\`turquoise\`、\`green\`、
-\`yellow\`、\`orange\`、\`red\`、\`carmine\`、\`violet\`、\`purple\`、
-\`indigo\`、\`grey\`、\`default\`
-
-## 卡片 JSON 基本结构
-
-\`\`\`json
-{
-  "schema": "2.0",
-  "config": { "wide_screen_mode": true },
-  "header": {
-    "title": { "tag": "plain_text", "content": "标题" },
-    "template": "blue"
-  },
-  "body": {
-    "elements": [
-      { "tag": "markdown", "content": "**正文** markdown 内容" }
-    ]
-  }
-}
-\`\`\`
-
-## 模板索引
-
-按需 Read 对应模板文件，替换占位符后发送。
-
-| 模板 | 文件 | 场景 |
-|------|------|------|
-| 文本回复 | templates/text-reply.json | 日常回复，标题 + markdown 正文 |
-| 结构化数据 | templates/structured-data.json | 表格展示：仓库映射、工单列表 |
-| 状态通知 | templates/status-notification.json | Worker 启动/完成/失败 |
-| 错误告警 | templates/error-alert.json | 系统异常、任务失败 |
-| Worker 结果 | templates/worker-result.json | 任务完成详细报告 |
-
-## 何时用卡片 vs 纯文本
-
-- 一句话回复 → 纯文本（--text）
-- 带格式的回复但无表格 → post（--markdown）
-- 包含表格、彩色标题、结构化数据 → 卡片（--msg-type interactive）
-`;
-}
-
-type CardTemplateType = "text-reply" | "structured-data" | "status-notification" | "error-alert" | "worker-result";
-
-/**
- * 生成卡片模板 JSON
- *
- * 每个模板包含占位符（{{placeholder}}），大脑 Read 后替换并发送。
- */
-function generateCardTemplate(type: CardTemplateType): string {
-  const templates: Record<CardTemplateType, object> = {
-    "text-reply": {
-      _comment: "文本回复卡片 — 替换 {{TITLE}}、{{COLOR}}、{{CONTENT}}",
-      schema: "2.0",
-      config: { wide_screen_mode: true },
-      header: {
-        title: { tag: "plain_text", content: "{{TITLE}}" },
-        template: "{{COLOR}}",
-      },
-      body: {
-        elements: [{ tag: "markdown", content: "{{CONTENT}}" }],
-      },
-    },
-    "structured-data": {
-      _comment: "结构化数据卡片 — 替换 {{TITLE}}、{{COLOR}}、{{COLUMNS}}、{{ROWS}}",
-      schema: "2.0",
-      config: { wide_screen_mode: true },
-      header: {
-        title: { tag: "plain_text", content: "{{TITLE}}" },
-        template: "{{COLOR}}",
-      },
-      body: {
-        elements: [
-          {
-            tag: "table",
-            page_size: 10,
-            row_height: "low",
-            header_style: { bold: true, background_style: "grey" },
-            columns: "{{COLUMNS}}",
-            rows: "{{ROWS}}",
-          },
-        ],
-      },
-    },
-    "status-notification": {
-      _comment: "状态通知卡片 — 替换 {{TITLE}}、{{COLOR}}、{{STATUS}}、{{DETAILS}}",
-      schema: "2.0",
-      config: { wide_screen_mode: true },
-      header: {
-        title: { tag: "plain_text", content: "{{TITLE}}" },
-        template: "{{COLOR}}",
-      },
-      body: {
-        elements: [
-          { tag: "markdown", content: "**状态：** {{STATUS}}" },
-          { tag: "hr" },
-          { tag: "markdown", content: "{{DETAILS}}" },
-        ],
-      },
-    },
-    "error-alert": {
-      _comment: "错误告警卡片 — 替换 {{TITLE}}、{{ERROR_MESSAGE}}、{{SUGGESTION}}",
-      schema: "2.0",
-      config: { wide_screen_mode: true },
-      header: {
-        title: { tag: "plain_text", content: "{{TITLE}}" },
-        template: "red",
-      },
-      body: {
-        elements: [
-          { tag: "markdown", content: "**错误信息：**\n{{ERROR_MESSAGE}}" },
-          { tag: "hr" },
-          { tag: "markdown", content: "**建议操作：**\n{{SUGGESTION}}" },
-        ],
-      },
-    },
-    "worker-result": {
-      _comment: "Worker 结果卡片 — 替换 {{TITLE}}、{{COLOR}}、{{WORKER_ID}}、{{SUMMARY}}、{{DETAILS}}",
-      schema: "2.0",
-      config: { wide_screen_mode: true },
-      header: {
-        title: { tag: "plain_text", content: "{{TITLE}}" },
-        template: "{{COLOR}}",
-      },
-      body: {
-        elements: [
-          { tag: "markdown", content: "**Worker：** `{{WORKER_ID}}`" },
-          { tag: "hr" },
-          { tag: "markdown", content: "{{SUMMARY}}" },
-          {
-            tag: "collapsible_panel",
-            expanded: false,
-            header: { title: { tag: "plain_text", content: "详细信息" } },
-            border: { color: "grey" },
-            background_style: "default",
-            body: {
-              elements: [{ tag: "markdown", content: "{{DETAILS}}" }],
-            },
-          },
-        ],
-      },
-    },
-  };
-
-  return JSON.stringify(templates[type], null, 2);
 }
 
 /**
@@ -781,8 +434,9 @@ export async function verifyWorkspaceIntegrity(workspacePath: string): Promise<{
     join(WORKSPACE_DIRS.teamslandSpawn, "SKILL.md"),
     join(WORKSPACE_DIRS.meegoQuery, "SKILL.md"),
     join(WORKSPACE_DIRS.selfEvolve, "SKILL.md"),
+    join(WORKSPACE_DIRS.memoryManagement, "SKILL.md"),
     join(WORKSPACE_DIRS.feishuCard, "SKILL.md"),
-    join(WORKSPACE_DIRS.workflows, "handle-meego-issue.md"),
+    join(WORKSPACE_DIRS.rules, "handle-meego-issue.md"),
     join(WORKSPACE_DIRS.ticketLifecycle, "SKILL.md"),
   ];
   const missing: string[] = [];

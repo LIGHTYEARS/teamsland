@@ -116,6 +116,7 @@ describe("initCoordinatorWorkspace", () => {
     expect(existsSync(join(workspacePath, "CLAUDE.md"))).toBe(true);
     expect(existsSync(join(workspacePath, ".claude", "skills", "teamsland-spawn", "SKILL.md"))).toBe(true);
     expect(existsSync(join(workspacePath, ".claude", "skills", "meego-query", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(workspacePath, ".claude", "skills", "memory-management", "SKILL.md"))).toBe(true);
   });
 
   it("版本化更新：.md 文件内容变更时自动更新并备份旧版", async () => {
@@ -202,5 +203,12 @@ describe("initCoordinatorWorkspace", () => {
 
     const meegoQuerySkill = readFileSync(join(workspacePath, ".claude", "skills", "meego-query", "SKILL.md"), "utf-8");
     expect(meegoQuerySkill).toContain("meego-query");
+
+    const memorySkill = readFileSync(
+      join(workspacePath, ".claude", "skills", "memory-management", "SKILL.md"),
+      "utf-8",
+    );
+    expect(memorySkill).toContain("memory-management");
+    expect(memorySkill).toContain("teamsland memory find");
   });
 });
