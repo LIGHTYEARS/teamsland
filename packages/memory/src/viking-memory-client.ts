@@ -83,6 +83,15 @@ export interface FindOptions {
   until?: string;
 }
 
+type OpenVikingFindRequest = {
+  query: string;
+  target_uri?: string;
+  limit?: number;
+  score_threshold?: number;
+  since?: string;
+  until?: string;
+};
+
 /**
  * 写入选项
  *
@@ -103,6 +112,25 @@ export interface WriteOptions {
   mode?: "replace" | "create" | "append";
   wait?: boolean;
   timeout?: number;
+}
+
+function buildFindRequest(query: string, opts?: FindOptions): OpenVikingFindRequest {
+  return {
+    query,
+    ...(opts?.targetUri ? { target_uri: opts.targetUri } : {}),
+    ...(opts?.limit !== undefined ? { limit: opts.limit } : {}),
+    ...(opts?.scoreThreshold !== undefined ? { score_threshold: opts.scoreThreshold } : {}),
+    ...(opts?.since ? { since: opts.since } : {}),
+    ...(opts?.until ? { until: opts.until } : {}),
+  };
+}
+
+function resolveWaitTimeoutMs(baseTimeoutMs: number, opts?: WriteOptions): number {
+  if (!opts?.wait) {
+    return baseTimeoutMs;
+  }
+  const explicitTimeoutMs = opts.timeout !== undefined ? opts.timeout * 1000 + 5000 : undefined;
+  return Math.max(baseTimeoutMs, explicitTimeoutMs ?? 120_000);
 }
 
 /**
@@ -356,9 +384,9 @@ export class VikingMemoryClient implements IVikingMemoryClient {
    * 自动附带 agent 标识、API Key 和超时控制。
    * 解析 OpenViking 标准响应格式并提取 result 字段。
    */
-  private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  private async request<T>(path: string, init: RequestInit = {}, timeoutMs = this.timeoutMs): Promise<T> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const headers = new Headers(init.headers ?? {});
       headers.set("X-OpenViking-Agent", this.agentId);
@@ -402,7 +430,7 @@ export class VikingMemoryClient implements IVikingMemoryClient {
     logger.debug({ query, opts }, "find 请求");
     return this.request<FindResult>("/api/v1/search/find", {
       method: "POST",
-      body: JSON.stringify({ query, ...opts }),
+      body: JSON.stringify(buildFindRequest(query, opts)),
     });
   }
 
@@ -423,15 +451,27 @@ export class VikingMemoryClient implements IVikingMemoryClient {
 
   async write(uri: string, content: string, opts?: WriteOptions): Promise<void> {
     logger.debug({ uri, opts }, "write 请求");
-    await this.request<unknown>("/api/v1/content/write", {
-      method: "POST",
-      body: JSON.stringify({ uri, content, ...opts }),
-    });
+    await this.request<unknown>(
+      "/api/v1/content/write",
+      {
+        method: "POST",
+        body: JSON.stringify({ uri, content, ...opts }),
+      },
+      resolveWaitTimeoutMs(this.timeoutMs, opts),
+    );
   }
 
   async ls(uri: string): Promise<FsEntry[]> {
     logger.debug({ uri }, "ls 请求");
-    return this.request<FsEntry[]>(`/api/v1/fs/ls?uri=${encodeURIComponent(uri)}`);
+    const raw = await this.request<Array<{ uri: string; size?: number; isDir?: boolean; is_dir?: boolean }>>(
+      `/api/v1/fs/ls?uri=${encodeURIComponent(uri)}`,
+    );
+    return raw.map((entry) => ({
+      name: entry.uri.split("/").filter(Boolean).pop() ?? entry.uri,
+      uri: entry.uri,
+      is_dir: entry.isDir ?? entry.is_dir ?? false,
+      size: entry.size,
+    }));
   }
 
   async mkdir(uri: string, description?: string): Promise<void> {
@@ -448,7 +488,7 @@ export class VikingMemoryClient implements IVikingMemoryClient {
     if (recursive !== undefined) {
       params.set("recursive", String(recursive));
     }
-    await this.request<unknown>(`/api/v1/fs/rm?${params.toString()}`, {
+    await this.request<unknown>(`/api/v1/fs?${params.toString()}`, {
       method: "DELETE",
     });
   }

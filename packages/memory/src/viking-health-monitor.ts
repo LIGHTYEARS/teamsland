@@ -42,9 +42,9 @@ export class VikingHealthMonitor {
     return this.healthy;
   }
 
-  /** 启动心跳定时器 */
-  start(): void {
-    this.check();
+  /** 启动心跳定时器（首次检查会 await，确保启动后 client 状态已确定） */
+  async start(): Promise<void> {
+    await this.check();
     this.timer = setInterval(() => this.check(), this.config.intervalMs);
   }
 

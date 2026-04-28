@@ -4,7 +4,7 @@ import { NullVikingMemoryClient, VikingMemoryClient } from "../viking-memory-cli
 
 // ─── Mock 路由表 ───
 
-type RouteHandler = () => Response;
+type RouteHandler = (req: Request) => Response | Promise<Response>;
 
 /** 根据 method + path 构建静态路由表，避免单个 fetch 函数认知复杂度过高 */
 function buildRoutes(): Map<string, RouteHandler> {
@@ -12,7 +12,23 @@ function buildRoutes(): Map<string, RouteHandler> {
 
   routes.set("GET /health", () => Response.json({ status: "ok" }));
 
-  routes.set("POST /api/v1/search/find", () => {
+  routes.set("POST /api/v1/search/find", async (req) => {
+    const body = (await req.json()) as Record<string, unknown>;
+    if ("targetUri" in body) {
+      return Response.json({ status: "error", error: { message: "targetUri is not supported" } }, { status: 422 });
+    }
+    if (body.since === "7d" && body.until === "1d" && body.target_uri === "viking://resources/tasks/") {
+      const findResult: FindResult = {
+        memories: [],
+        resources: [],
+        skills: [],
+        total: 0,
+      };
+      return Response.json({ status: "ok", result: findResult });
+    }
+    if (body.target_uri !== "viking://agent/teamsland/memories/") {
+      return Response.json({ status: "error", error: { message: "target_uri is required" } }, { status: 422 });
+    }
     const findResult: FindResult = {
       memories: [
         {
@@ -38,7 +54,13 @@ function buildRoutes(): Map<string, RouteHandler> {
 
   routes.set("GET /api/v1/content/overview", () => Response.json({ status: "ok", result: "overview text" }));
 
-  routes.set("POST /api/v1/content/write", () => Response.json({ status: "ok", result: {} }));
+  routes.set("POST /api/v1/content/write", async (req) => {
+    const body = (await req.json()) as Record<string, unknown>;
+    if (body.wait === true) {
+      await Bun.sleep(30);
+    }
+    return Response.json({ status: "ok", result: {} });
+  });
 
   routes.set("GET /api/v1/fs/ls", () => {
     const entries: FsEntry[] = [{ name: "file.txt", uri: "mem://file.txt", is_dir: false, size: 42 }];
@@ -47,7 +69,7 @@ function buildRoutes(): Map<string, RouteHandler> {
 
   routes.set("POST /api/v1/fs/mkdir", () => Response.json({ status: "ok", result: {} }));
 
-  routes.set("DELETE /api/v1/fs/rm", () => Response.json({ status: "ok", result: {} }));
+  routes.set("DELETE /api/v1/fs", () => Response.json({ status: "ok", result: {} }));
 
   routes.set("POST /api/v1/resources", () =>
     Response.json({ status: "ok", result: { uri: "mem://resources/file", task_id: "task-r1" } }),
@@ -210,7 +232,7 @@ describe("VikingMemoryClient", () => {
         const key = `${req.method} ${url.pathname}`;
 
         const staticHandler = staticRoutes.get(key);
-        if (staticHandler) return staticHandler();
+        if (staticHandler) return staticHandler(req);
 
         const dynamicResponse = handleDynamicRoute(req.method, url.pathname);
         if (dynamicResponse) return dynamicResponse;
@@ -248,11 +270,20 @@ describe("VikingMemoryClient", () => {
   });
 
   it("find returns parsed result", async () => {
-    const result = await client.find("test query", { limit: 10 });
+    const result = await client.find("test query", { targetUri: "viking://agent/teamsland/memories/", limit: 10 });
     expect(result.total).toBe(1);
     expect(result.memories).toHaveLength(1);
     expect(result.memories[0].uri).toBe("mem://m1");
     expect(result.memories[0].score).toBe(0.95);
+  });
+
+  it("sends since/until in find request for time-filtered queries", async () => {
+    const result = await client.find("recent tasks", {
+      targetUri: "viking://resources/tasks/",
+      since: "7d",
+      until: "1d",
+    });
+    expect(result.total).toBe(0);
   });
 
   it("read returns content string", async () => {
@@ -272,6 +303,18 @@ describe("VikingMemoryClient", () => {
 
   it("write resolves without error", async () => {
     await expect(client.write("mem://file", "content", { mode: "replace" })).resolves.toBeUndefined();
+  });
+
+  it("extends the HTTP timeout for wait=true writes", async () => {
+    const shortTimeoutClient = new VikingMemoryClient({
+      baseUrl: server.url.toString().replace(/\/$/, ""),
+      agentId: "test-agent",
+      timeoutMs: 10,
+      heartbeatIntervalMs: 30000,
+      heartbeatFailThreshold: 3,
+    });
+
+    await expect(shortTimeoutClient.write("mem://file", "content", { wait: true })).resolves.toBeUndefined();
   });
 
   it("ls returns file entries", async () => {
@@ -330,7 +373,7 @@ describe("VikingMemoryClient", () => {
 
   it("sets X-OpenViking-Agent header on requests", async () => {
     // The server would reject if header is missing; the fact that find works proves the header is set
-    const result = await client.find("header test");
+    const result = await client.find("header test", { targetUri: "viking://agent/teamsland/memories/" });
     expect(result).toBeDefined();
   });
 
