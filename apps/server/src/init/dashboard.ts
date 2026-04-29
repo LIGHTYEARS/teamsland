@@ -38,7 +38,7 @@ export interface DashboardResult {
 }
 
 /** Worker Skill 名称列表 */
-const WORKER_SKILL_NAMES = ["lark-reply", "meego-update", "teamsland-report"];
+const WORKER_SKILL_NAMES = ["lark-messaging", "teamsland-report"];
 
 /**
  * 构建 SkillInjector 实例

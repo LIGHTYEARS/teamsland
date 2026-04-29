@@ -1,127 +1,131 @@
 ---
 name: memory-management
-description: 管理 OpenViking 长期记忆，与 Claude Code 内置记忆互补，用于存储事实、经历、经验等低频访问的被动记忆
-allowed-tools: Bash(teamsland memory *)
+description: 管理 OpenViking 长期记忆和知识库资源——包括 Agent/用户记忆的增删改查，以及代码仓库、飞书文档等知识资源的导入与检索。
+allowed-tools:
+  - Bash(teamsland memory *)
+  - Bash(curl *)
 ---
 
-# 记忆管理
+# 记忆与知识管理
 
-你有两套记忆系统，各有分工：
+OpenViking 存储两类数据：**记忆**（经验、事实、偏好）和**知识资源**（仓库、文档）。两者共享语义检索能力，通过 URI 命名空间区分。
 
-## 记忆分层
+---
 
-### Claude Code 内置记忆（CLAUDE.md / .claude/memory/）
+## 一、记忆管理（teamsland memory 命令）
 
-定位：主动记忆，人格与约束层。
+### 记忆分层
 
-每次对话都会加载，适合存放：
-- 身份与角色定义
-- 行为约束与决策规则
-- 团队背景与组织结构
-- 协作偏好
+| 层级 | 存储 | 何时用 |
+|------|------|--------|
+| Claude Code 内置 | CLAUDE.md / .claude/memory/ | 身份、约束、决策规则——每次对话都需要 |
+| OpenViking 记忆 | `teamsland memory` 命令 | 事件、案例、偏好、经验——按需语义检索 |
 
-特点：高频访问、小体量、每次对话都需要。
+灰色地带：先放 OpenViking，确认长期有效后再考虑提升到内置。
 
-### OpenViking 记忆（teamsland memory 命令）
+### 何时主动记忆
 
-定位：被动记忆，事实与经验层。
+- 任务中发现的可复用经验（踩坑、解法、最佳实践）
+- 用户偏好细节（不属于每次对话都要知道的）
+- 项目事实和技术决策背景
+- **不要记忆**：代码或 git 历史能直接获取的信息
+- **不要记忆**：仅当前对话有用的临时上下文
 
-按需语义检索，适合存放：
-- 具体事件和经历
-- 问题-方案案例
-- 用户的具体偏好细节
-- 项目事实
-- 工作流经验
+### 何时主动检索
 
-特点：低频访问、可能大体量、需要时语义检索召回。
+Agent 记忆不会自动注入上下文。主动使用 `teamsland memory find` 检索：
+- 处理类似之前解决过的问题
+- 用户提到你可能记录过的项目或技术细节
+- 需要回忆团队约定或流程
 
-## 判断标准
+### URI 命名空间
 
-| 问自己 | Claude Code 内置 | OpenViking |
-| --- | --- | --- |
-| 几乎每次对话都需要？ | 是 | 否 |
-| 是身份、约束、大方向？ | 是 | 否 |
-| 是具体事件、案例、事实？ | 否 | 是 |
-| 内容会随时间积累变多？ | 否，应精简 | 是，正常积累 |
-| 需要语义检索才能找到？ | 否，全量加载 | 是 |
-
-灰色地带：如果一条信息现在高频使用但未来会降频，先放 OpenViking，等确认长期有效后再考虑是否提升到 Claude Code 内置记忆。
-
-## 何时主动记忆
-
-- 任务执行中发现的可复用经验，包括踩坑、解法、最佳实践
-- 用户明确表达但不属于每次对话都要知道的偏好细节
-- 重要的项目事实和技术决策的背景原因
-- 不要记忆：可以从代码或 git 历史直接获取的信息
-- 不要记忆：临时的、仅当前对话有用的上下文
-
-## 何时主动检索
-
-Agent 记忆不会自动注入你的上下文。当你认为历史经验可能对当前任务有帮助时，主动使用 `teamsland memory find` 检索。典型场景：
-- 处理一个类似之前解决过的问题
-- 用户提到了某个你可能记录过的项目或技术细节
-- 需要回忆某个团队约定或流程
-
-## URI 命名空间
-
-| 类型 | URI 前缀 | 何时使用 |
-| --- | --- | --- |
+| 类型 | URI 前缀 | 用途 |
+|------|---------|------|
 | Agent 记忆 | `viking://agent/teamsland/memories/` | 团队级知识、工作模式、技术决策 |
 | 用户记忆 | `viking://user/<userId>/memories/` | 特定用户的偏好和背景 |
-| 资源 | `viking://resources/` | 文档、任务记录等结构化资源 |
+| 知识资源 | `viking://resources/` | 仓库、文档等结构化资源 |
 
-## 常用操作
-
-### 记住新知识
+### 记忆 CRUD
 
 ```bash
+# 写入
 teamsland memory write viking://agent/teamsland/memories/cases/deploy-hotfix.md \
-  --content "## 热修复部署流程\n\n1. 从 main 拉分支 ..." \
-  --mode create
-```
+  --content "## 热修复流程\n\n1. 从 main 拉分支 ..." --mode create
 
-### 检索相关记忆
-
-```bash
-teamsland memory find "部署流程" --scope agent --limit 5
-```
-
-### 更新已有记忆
-
-```bash
+# 更新
 teamsland memory write viking://agent/teamsland/memories/cases/deploy-hotfix.md \
   --content "更新后的内容..." --mode replace
-```
 
-### 浏览记忆结构
+# 语义检索
+teamsland memory find "部署流程" --scope agent --limit 5
 
-```bash
+# 浏览结构
 teamsland memory ls viking://agent/teamsland/memories/ --recursive
-```
 
-### 删除过时记忆
-
-```bash
+# 删除
 teamsland memory rm viking://agent/teamsland/memories/cases/outdated.md
-```
 
-### 查看摘要
-
-```bash
+# 目录摘要
 teamsland memory abstract viking://agent/teamsland/memories/cases/
 ```
 
-## scope 快捷方式
+### scope 快捷方式
 
-`--scope agent` -> `viking://agent/teamsland/memories/`
-`--scope user --user <id>` -> `viking://user/<id>/memories/`
-`--scope tasks` -> `viking://resources/tasks/`
-`--scope resources` -> `viking://resources/`
+- `--scope agent` → `viking://agent/teamsland/memories/`
+- `--scope user --user <id>` → `viking://user/<id>/memories/`
+- `--scope tasks` → `viking://resources/tasks/`
+- `--scope resources` → `viking://resources/`
 
-## 记忆文件规范
+### 记忆文件规范
 
-- 使用 Markdown 格式，文件名语义化，如 `deploy-hotfix.md`、`alice-preferences.md`
-- cases/ 下存问题-方案案例
-- patterns/ 下存交互模式和工作流
-- preferences/ 下存用户偏好，放在对应用户的 URI 下
-- 记忆内容简洁，聚焦为什么和怎么做，避免冗余
+- Markdown 格式，文件名语义化（`deploy-hotfix.md`、`alice-preferences.md`）
+- `cases/` 存问题-方案案例
+- `patterns/` 存交互模式和工作流
+- `preferences/` 存用户偏好（放在对应用户 URI 下）
+- 内容简洁，聚焦为什么和怎么做
+
+---
+
+## 二、知识资源管理（HTTP API）
+
+通过 teamsland server API 管理 `viking://resources/` 下的知识库。
+
+### 添加代码仓库
+
+```bash
+curl -s -X POST http://localhost:3001/api/viking/resource \
+  -H "Content-Type: application/json" \
+  -d '{"path": "/path/to/repo", "to": "viking://resources/repo-name/", "wait": false}'
+```
+
+### 添加飞书文档
+
+```bash
+curl -s -X POST http://localhost:3001/api/viking/resource \
+  -H "Content-Type: application/json" \
+  -d '{"path": "https://xxx.feishu.cn/docx/xxx", "to": "viking://resources/lark-docs/title/", "wait": false}'
+```
+
+### 语义搜索
+
+```bash
+curl -s -X POST http://localhost:3001/api/viking/find \
+  -H "Content-Type: application/json" \
+  -d '{"query": "搜索关键词", "limit": 5}'
+```
+
+### 浏览与读取
+
+```bash
+# 列出目录
+curl -s "http://localhost:3001/api/viking/ls?uri=viking://resources/"
+
+# 读取文件
+curl -s "http://localhost:3001/api/viking/read?uri=viking://resources/repo-name/README.md"
+```
+
+### 注意
+
+- `addResource` 是异步操作（`wait: false`），语义处理在后台进行
+- 仓库路径必须是部署机器上的绝对路径

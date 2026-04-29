@@ -336,6 +336,22 @@ export class TeamslandClient {
     return this.request("POST", "/api/ask", { to, ticketId, text });
   }
 
+  // ─── Worker Report API ───
+
+  async reportProgress(
+    workerId: string,
+    params: { phase: string; summary: string; details?: string },
+  ): Promise<{ workerId: string; phase: string; reportedAt: number }> {
+    return this.request("POST", `/api/workers/${workerId}/progress`, params);
+  }
+
+  async reportResult(
+    workerId: string,
+    params: { status: "success" | "failed" | "blocked"; summary: string; artifacts?: Record<string, unknown> },
+  ): Promise<{ workerId: string; status: string; completedAt: number }> {
+    return this.request("POST", `/api/workers/${workerId}/result`, params);
+  }
+
   // ─── Viking Memory API ───
 
   async vikingWrite(uri: string, content: string, opts?: { mode?: string; wait?: boolean }): Promise<unknown> {

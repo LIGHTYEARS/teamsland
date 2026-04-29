@@ -13,8 +13,8 @@ import type { Logger } from "@teamsland/observability";
  * import type { SkillManifest } from "@teamsland/sidecar";
  *
  * const manifest: SkillManifest = {
- *   name: "lark-reply",
- *   sourcePath: "~/.teamsland/worker-template/.claude/skills/lark-reply",
+ *   name: "lark-messaging",
+ *   sourcePath: "~/.teamsland/worker-template/.claude/skills/lark-messaging",
  * };
  * ```
  */
@@ -35,8 +35,8 @@ export interface SkillManifest {
  * import type { SkillRouting } from "@teamsland/sidecar";
  *
  * const routing: SkillRouting = {
- *   frontend_dev: ["lark-reply", "meego-update"],
- *   code_review: ["lark-reply"],
+ *   frontend_dev: ["lark-messaging", "teamsland-report"],
+ *   code_review: ["lark-messaging"],
  * };
  * ```
  */
@@ -50,8 +50,8 @@ export type SkillRouting = Record<string, string[]>;
  * import type { SkillInjectorOpts } from "@teamsland/sidecar";
  *
  * const opts: SkillInjectorOpts = {
- *   skills: [{ name: "lark-reply", sourcePath: "~/.teamsland/worker-template/.claude/skills/lark-reply" }],
- *   routing: { frontend_dev: ["lark-reply"] },
+ *   skills: [{ name: "lark-messaging", sourcePath: "~/.teamsland/worker-template/.claude/skills/lark-messaging" }],
+ *   routing: { frontend_dev: ["lark-messaging"] },
  *   logger: createLogger("skill-injector"),
  * };
  * ```
@@ -98,7 +98,7 @@ export interface InjectRequest {
  * import type { InjectResult } from "@teamsland/sidecar";
  *
  * const result: InjectResult = {
- *   injected: ["lark-reply", "meego-update"],
+ *   injected: ["lark-messaging", "teamsland-report"],
  *   skipped: ["unknown-skill"],
  * };
  * ```
@@ -127,10 +127,10 @@ const MARKER_FILE = ".injected-by-teamsland";
  *
  * const injector = new SkillInjector({
  *   skills: [
- *     { name: "lark-reply", sourcePath: "~/.teamsland/worker-template/.claude/skills/lark-reply" },
- *     { name: "meego-update", sourcePath: "~/.teamsland/worker-template/.claude/skills/meego-update" },
+ *     { name: "lark-messaging", sourcePath: "~/.teamsland/worker-template/.claude/skills/lark-messaging" },
+ *     { name: "teamsland-report", sourcePath: "~/.teamsland/worker-template/.claude/skills/teamsland-report" },
  *   ],
- *   routing: { frontend_dev: ["lark-reply", "meego-update"] },
+ *   routing: { frontend_dev: ["lark-messaging", "teamsland-report"] },
  *   logger: createLogger("skill-injector"),
  * });
  *
@@ -138,7 +138,7 @@ const MARKER_FILE = ".injected-by-teamsland";
  *   worktreePath: "/tmp/worktree-abc",
  *   taskType: "frontend_dev",
  * });
- * // result.injected => ["lark-reply", "meego-update"]
+ * // result.injected => ["lark-messaging", "teamsland-report"]
  * ```
  */
 export class SkillInjector {
@@ -175,7 +175,7 @@ export class SkillInjector {
    *   taskType: "frontend_dev",
    *   extraSkills: ["teamsland-report"],
    * });
-   * console.log(result.injected); // ["lark-reply", "teamsland-report"]
+   * console.log(result.injected); // ["lark-messaging", "teamsland-report"]
    * ```
    */
   async inject(req: InjectRequest): Promise<InjectResult> {

@@ -83,9 +83,9 @@
     }
   ],
   "skillRouting": {
-    "coding": ["lark-reply", "meego-update", "teamsland-report"],
-    "research": ["lark-reply", "teamsland-report"],
-    "review": ["lark-reply", "meego-update", "teamsland-report"],
+    "coding": ["lark-messaging", "teamsland-report"],
+    "research": ["lark-messaging", "teamsland-report"],
+    "review": ["lark-messaging", "teamsland-report"],
     "observer": ["teamsland-report"]
   },
   "llm": {

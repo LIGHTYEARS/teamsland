@@ -62,7 +62,7 @@ describe("ResumeController", () => {
     } as unknown as TranscriptReader;
 
     const skillInjector = {
-      inject: vi.fn().mockResolvedValue({ injected: ["lark-reply"], skipped: [] }),
+      inject: vi.fn().mockResolvedValue({ injected: ["lark-messaging"], skipped: [] }),
     } as unknown as SkillInjector;
 
     const claudeMdInjector = {

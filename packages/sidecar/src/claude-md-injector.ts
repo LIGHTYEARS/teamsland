@@ -195,8 +195,7 @@ export class ClaudeMdInjector {
 - 任务完成 → 必须调用 teamsland-report 回报（status: success）
 - 遇到阻塞 → 必须调用 teamsland-report 说明阻塞原因（status: blocked），不得静默退出
 - 部分完成 → 回报已完成的部分和剩余待做的部分（status: partial）
-- 如需回复群聊，使用 lark-reply skill
-- 如关联了 Meego 工单，完成后通过 meego-update skill 更新状态
+- 如需回复群聊，使用 lark-messaging skill
 
 **工具约束**：
 - 禁止调用 delegate、spawn_agent、memory_write

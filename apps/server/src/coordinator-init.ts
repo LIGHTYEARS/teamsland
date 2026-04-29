@@ -240,10 +240,10 @@ ${chatTable}
 
 - **一句话回复** → 纯文本（--text）
 - **带格式但无表格** → post（--markdown），注意：post 不支持表格语法和 HTML
-- **包含表格、彩色标题、结构化数据** → 卡片消息（参见 feishu-card skill）
+- **包含表格、彩色标题、结构化数据** → 卡片消息（参见 lark-messaging skill）
 
 **严禁在 post 消息中使用 \`| col1 | col2 |\` 表格语法** — 会原样显示为纯文本。
-需要表格时必须使用 feishu-card skill 的 structured-data 模板。
+需要表格时必须使用 lark-messaging skill 的 structured-data 模板。
 
 ## Spawn Worker 提示词规范
 

@@ -33,13 +33,13 @@ describe("SkillInjector", () => {
     await mkdir(worktreePath, { recursive: true });
 
     // 创建两个模拟 Skill 源目录
-    const larkReplyDir = join(skillSourceDir, "lark-reply");
-    const meegoUpdateDir = join(skillSourceDir, "meego-update");
-    await mkdir(larkReplyDir, { recursive: true });
-    await mkdir(meegoUpdateDir, { recursive: true });
+    const larkMessagingDir = join(skillSourceDir, "lark-messaging");
+    const teamslandReportDir = join(skillSourceDir, "teamsland-report");
+    await mkdir(larkMessagingDir, { recursive: true });
+    await mkdir(teamslandReportDir, { recursive: true });
 
-    await Bun.write(join(larkReplyDir, "SKILL.md"), "# lark-reply\n发送飞书消息");
-    await Bun.write(join(meegoUpdateDir, "SKILL.md"), "# meego-update\n更新工单");
+    await Bun.write(join(larkMessagingDir, "SKILL.md"), "# lark-messaging\n发送飞书消息");
+    await Bun.write(join(teamslandReportDir, "SKILL.md"), "# teamsland-report\n上报结果");
   });
 
   afterEach(async () => {
@@ -48,14 +48,14 @@ describe("SkillInjector", () => {
 
   function createInjector(manifests?: SkillManifest[], routing?: Record<string, string[]>) {
     const skills = manifests ?? [
-      { name: "lark-reply", sourcePath: join(skillSourceDir, "lark-reply") },
-      { name: "meego-update", sourcePath: join(skillSourceDir, "meego-update") },
+      { name: "lark-messaging", sourcePath: join(skillSourceDir, "lark-messaging") },
+      { name: "teamsland-report", sourcePath: join(skillSourceDir, "teamsland-report") },
     ];
     return new SkillInjector({
       skills,
       routing: routing ?? {
-        frontend_dev: ["lark-reply", "meego-update"],
-        code_review: ["lark-reply"],
+        frontend_dev: ["lark-messaging", "teamsland-report"],
+        code_review: ["lark-messaging"],
       },
       logger: makeFakeLogger() as never,
     });
@@ -69,16 +69,16 @@ describe("SkillInjector", () => {
       taskType: "frontend_dev",
     });
 
-    const skillMd = Bun.file(join(worktreePath, ".claude", "skills", "lark-reply", "SKILL.md"));
+    const skillMd = Bun.file(join(worktreePath, ".claude", "skills", "lark-messaging", "SKILL.md"));
     const exists = await skillMd.exists();
     expect(exists).toBe(true);
 
     const content = await skillMd.text();
-    expect(content).toBe("# lark-reply\n发送飞书消息");
+    expect(content).toBe("# lark-messaging\n发送飞书消息");
 
-    const meegoMd = Bun.file(join(worktreePath, ".claude", "skills", "meego-update", "SKILL.md"));
-    const meegoExists = await meegoMd.exists();
-    expect(meegoExists).toBe(true);
+    const reportMd = Bun.file(join(worktreePath, ".claude", "skills", "teamsland-report", "SKILL.md"));
+    const reportExists = await reportMd.exists();
+    expect(reportExists).toBe(true);
   });
 
   it("inject: 写入 .injected-by-teamsland 标记文件", async () => {
@@ -89,7 +89,7 @@ describe("SkillInjector", () => {
       taskType: "code_review",
     });
 
-    const markerFile = Bun.file(join(worktreePath, ".claude", "skills", "lark-reply", ".injected-by-teamsland"));
+    const markerFile = Bun.file(join(worktreePath, ".claude", "skills", "lark-messaging", ".injected-by-teamsland"));
     const exists = await markerFile.exists();
     expect(exists).toBe(true);
 
@@ -108,8 +108,8 @@ describe("SkillInjector", () => {
     });
 
     expect(result.skipped).toContain("non-existent-skill");
-    expect(result.injected).toContain("lark-reply");
-    expect(result.injected).toContain("meego-update");
+    expect(result.injected).toContain("lark-messaging");
+    expect(result.injected).toContain("teamsland-report");
   });
 
   it("inject: 合并 routing 和 extraSkills 并去重", async () => {
@@ -117,12 +117,12 @@ describe("SkillInjector", () => {
 
     const result = await injector.inject({
       worktreePath,
-      taskType: "code_review", // routing 只有 lark-reply
-      extraSkills: ["lark-reply", "meego-update"], // lark-reply 重复
+      taskType: "code_review", // routing 只有 lark-messaging
+      extraSkills: ["lark-messaging", "teamsland-report"], // lark-messaging 重复
     });
 
-    // lark-reply 不应出现两次
-    expect(result.injected).toEqual(["lark-reply", "meego-update"]);
+    // lark-messaging 不应出现两次
+    expect(result.injected).toEqual(["lark-messaging", "teamsland-report"]);
     expect(result.skipped).toEqual([]);
   });
 
@@ -142,9 +142,11 @@ describe("SkillInjector", () => {
 
     await injector.cleanup(worktreePath);
 
-    // 被标记的 lark-reply 应被移除
-    const larkReplyExists = await Bun.file(join(worktreePath, ".claude", "skills", "lark-reply", "SKILL.md")).exists();
-    expect(larkReplyExists).toBe(false);
+    // 被标记的 lark-messaging 应被移除
+    const larkMessagingExists = await Bun.file(
+      join(worktreePath, ".claude", "skills", "lark-messaging", "SKILL.md"),
+    ).exists();
+    expect(larkMessagingExists).toBe(false);
 
     // 手动创建的目录应保留
     const manualExists = await Bun.file(join(manualSkillDir, "SKILL.md")).exists();
@@ -183,17 +185,12 @@ describe("SkillInjector", () => {
   });
 
   it("inject: core skills 在 taskType 无路由时仍被注入", async () => {
-    // 创建 teamsland-report skill 源目录
-    const teamslandReportDir = join(skillSourceDir, "teamsland-report");
-    await mkdir(teamslandReportDir, { recursive: true });
-    await Bun.write(join(teamslandReportDir, "SKILL.md"), "# teamsland-report\n上报结果");
-
     const injector = new SkillInjector({
       skills: [
-        { name: "lark-reply", sourcePath: join(skillSourceDir, "lark-reply") },
-        { name: "teamsland-report", sourcePath: teamslandReportDir },
+        { name: "lark-messaging", sourcePath: join(skillSourceDir, "lark-messaging") },
+        { name: "teamsland-report", sourcePath: join(skillSourceDir, "teamsland-report") },
       ],
-      routing: { coding: ["lark-reply"] }, // unknown_task 无路由
+      routing: { coding: ["lark-messaging"] }, // unknown_task 无路由
       coreSkills: ["teamsland-report"],
       logger: makeFakeLogger() as never,
     });
@@ -211,17 +208,12 @@ describe("SkillInjector", () => {
   });
 
   it("inject: core skills 不重复注入已在路由中的 skill", async () => {
-    // 创建 teamsland-report skill 源目录
-    const teamslandReportDir = join(skillSourceDir, "teamsland-report");
-    await mkdir(teamslandReportDir, { recursive: true });
-    await Bun.write(join(teamslandReportDir, "SKILL.md"), "# teamsland-report\n上报结果");
-
     const injector = new SkillInjector({
       skills: [
-        { name: "lark-reply", sourcePath: join(skillSourceDir, "lark-reply") },
-        { name: "teamsland-report", sourcePath: teamslandReportDir },
+        { name: "lark-messaging", sourcePath: join(skillSourceDir, "lark-messaging") },
+        { name: "teamsland-report", sourcePath: join(skillSourceDir, "teamsland-report") },
       ],
-      routing: { coding: ["lark-reply", "teamsland-report"] },
+      routing: { coding: ["lark-messaging", "teamsland-report"] },
       coreSkills: ["teamsland-report"],
       logger: makeFakeLogger() as never,
     });

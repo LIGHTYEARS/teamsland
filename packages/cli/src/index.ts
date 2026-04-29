@@ -4,6 +4,7 @@ import { runAsk } from "./commands/ask.js";
 import { runCancel } from "./commands/cancel.js";
 import { runList } from "./commands/list.js";
 import { runMemory } from "./commands/memory.js";
+import { runReport } from "./commands/report.js";
 import { runResult } from "./commands/result.js";
 import { runSpawn } from "./commands/spawn.js";
 import { runStatus } from "./commands/status.js";
@@ -26,6 +27,8 @@ Commands:
   result <id>  Show the result of a completed Worker
   cancel <id>  Cancel a running Worker
   transcript <id>  Show transcript file path for a Worker
+  report progress <id> --phase <p> --summary <s>  Report worker progress
+  report result <id> --status <s> --summary <s>   Report worker result
   memory <op>  Manage OpenViking memories (write, read, ls, find, ...)
   ticket status <id> --set <state>  Transition ticket state
   ticket state <id>                 Show ticket state
@@ -150,6 +153,9 @@ async function main(): Promise<void> {
         break;
       case "memory":
         await runMemory(client, commandArgs, jsonOutput);
+        break;
+      case "report":
+        await runReport(client, commandArgs, jsonOutput);
         break;
       case "ticket":
         await runTicket(client, commandArgs, jsonOutput);
