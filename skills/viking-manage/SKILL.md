@@ -1,3 +1,9 @@
+---
+name: viking-manage
+description: 管理 OpenViking 知识库资源，包括添加代码仓库、导入飞书文档、搜索知识库。
+allowed-tools: Bash(curl *)
+---
+
 # viking-manage
 
 管理 OpenViking 知识库资源。

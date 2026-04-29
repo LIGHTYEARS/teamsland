@@ -1,6 +1,7 @@
 // @teamsland/server — Dashboard 初始化模块
 
-import { resolve } from "node:path";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import type { HookEngine, HookMetricsCollector } from "@teamsland/hooks";
 import type { IVikingMemoryClient } from "@teamsland/memory";
 import type { createLogger } from "@teamsland/observability";
@@ -42,21 +43,11 @@ const WORKER_SKILL_NAMES = ["lark-reply", "meego-update", "teamsland-report"];
 /**
  * 构建 SkillInjector 实例
  *
- * 扫描 `config/worker-skills/` 目录下的已知 Skill，结合 skillRouting 配置
- * 构建 SkillInjector。
- *
- * @param config - 应用配置
- * @param logger - 日志记录器
- * @returns SkillInjector 实例
- *
- * @example
- * ```typescript
- * const injector = buildSkillInjector(config, logger);
- * await injector.inject({ worktreePath: "/tmp/wt", taskType: "coding" });
- * ```
+ * 从 `~/.teamsland/worker-template/.claude/skills/` 读取 worker skills（由 npx skills add 安装），
+ * 结合 skillRouting 配置构建 SkillInjector。
  */
 function buildSkillInjector(config: AppConfig, logger: ReturnType<typeof createLogger>): SkillInjector {
-  const skillsBasePath = resolve(process.cwd(), "config/worker-skills");
+  const skillsBasePath = join(homedir(), ".teamsland", "worker-template", ".claude", "skills");
   const skills = WORKER_SKILL_NAMES.map((name) => ({
     name,
     sourcePath: resolve(skillsBasePath, name),

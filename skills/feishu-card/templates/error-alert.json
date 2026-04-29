@@ -1,0 +1,29 @@
+{
+  "_comment": "错误告警卡片 — 替换 {{TITLE}}、{{ERROR_MESSAGE}}、{{SUGGESTION}}",
+  "schema": "2.0",
+  "config": {
+    "wide_screen_mode": true
+  },
+  "header": {
+    "title": {
+      "tag": "plain_text",
+      "content": "{{TITLE}}"
+    },
+    "template": "red"
+  },
+  "body": {
+    "elements": [
+      {
+        "tag": "markdown",
+        "content": "**错误信息：**\n{{ERROR_MESSAGE}}"
+      },
+      {
+        "tag": "hr"
+      },
+      {
+        "tag": "markdown",
+        "content": "**建议操作：**\n{{SUGGESTION}}"
+      }
+    ]
+  }
+}

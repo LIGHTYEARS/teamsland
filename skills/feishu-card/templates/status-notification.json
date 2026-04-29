@@ -1,0 +1,29 @@
+{
+  "_comment": "状态通知卡片 — 替换 {{TITLE}}、{{COLOR}}、{{STATUS}}、{{DETAILS}}",
+  "schema": "2.0",
+  "config": {
+    "wide_screen_mode": true
+  },
+  "header": {
+    "title": {
+      "tag": "plain_text",
+      "content": "{{TITLE}}"
+    },
+    "template": "{{COLOR}}"
+  },
+  "body": {
+    "elements": [
+      {
+        "tag": "markdown",
+        "content": "**状态：** {{STATUS}}"
+      },
+      {
+        "tag": "hr"
+      },
+      {
+        "tag": "markdown",
+        "content": "{{DETAILS}}"
+      }
+    ]
+  }
+}

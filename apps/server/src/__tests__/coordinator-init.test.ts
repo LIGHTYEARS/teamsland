@@ -15,7 +15,7 @@ vi.mock("@teamsland/observability", () => ({
 }));
 
 import type { AppConfig } from "@teamsland/types";
-import { initCoordinatorWorkspace } from "../coordinator-init.js";
+import { initCoordinatorWorkspace, verifyWorkspaceIntegrity } from "../coordinator-init.js";
 
 // ─── 工厂辅助函数 ───
 
@@ -114,9 +114,10 @@ describe("initCoordinatorWorkspace", () => {
 
     expect(result).toBe(workspacePath);
     expect(existsSync(join(workspacePath, "CLAUDE.md"))).toBe(true);
-    expect(existsSync(join(workspacePath, ".claude", "skills", "teamsland-spawn", "SKILL.md"))).toBe(true);
-    expect(existsSync(join(workspacePath, ".claude", "skills", "meego-query", "SKILL.md"))).toBe(true);
-    expect(existsSync(join(workspacePath, ".claude", "skills", "memory-management", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(workspacePath, ".claude", "rules", "handle-meego-issue.md"))).toBe(true);
+    expect(existsSync(join(workspacePath, "evolution-config.json"))).toBe(true);
+    expect(existsSync(join(workspacePath, "hooks"))).toBe(true);
+    expect(existsSync(join(workspacePath, "hooks-pending"))).toBe(true);
   });
 
   it("版本化更新：.md 文件内容变更时自动更新并备份旧版", async () => {
@@ -181,34 +182,31 @@ describe("initCoordinatorWorkspace", () => {
 
   it("使用默认路径当 coordinator 配置为空时", async () => {
     const config = createMinimalConfig(join(testDir, "coordinator"));
-    // 移除 coordinator 配置，测试默认路径逻辑
     const configWithoutCoordinator = { ...config };
     delete (configWithoutCoordinator as Record<string, unknown>).coordinator;
 
-    // 注：此测试验证函数不会崩溃，实际路径会是 ~/.teamsland/coordinator
-    // 为避免在用户 home 目录创建文件，我们只验证函数不抛错的行为
-    // 通过之前的测试已验证文件创建逻辑
     expect(configWithoutCoordinator.coordinator).toBeUndefined();
   });
 
-  it("skill 文件包含预期内容", async () => {
+  it("verifyWorkspaceIntegrity 检测缺失文件", async () => {
     const workspacePath = join(testDir, "coordinator");
     const config = createMinimalConfig(workspacePath);
 
     await initCoordinatorWorkspace(config);
 
-    const spawnSkill = readFileSync(join(workspacePath, ".claude", "skills", "teamsland-spawn", "SKILL.md"), "utf-8");
-    expect(spawnSkill).toContain("teamsland-spawn");
-    expect(spawnSkill).toContain("teamsland spawn");
+    const { ok, missing } = await verifyWorkspaceIntegrity(workspacePath);
+    expect(ok).toBe(true);
+    expect(missing).toEqual([]);
+  });
 
-    const meegoQuerySkill = readFileSync(join(workspacePath, ".claude", "skills", "meego-query", "SKILL.md"), "utf-8");
-    expect(meegoQuerySkill).toContain("meego-query");
+  it("verifyWorkspaceIntegrity 报告缺失文件", async () => {
+    const workspacePath = join(testDir, "coordinator-empty");
+    mkdirSync(workspacePath, { recursive: true });
 
-    const memorySkill = readFileSync(
-      join(workspacePath, ".claude", "skills", "memory-management", "SKILL.md"),
-      "utf-8",
-    );
-    expect(memorySkill).toContain("memory-management");
-    expect(memorySkill).toContain("teamsland memory find");
+    const { ok, missing } = await verifyWorkspaceIntegrity(workspacePath);
+    expect(ok).toBe(false);
+    expect(missing).toContain("CLAUDE.md");
+    expect(missing).toContain(".claude/rules/handle-meego-issue.md");
+    expect(missing).toContain("evolution-config.json");
   });
 });

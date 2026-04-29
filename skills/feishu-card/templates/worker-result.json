@@ -1,0 +1,51 @@
+{
+  "_comment": "Worker 结果卡片 — 替换 {{TITLE}}、{{COLOR}}、{{WORKER_ID}}、{{SUMMARY}}、{{DETAILS}}",
+  "schema": "2.0",
+  "config": {
+    "wide_screen_mode": true
+  },
+  "header": {
+    "title": {
+      "tag": "plain_text",
+      "content": "{{TITLE}}"
+    },
+    "template": "{{COLOR}}"
+  },
+  "body": {
+    "elements": [
+      {
+        "tag": "markdown",
+        "content": "**Worker：** `{{WORKER_ID}}`"
+      },
+      {
+        "tag": "hr"
+      },
+      {
+        "tag": "markdown",
+        "content": "{{SUMMARY}}"
+      },
+      {
+        "tag": "collapsible_panel",
+        "expanded": false,
+        "header": {
+          "title": {
+            "tag": "plain_text",
+            "content": "详细信息"
+          }
+        },
+        "border": {
+          "color": "grey"
+        },
+        "background_style": "default",
+        "body": {
+          "elements": [
+            {
+              "tag": "markdown",
+              "content": "{{DETAILS}}"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

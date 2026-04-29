@@ -3,50 +3,24 @@ import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { createLogger } from "@teamsland/observability";
 import type { AppConfig, RepoMappingEntry } from "@teamsland/types";
-import {
-  generateCardTemplate,
-  generateFeishuCardSkill,
-  generateMeegoQuerySkill,
-  generateMemoryManagementSkill,
-  generateSelfEvolveSkill,
-  generateTeamslandSpawnSkill,
-} from "./coordinator-init-skills.js";
-import { generateHandleMeegoIssueWorkflow, generateTicketLifecycleSkill } from "./coordinator-init-workflows.js";
+import { generateHandleMeegoIssueWorkflow } from "./coordinator-init-workflows.js";
 
 const logger = createLogger("server:coordinator-init");
 
 /** Coordinator 工作区目录结构常量 */
 const WORKSPACE_DIRS = {
   claude: ".claude",
-  skills: ".claude/skills",
-  teamslandSpawn: ".claude/skills/teamsland-spawn",
-  meegoQuery: ".claude/skills/meego-query",
-  selfEvolve: ".claude/skills/self-evolve",
-  memoryManagement: ".claude/skills/memory-management",
-  feishuCard: ".claude/skills/feishu-card",
-  feishuCardTemplates: ".claude/skills/feishu-card/templates",
   rules: ".claude/rules",
-  ticketLifecycle: ".claude/skills/ticket-lifecycle",
 } as const;
 
 /**
  * 初始化 Coordinator 工作区
  *
- * 在指定路径创建 Coordinator 运行所需的完整目录结构和配置文件。
- * 已存在的文件不会被覆盖（幂等操作），保护用户自定义修改。
+ * 在指定路径创建 Coordinator 运行所需的目录结构和配置文件。
+ * Skills 不在此处写入——由 `npx skills add` 通过 symlink 安装。
  *
  * @param config - 应用完整配置
  * @returns 工作区绝对路径
- *
- * @example
- * ```typescript
- * import { initCoordinatorWorkspace } from "./coordinator-init.js";
- * import type { AppConfig } from "@teamsland/types";
- *
- * declare const config: AppConfig;
- * const workspacePath = await initCoordinatorWorkspace(config);
- * // workspacePath === "/Users/xxx/.teamsland/coordinator"
- * ```
  */
 export async function initCoordinatorWorkspace(config: AppConfig): Promise<string> {
   const rawPath = config.coordinator?.workspacePath ?? "~/.teamsland/coordinator";
@@ -63,8 +37,6 @@ export async function initCoordinatorWorkspace(config: AppConfig): Promise<strin
 
 /**
  * 创建工作区所需的目录结构
- *
- * @param basePath - 工作区根目录
  */
 function createDirectories(basePath: string): void {
   for (const dir of Object.values(WORKSPACE_DIRS)) {
@@ -84,61 +56,14 @@ function createDirectories(basePath: string): void {
 }
 
 /**
- * 写入所有工作区文件
- *
- * @param basePath - 工作区根目录
- * @param config - 应用配置
+ * 写入工作区配置文件（不含 skills）
  */
 async function writeWorkspaceFiles(basePath: string, config: AppConfig): Promise<void> {
   const files: Array<{ path: string; content: string }> = [
     { path: join(basePath, "CLAUDE.md"), content: generateClaudeMd(config) },
     {
-      path: join(basePath, WORKSPACE_DIRS.teamslandSpawn, "SKILL.md"),
-      content: generateTeamslandSpawnSkill(),
-    },
-    {
-      path: join(basePath, WORKSPACE_DIRS.meegoQuery, "SKILL.md"),
-      content: generateMeegoQuerySkill(),
-    },
-    {
-      path: join(basePath, WORKSPACE_DIRS.selfEvolve, "SKILL.md"),
-      content: generateSelfEvolveSkill(),
-    },
-    {
-      path: join(basePath, WORKSPACE_DIRS.memoryManagement, "SKILL.md"),
-      content: generateMemoryManagementSkill(),
-    },
-    {
-      path: join(basePath, WORKSPACE_DIRS.feishuCard, "SKILL.md"),
-      content: generateFeishuCardSkill(),
-    },
-    {
-      path: join(basePath, WORKSPACE_DIRS.feishuCardTemplates, "text-reply.json"),
-      content: generateCardTemplate("text-reply"),
-    },
-    {
-      path: join(basePath, WORKSPACE_DIRS.feishuCardTemplates, "structured-data.json"),
-      content: generateCardTemplate("structured-data"),
-    },
-    {
-      path: join(basePath, WORKSPACE_DIRS.feishuCardTemplates, "status-notification.json"),
-      content: generateCardTemplate("status-notification"),
-    },
-    {
-      path: join(basePath, WORKSPACE_DIRS.feishuCardTemplates, "error-alert.json"),
-      content: generateCardTemplate("error-alert"),
-    },
-    {
-      path: join(basePath, WORKSPACE_DIRS.feishuCardTemplates, "worker-result.json"),
-      content: generateCardTemplate("worker-result"),
-    },
-    {
       path: join(basePath, WORKSPACE_DIRS.rules, "handle-meego-issue.md"),
       content: generateHandleMeegoIssueWorkflow(),
-    },
-    {
-      path: join(basePath, WORKSPACE_DIRS.ticketLifecycle, "SKILL.md"),
-      content: generateTicketLifecycleSkill(),
     },
     {
       path: join(basePath, "evolution-config.json"),
@@ -193,9 +118,6 @@ function findFrontmatterEnd(content: string): number {
  * 使用 SHA-256 前 8 位作为内容指纹。
  * 对含 YAML frontmatter 的文件，hash 注释插入到 frontmatter 之后，
  * 避免破坏 frontmatter 解析；其他文件仍插入到文件头。
- *
- * @param filePath - 文件绝对路径
- * @param content - 新文件内容
  */
 async function writeFileIfChanged(filePath: string, content: string): Promise<void> {
   const HASH_PREFIX = "<!-- teamsland-content-hash: ";
@@ -230,16 +152,6 @@ async function writeFileIfChanged(filePath: string, content: string): Promise<vo
 
 /**
  * 生成仓库映射表的 Markdown 格式
- *
- * @param entries - 仓库映射配置
- * @returns Markdown 表格字符串
- *
- * @example
- * ```typescript
- * const table = formatRepoMappingTable([
- *   { meegoProjectId: "p1", repos: [{ path: "/repos/fe", name: "前端" }] },
- * ]);
- * ```
  */
 function formatRepoMappingTable(entries: ReadonlyArray<RepoMappingEntry>): string {
   const lines: string[] = ["| Meego 项目 ID | 仓库名称 | 本地路径 |", "| --- | --- | --- |"];
@@ -255,14 +167,6 @@ function formatRepoMappingTable(entries: ReadonlyArray<RepoMappingEntry>): strin
 
 /**
  * 生成群聊项目映射表的 Markdown 格式
- *
- * @param mapping - chatId → projectId 映射
- * @returns Markdown 表格字符串
- *
- * @example
- * ```typescript
- * const table = formatChatProjectMappingTable({ "oc_xxx": "project_xxx" });
- * ```
  */
 function formatChatProjectMappingTable(mapping: Record<string, string>): string {
   const lines: string[] = ["| 群聊 ID | Meego 项目 ID |", "| --- | --- |"];
@@ -276,14 +180,6 @@ function formatChatProjectMappingTable(mapping: Record<string, string>): string 
 
 /**
  * 根据配置动态生成 Coordinator 的 CLAUDE.md
- *
- * @param config - 应用配置
- * @returns CLAUDE.md 文件内容
- *
- * @example
- * ```typescript
- * const content = generateClaudeMd(config);
- * ```
  */
 function generateClaudeMd(config: AppConfig): string {
   const repoTable = formatRepoMappingTable(config.repoMapping);
@@ -421,24 +317,9 @@ Spawn Worker 时，task prompt 必须包含以下结构：
  * 验证 Coordinator 工作目录完整性
  *
  * 检查所有必需文件是否存在。缺失的文件将在下次 initCoordinatorWorkspace 调用时被重新创建。
- *
- * @example
- * ```typescript
- * const { ok, missing } = await verifyWorkspaceIntegrity("~/.teamsland/coordinator");
- * if (!ok) logger.warn({ missing }, "Workspace 完整性检查失败");
- * ```
  */
 export async function verifyWorkspaceIntegrity(workspacePath: string): Promise<{ ok: boolean; missing: string[] }> {
-  const required = [
-    "CLAUDE.md",
-    join(WORKSPACE_DIRS.teamslandSpawn, "SKILL.md"),
-    join(WORKSPACE_DIRS.meegoQuery, "SKILL.md"),
-    join(WORKSPACE_DIRS.selfEvolve, "SKILL.md"),
-    join(WORKSPACE_DIRS.memoryManagement, "SKILL.md"),
-    join(WORKSPACE_DIRS.feishuCard, "SKILL.md"),
-    join(WORKSPACE_DIRS.rules, "handle-meego-issue.md"),
-    join(WORKSPACE_DIRS.ticketLifecycle, "SKILL.md"),
-  ];
+  const required = ["CLAUDE.md", join(WORKSPACE_DIRS.rules, "handle-meego-issue.md"), "evolution-config.json"];
   const missing: string[] = [];
   for (const rel of required) {
     const file = Bun.file(join(workspacePath, rel));

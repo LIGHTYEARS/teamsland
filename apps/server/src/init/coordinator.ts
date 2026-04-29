@@ -1,6 +1,8 @@
 // @teamsland/server — Coordinator 初始化模块
 
+import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import type { LarkNotifier } from "@teamsland/lark";
 import type { IVikingMemoryClient } from "@teamsland/memory";
 import { createLogger } from "@teamsland/observability";
@@ -83,6 +85,41 @@ async function ensureBytedcli(parentLogger: ReturnType<typeof createLogger>): Pr
 }
 
 /**
+ * 将仓库 skills/ 目录下的 skills 通过 npx skills 安装到指定工作区
+ *
+ * 使用 symlink 模式安装，skill 源变更后无需重新安装。
+ * 安装失败不阻塞启动。
+ */
+async function installSkillsFromRepo(targetPath: string, parentLogger: ReturnType<typeof createLogger>): Promise<void> {
+  mkdirSync(targetPath, { recursive: true });
+
+  parentLogger.info({ targetPath }, "正在安装 teamsland skills...");
+  const proc = Bun.spawn(["npx", "skills@latest", "add", "LIGHTYEARS/teamsland", "-a", "claude-code", "-y"], {
+    cwd: targetPath,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const exitCode = await proc.exited;
+  if (exitCode !== 0) {
+    const stderr = await new Response(proc.stderr).text();
+    parentLogger.warn({ exitCode, stderr, targetPath }, "teamsland skills 安装失败");
+  } else {
+    parentLogger.info({ targetPath }, "teamsland skills 安装完成");
+  }
+}
+
+/**
+ * 初始化 worker-template 工作区
+ *
+ * 创建 ~/.teamsland/worker-template/ 并安装 worker skills，
+ * SkillInjector 从此目录读取 skill 源文件注入到 worker worktree。
+ */
+async function ensureWorkerTemplate(parentLogger: ReturnType<typeof createLogger>): Promise<void> {
+  const templatePath = join(homedir(), ".teamsland", "worker-template");
+  await installSkillsFromRepo(templatePath, parentLogger);
+}
+
+/**
  * Coordinator 初始化结果
  */
 export interface CoordinatorResult {
@@ -135,11 +172,15 @@ export async function initCoordinator(
   // 2. 确保 bytedcli 二进制和 skill 可用（非阻塞 — 失败仅 warn）
   await ensureBytedcli(parentLogger);
 
-  // 3. 创建 LiveContextLoader + PromptBuilder
+  // 3. 安装 teamsland skills（coordinator + worker-template）
+  await installSkillsFromRepo(workspacePath, parentLogger);
+  await ensureWorkerTemplate(parentLogger);
+
+  // 4. 创建 LiveContextLoader + PromptBuilder
   const contextLoader = new LiveContextLoader({ registry, vikingClient });
   const promptBuilder = new CoordinatorPromptBuilder();
 
-  // 4. 创建 CoordinatorProcess
+  // 5. 创建 CoordinatorProcess
   const coordinator = new CoordinatorProcess({
     config: {
       workspacePath,
@@ -153,7 +194,7 @@ export async function initCoordinator(
     teamId: "default",
   });
 
-  // 5. 创建 WorkerManager
+  // 6. 创建 WorkerManager
   const workerManager = new WorkerManager({
     registry,
     queue: queue as unknown as WorkerManagerOpts["queue"],

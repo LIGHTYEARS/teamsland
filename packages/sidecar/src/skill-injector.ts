@@ -14,7 +14,7 @@ import type { Logger } from "@teamsland/observability";
  *
  * const manifest: SkillManifest = {
  *   name: "lark-reply",
- *   sourcePath: "config/worker-skills/lark-reply",
+ *   sourcePath: "~/.teamsland/worker-template/.claude/skills/lark-reply",
  * };
  * ```
  */
@@ -50,7 +50,7 @@ export type SkillRouting = Record<string, string[]>;
  * import type { SkillInjectorOpts } from "@teamsland/sidecar";
  *
  * const opts: SkillInjectorOpts = {
- *   skills: [{ name: "lark-reply", sourcePath: "/config/worker-skills/lark-reply" }],
+ *   skills: [{ name: "lark-reply", sourcePath: "~/.teamsland/worker-template/.claude/skills/lark-reply" }],
  *   routing: { frontend_dev: ["lark-reply"] },
  *   logger: createLogger("skill-injector"),
  * };
@@ -127,8 +127,8 @@ const MARKER_FILE = ".injected-by-teamsland";
  *
  * const injector = new SkillInjector({
  *   skills: [
- *     { name: "lark-reply", sourcePath: "/config/worker-skills/lark-reply" },
- *     { name: "meego-update", sourcePath: "/config/worker-skills/meego-update" },
+ *     { name: "lark-reply", sourcePath: "~/.teamsland/worker-template/.claude/skills/lark-reply" },
+ *     { name: "meego-update", sourcePath: "~/.teamsland/worker-template/.claude/skills/meego-update" },
  *   ],
  *   routing: { frontend_dev: ["lark-reply", "meego-update"] },
  *   logger: createLogger("skill-injector"),
