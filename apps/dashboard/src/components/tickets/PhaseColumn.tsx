@@ -17,10 +17,10 @@ const STATE_LABELS: Record<string, string> = {
 };
 
 const ACCENT_COLORS: Record<string, { bar: string; badge: string; badgeText: string }> = {
-  blue: { bar: "bg-blue-500", badge: "bg-blue-500/10", badgeText: "text-blue-500" },
-  yellow: { bar: "bg-yellow-500", badge: "bg-yellow-500/10", badgeText: "text-yellow-500" },
-  green: { bar: "bg-green-500", badge: "bg-green-500/10", badgeText: "text-green-500" },
-  gray: { bar: "bg-gray-500", badge: "bg-gray-500/10", badgeText: "text-gray-500" },
+  blue: { bar: "bg-info", badge: "bg-info/10", badgeText: "text-info" },
+  yellow: { bar: "bg-warning", badge: "bg-warning/10", badgeText: "text-warning" },
+  green: { bar: "bg-success", badge: "bg-success/10", badgeText: "text-success" },
+  gray: { bar: "bg-muted-foreground", badge: "bg-muted-foreground/10", badgeText: "text-muted-foreground" },
 };
 
 export function PhaseColumn({

@@ -1,4 +1,5 @@
 import { EmptyState } from "@teamsland/ui/components/ui/empty-state";
+import { Sheet } from "@teamsland/ui/components/ui/sheet";
 import { Skeleton } from "@teamsland/ui/components/ui/skeleton";
 import { Inbox } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -130,7 +131,14 @@ export function TicketsPage({
         )}
       </div>
 
-      {selectedId && <TicketDetailDrawer issueId={selectedId} onClose={handleCloseDrawer} />}
+      <Sheet
+        open={!!selectedId}
+        onOpenChange={(open) => {
+          if (!open) handleCloseDrawer();
+        }}
+      >
+        {selectedId && <TicketDetailDrawer issueId={selectedId} />}
+      </Sheet>
     </div>
   );
 }

@@ -6,10 +6,10 @@ const statusDotVariants = cva("inline-block shrink-0 rounded-full", {
   variants: {
     variant: {
       default: "bg-muted-foreground",
-      success: "bg-green-500 dark:bg-green-400",
-      warning: "bg-yellow-500 dark:bg-yellow-400",
-      error: "bg-red-500 dark:bg-red-400",
-      info: "bg-blue-500 dark:bg-blue-400",
+      success: "bg-success",
+      warning: "bg-warning",
+      error: "bg-destructive",
+      info: "bg-info",
     },
     size: {
       sm: "size-1.5",

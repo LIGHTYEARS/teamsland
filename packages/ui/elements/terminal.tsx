@@ -23,7 +23,7 @@ const TerminalContext = createContext<TerminalContextType>({
 export type TerminalHeaderProps = HTMLAttributes<HTMLDivElement>;
 
 export const TerminalHeader = ({ className, children, ...props }: TerminalHeaderProps) => (
-  <div className={cn("flex items-center justify-between border-zinc-800 border-b px-4 py-2", className)} {...props}>
+  <div className={cn("flex items-center justify-between border-border border-b px-4 py-2", className)} {...props}>
     {children}
   </div>
 );
@@ -31,7 +31,7 @@ export const TerminalHeader = ({ className, children, ...props }: TerminalHeader
 export type TerminalTitleProps = HTMLAttributes<HTMLDivElement>;
 
 export const TerminalTitle = ({ className, children, ...props }: TerminalTitleProps) => (
-  <div className={cn("flex items-center gap-2 text-sm text-zinc-400", className)} {...props}>
+  <div className={cn("flex items-center gap-2 text-sm text-muted-foreground", className)} {...props}>
     <TerminalIcon className="size-4" />
     {children ?? "Terminal"}
   </div>
@@ -47,7 +47,7 @@ export const TerminalStatus = ({ className, children, ...props }: TerminalStatus
   }
 
   return (
-    <div className={cn("flex items-center gap-2 text-xs text-zinc-400", className)} {...props}>
+    <div className={cn("flex items-center gap-2 text-xs text-muted-foreground", className)} {...props}>
       {children}
     </div>
   );
@@ -106,7 +106,7 @@ export const TerminalCopyButton = ({
 
   return (
     <Button
-      className={cn("size-7 shrink-0 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100", className)}
+      className={cn("size-7 shrink-0 text-muted-foreground hover:bg-accent hover:text-accent-foreground", className)}
       onClick={copyToClipboard}
       size="icon"
       variant="ghost"
@@ -128,7 +128,7 @@ export const TerminalClearButton = ({ children, className, ...props }: TerminalC
 
   return (
     <Button
-      className={cn("size-7 shrink-0 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100", className)}
+      className={cn("size-7 shrink-0 text-muted-foreground hover:bg-accent hover:text-accent-foreground", className)}
       onClick={onClear}
       size="icon"
       variant="ghost"
@@ -160,7 +160,7 @@ export const TerminalContent = ({ className, children, ...props }: TerminalConte
       {children ?? (
         <pre className="whitespace-pre-wrap break-words">
           <Ansi>{output}</Ansi>
-          {isStreaming && <span className="ml-0.5 inline-block h-4 w-2 animate-pulse bg-zinc-100" />}
+          {isStreaming && <span className="ml-0.5 inline-block h-4 w-2 animate-pulse bg-foreground" />}
         </pre>
       )}
     </div>
@@ -191,7 +191,7 @@ export const Terminal = ({
   return (
     <TerminalContext.Provider value={contextValue}>
       <div
-        className={cn("flex flex-col overflow-hidden rounded-lg border bg-zinc-950 text-zinc-100", className)}
+        className={cn("flex flex-col overflow-hidden rounded-lg border bg-card text-card-foreground", className)}
         {...props}
       >
         {children ?? (

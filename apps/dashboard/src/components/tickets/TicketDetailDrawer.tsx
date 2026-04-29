@@ -1,7 +1,8 @@
 import { Badge } from "@teamsland/ui/components/ui/badge";
 import { Card } from "@teamsland/ui/components/ui/card";
 import { Separator } from "@teamsland/ui/components/ui/separator";
-import { AlertCircle, ExternalLink, FileText, X } from "lucide-react";
+import { SheetContent, SheetHeader, SheetTitle } from "@teamsland/ui/components/ui/sheet";
+import { AlertCircle, ExternalLink, FileText } from "lucide-react";
 import { useTicketDetail } from "../../hooks/useTicketDetail.js";
 
 function formatTimestamp(ts: number): string {
@@ -18,7 +19,7 @@ function Row({ label, value }: { label: string; value?: string }) {
   );
 }
 
-function TimelineEntry({ label, timestamp }: { label: string; _state?: string; timestamp: number }) {
+function TimelineEntry({ label, timestamp }: { label: string; timestamp: number }) {
   return (
     <div className="relative">
       <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-border border-2 border-background" />
@@ -30,29 +31,26 @@ function TimelineEntry({ label, timestamp }: { label: string; _state?: string; t
   );
 }
 
-export function TicketDetailDrawer({ issueId, onClose }: { issueId: string; onClose: () => void }) {
+export function TicketDetailDrawer({ issueId }: { issueId: string }) {
   const { ticket, enrichResult, loading, error } = useTicketDetail(issueId);
 
   return (
-    <div className="fixed inset-y-0 right-0 w-[480px] bg-background shadow-lg z-50 flex flex-col">
-      <div className="shrink-0 flex items-center justify-between bg-muted/30 px-4 py-3">
+    <SheetContent className="w-[480px] sm:max-w-[480px] p-0 flex flex-col">
+      <SheetHeader className="shrink-0 flex-row items-center justify-between bg-muted/30 px-4 py-3 space-y-0">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-sm font-mono text-muted-foreground">{issueId}</span>
+          <SheetTitle className="text-sm font-mono text-muted-foreground">{issueId}</SheetTitle>
           {ticket && (
             <Badge variant="outline" className="text-[10px]">
               {ticket.state}
             </Badge>
           )}
         </div>
-        <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground">
-          <X size={16} />
-        </button>
-      </div>
+      </SheetHeader>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {loading && <p className="text-sm text-muted-foreground">加载中...</p>}
         {error && (
-          <div className="flex items-center gap-2 text-red-500 text-sm">
+          <div className="flex items-center gap-2 text-destructive text-sm">
             <AlertCircle size={14} />
             {error}
           </div>
@@ -90,7 +88,7 @@ export function TicketDetailDrawer({ issueId, onClose }: { issueId: string; onCl
                           href={doc.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-blue-500 hover:underline truncate"
+                          className="text-primary hover:underline truncate"
                         >
                           {doc.url}
                         </a>
@@ -102,7 +100,7 @@ export function TicketDetailDrawer({ issueId, onClose }: { issueId: string; onCl
                         )}
                       </div>
                       {doc.content && <p className="mt-1 text-xs text-muted-foreground line-clamp-3">{doc.content}</p>}
-                      {doc.error && <p className="mt-1 text-xs text-red-500">{doc.error}</p>}
+                      {doc.error && <p className="mt-1 text-xs text-destructive">{doc.error}</p>}
                     </Card>
                   ))}
                 </div>
@@ -114,7 +112,7 @@ export function TicketDetailDrawer({ issueId, onClose }: { issueId: string; onCl
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">自定义字段</h3>
                 <Card className="p-3 text-sm space-y-1">
                   {enrichResult.customFields.map((f) => (
-                    <Row key={f.fieldKey} label={f.fieldName} value={String(f.value ?? "\u2014")} />
+                    <Row key={f.fieldKey} label={f.fieldName} value={String(f.value ?? "—")} />
                   ))}
                 </Card>
               </div>
@@ -130,7 +128,7 @@ export function TicketDetailDrawer({ issueId, onClose }: { issueId: string; onCl
                   {ticket.history.map((h) => (
                     <TimelineEntry
                       key={`${h.from}-${h.to}-${h.timestamp}`}
-                      label={`${h.from} \u2192 ${h.to}`}
+                      label={`${h.from} → ${h.to}`}
                       timestamp={h.timestamp}
                     />
                   ))}
@@ -140,6 +138,6 @@ export function TicketDetailDrawer({ issueId, onClose }: { issueId: string; onCl
           </>
         )}
       </div>
-    </div>
+    </SheetContent>
   );
 }

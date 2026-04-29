@@ -1,3 +1,4 @@
+import { Tabs, TabsList, TabsTrigger } from "@teamsland/ui/components/ui/tabs";
 import { FileText, GitBranch, Network, Terminal, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useWebSocket } from "../../contexts/WebSocketContext";
@@ -101,26 +102,24 @@ export function DetailPanel({ sessionId: _sessionId, projectPath }: DetailPanelP
   return (
     <div className="flex h-full flex-col bg-background">
       {/* 标签栏 */}
-      <div className="flex items-center bg-muted/30 px-2">
-        {TABS.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => {
-              setActiveTab(id);
-              setEditingFile(null);
-            }}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors ${
-              activeTab === id
-                ? "border-b-2 border-primary text-primary"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Icon size={12} />
-            <span>{label}</span>
-          </button>
-        ))}
-      </div>
+      <Tabs>
+        <TabsList className="bg-muted/30 px-2">
+          {TABS.map(({ id, label, icon: Icon }) => (
+            <TabsTrigger
+              key={id}
+              active={activeTab === id}
+              onClick={() => {
+                setActiveTab(id);
+                setEditingFile(null);
+              }}
+              className="gap-1.5 text-xs"
+            >
+              <Icon size={12} />
+              <span>{label}</span>
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
       {/* 面板内容 */}
       <div className="flex-1 min-h-0 overflow-hidden">

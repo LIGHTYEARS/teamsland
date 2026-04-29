@@ -4,16 +4,16 @@ import { AlertCircle, Clock, User } from "lucide-react";
 import type { TicketRecord } from "../../hooks/useTickets.js";
 
 const STATE_COLORS: Record<string, string> = {
-  received: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-  enriching: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-  triaging: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-  awaiting_clarification: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-  ready: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-  executing: "bg-green-500/10 text-green-500 border-green-500/20",
-  completed: "bg-green-500/10 text-green-500 border-green-500/20",
-  failed: "bg-red-500/10 text-red-500 border-red-500/20",
-  suspended: "bg-gray-500/10 text-gray-500 border-gray-500/20",
-  skipped: "bg-gray-500/10 text-gray-500 border-gray-500/20",
+  received: "bg-info/10 text-info border-info/20",
+  enriching: "bg-info/10 text-info border-info/20",
+  triaging: "bg-warning/10 text-warning border-warning/20",
+  awaiting_clarification: "bg-warning/10 text-warning border-warning/20",
+  ready: "bg-info/10 text-info border-info/20",
+  executing: "bg-success/10 text-success border-success/20",
+  completed: "bg-success/10 text-success border-success/20",
+  failed: "bg-destructive/10 text-destructive border-destructive/20",
+  suspended: "bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20",
+  skipped: "bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20",
 };
 
 function formatDwell(ms: number): string {
@@ -76,7 +76,7 @@ export function TicketCard({ ticket, onClick }: { ticket: TicketRecord; onClick:
             {assignee}
           </span>
         )}
-        <span className={`flex items-center gap-1 ${isStale ? "text-red-500 font-medium" : ""}`}>
+        <span className={`flex items-center gap-1 ${isStale ? "text-destructive font-medium" : ""}`}>
           {isStale ? <AlertCircle size={12} /> : <Clock size={12} />}
           {formatDwell(dwellMs)}
         </span>
