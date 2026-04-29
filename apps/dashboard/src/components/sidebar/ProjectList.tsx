@@ -1,4 +1,4 @@
-import type { DiscoveredProject } from "@teamsland/types";
+import type { DiscoveredProject, DiscoveredSession, SessionRow } from "@teamsland/types";
 import { ChevronDown, ChevronRight, Folder } from "lucide-react";
 import { useState } from "react";
 import { SessionList } from "./SessionList";
@@ -94,6 +94,27 @@ export function ProjectList({ projects, selectedSessionId, onSelectSession, acti
             ? project.sessions.filter((s) => activeFilters.has(s.sessionType ?? "unknown")).length
             : project.sessions.length;
 
+        const sessionRows: SessionRow[] = project.sessions.map((s: DiscoveredSession) => ({
+          sessionId: s.id,
+          parentSessionId: null as string | null,
+          teamId: "",
+          projectId: project.name,
+          agentId: s.workerId ?? null,
+          status: "active" as const,
+          createdAt: new Date(s.lastActivity).getTime(),
+          updatedAt: new Date(s.lastActivity).getTime(),
+          contextHash: null as string | null,
+          metadata: null,
+          sessionType:
+            s.sessionType && s.sessionType !== "unknown"
+              ? (s.sessionType as "coordinator" | "task_worker" | "observer_worker")
+              : null,
+          source: null,
+          originData: s.chatId ? { chatId: s.chatId } : null,
+          summary: s.summary,
+          messageCount: s.messageCount,
+        }));
+
         return (
           <div key={project.name}>
             <button
@@ -114,10 +135,9 @@ export function ProjectList({ projects, selectedSessionId, onSelectSession, acti
             </button>
             {isExpanded && (
               <SessionList
-                sessions={project.sessions}
-                projectName={project.name}
+                sessions={sessionRows}
                 selectedSessionId={selectedSessionId}
-                onSelectSession={onSelectSession}
+                onSelectSession={(sessionId) => onSelectSession(project.name, sessionId)}
                 activeFilters={activeFilters}
               />
             )}

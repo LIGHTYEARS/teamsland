@@ -1,3 +1,4 @@
+import type { SQLQueryBindings } from "bun:sqlite";
 import { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 import type {
@@ -219,7 +220,7 @@ export class SessionDB {
     offset?: number;
   }): SessionRow[] {
     const conditions: string[] = ["team_id = ?"];
-    const params: unknown[] = [opts.teamId];
+    const params: SQLQueryBindings[] = [opts.teamId];
 
     if (opts.sessionType) {
       conditions.push("session_type = ?");
@@ -269,7 +270,7 @@ export class SessionDB {
     includeArchived?: boolean;
   }): number {
     const conditions: string[] = ["team_id = ?"];
-    const params: unknown[] = [opts.teamId];
+    const params: SQLQueryBindings[] = [opts.teamId];
 
     if (opts.sessionType) {
       conditions.push("session_type = ?");
