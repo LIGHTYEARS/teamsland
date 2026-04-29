@@ -127,6 +127,125 @@ describe("SessionDB", () => {
       expect(session?.summary).toBe("实现用户认证模块");
       expect(session?.messageCount).toBe(0);
     });
+
+    it("updateSummary 更新 session 摘要", async () => {
+      const sid = `sess-${randomUUID()}`;
+      await db.createSession({ sessionId: sid, teamId: "team-alpha" });
+      expect(db.getSession(sid)?.summary).toBeNull();
+
+      await db.updateSummary(sid, "新的摘要文本");
+      expect(db.getSession(sid)?.summary).toBe("新的摘要文本");
+    });
+  });
+
+  describe("listSessions", () => {
+    it("按 session_type 和 source 过滤", async () => {
+      const teamId = `team-${randomUUID()}`;
+      await db.createSession({
+        sessionId: `sess-${randomUUID()}`,
+        teamId,
+        sessionType: "task_worker",
+        source: "meego",
+      });
+      await db.createSession({
+        sessionId: `sess-${randomUUID()}`,
+        teamId,
+        sessionType: "coordinator",
+        source: "coordinator",
+      });
+      await db.createSession({
+        sessionId: `sess-${randomUUID()}`,
+        teamId,
+        sessionType: "task_worker",
+        source: "dashboard",
+      });
+
+      const meegoWorkers = db.listSessions({ teamId, sessionType: "task_worker", source: "meego" });
+      expect(meegoWorkers).toHaveLength(1);
+      expect(meegoWorkers[0].source).toBe("meego");
+
+      const allWorkers = db.listSessions({ teamId, sessionType: "task_worker" });
+      expect(allWorkers).toHaveLength(2);
+
+      const all = db.listSessions({ teamId });
+      expect(all).toHaveLength(3);
+    });
+
+    it("分页和排序正确", async () => {
+      const teamId = `team-${randomUUID()}`;
+      for (let i = 0; i < 5; i++) {
+        await db.createSession({
+          sessionId: `sess-page-${i}-${randomUUID()}`,
+          teamId,
+          sessionType: "task_worker",
+          source: "meego",
+        });
+      }
+      const page1 = db.listSessions({ teamId, limit: 2, offset: 0 });
+      expect(page1).toHaveLength(2);
+
+      const page2 = db.listSessions({ teamId, limit: 2, offset: 2 });
+      expect(page2).toHaveLength(2);
+
+      expect(page1[0].updatedAt).toBeGreaterThanOrEqual(page1[1].updatedAt);
+    });
+
+    it("默认排除 archived 状态", async () => {
+      const teamId = `team-${randomUUID()}`;
+      const activeId = `sess-${randomUUID()}`;
+      const archivedId = `sess-${randomUUID()}`;
+      await db.createSession({ sessionId: activeId, teamId, sessionType: "task_worker", source: "meego" });
+      await db.createSession({ sessionId: archivedId, teamId, sessionType: "task_worker", source: "meego" });
+      await db.updateSessionStatus(archivedId, "archived");
+
+      const sessions = db.listSessions({ teamId });
+      expect(sessions.every((s) => s.status !== "archived")).toBe(true);
+
+      const withArchived = db.listSessions({ teamId, includeArchived: true });
+      expect(withArchived.some((s) => s.status === "archived")).toBe(true);
+    });
+
+    it("search 过滤 summary 和 session_id", async () => {
+      const teamId = `team-${randomUUID()}`;
+      const sid1 = `sess-${randomUUID()}`;
+      const sid2 = `sess-${randomUUID()}`;
+      await db.createSession({
+        sessionId: sid1,
+        teamId,
+        sessionType: "task_worker",
+        source: "meego",
+        summary: "实现用户认证模块",
+      });
+      await db.createSession({
+        sessionId: sid2,
+        teamId,
+        sessionType: "task_worker",
+        source: "meego",
+        summary: "重构配置加载器",
+      });
+
+      const results = db.listSessions({ teamId, search: "认证" });
+      expect(results).toHaveLength(1);
+      expect(results[0].sessionId).toBe(sid1);
+    });
+
+    it("countSessions 返回总数", async () => {
+      const teamId = `team-${randomUUID()}`;
+      await db.createSession({
+        sessionId: `sess-${randomUUID()}`,
+        teamId,
+        sessionType: "task_worker",
+        source: "meego",
+      });
+      await db.createSession({
+        sessionId: `sess-${randomUUID()}`,
+        teamId,
+        sessionType: "coordinator",
+        source: "coordinator",
+      });
+      const count = db.countSessions({ teamId });
+      expect(count).toBe(2);
+    });
   });
 
   describe("Messages", () => {

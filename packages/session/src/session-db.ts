@@ -202,6 +202,116 @@ export class SessionDB {
     return rows.map((row) => this.mapSessionRow(row));
   }
 
+  /**
+   * 按条件列出会话
+   *
+   * @param opts - 过滤和分页选项
+   * @returns 会话列表，按 updated_at 降序排列
+   */
+  listSessions(opts: {
+    teamId: string;
+    sessionType?: string;
+    source?: string;
+    status?: string;
+    search?: string;
+    includeArchived?: boolean;
+    limit?: number;
+    offset?: number;
+  }): SessionRow[] {
+    const conditions: string[] = ["team_id = ?"];
+    const params: unknown[] = [opts.teamId];
+
+    if (opts.sessionType) {
+      conditions.push("session_type = ?");
+      params.push(opts.sessionType);
+    }
+    if (opts.source) {
+      conditions.push("source = ?");
+      params.push(opts.source);
+    }
+    if (opts.status) {
+      conditions.push("status = ?");
+      params.push(opts.status);
+    }
+    if (!opts.includeArchived && !opts.status) {
+      conditions.push("status != 'archived'");
+    }
+    if (opts.search) {
+      conditions.push("(summary LIKE ? OR session_id LIKE ?)");
+      const pattern = `%${opts.search}%`;
+      params.push(pattern, pattern);
+    }
+
+    const where = conditions.join(" AND ");
+    const limit = opts.limit ?? 50;
+    const offset = opts.offset ?? 0;
+    params.push(limit, offset);
+
+    const rows = this.db
+      .prepare(`SELECT * FROM sessions WHERE ${where} ORDER BY updated_at DESC LIMIT ? OFFSET ?`)
+      .all(...params) as RawSessionRow[];
+
+    return rows.map((row) => this.mapSessionRow(row));
+  }
+
+  /**
+   * 统计符合条件的会话数量
+   *
+   * @param opts - 过滤选项
+   * @returns 会话总数
+   */
+  countSessions(opts: {
+    teamId: string;
+    sessionType?: string;
+    source?: string;
+    status?: string;
+    search?: string;
+    includeArchived?: boolean;
+  }): number {
+    const conditions: string[] = ["team_id = ?"];
+    const params: unknown[] = [opts.teamId];
+
+    if (opts.sessionType) {
+      conditions.push("session_type = ?");
+      params.push(opts.sessionType);
+    }
+    if (opts.source) {
+      conditions.push("source = ?");
+      params.push(opts.source);
+    }
+    if (opts.status) {
+      conditions.push("status = ?");
+      params.push(opts.status);
+    }
+    if (!opts.includeArchived && !opts.status) {
+      conditions.push("status != 'archived'");
+    }
+    if (opts.search) {
+      conditions.push("(summary LIKE ? OR session_id LIKE ?)");
+      const pattern = `%${opts.search}%`;
+      params.push(pattern, pattern);
+    }
+
+    const where = conditions.join(" AND ");
+    const row = this.db.prepare(`SELECT COUNT(*) as count FROM sessions WHERE ${where}`).get(...params) as {
+      count: number;
+    };
+    return row.count;
+  }
+
+  /**
+   * 更新会话摘要
+   *
+   * @param sessionId - 会话 ID
+   * @param summary - 新摘要文本
+   */
+  async updateSummary(sessionId: string, summary: string): Promise<void> {
+    await jitter(this.config.sqliteJitterRangeMs);
+    this.db
+      .prepare("UPDATE sessions SET summary = ?, updated_at = ? WHERE session_id = ?")
+      .run(summary, Date.now(), sessionId);
+  }
+
   // ─── Messages ───
 
   /**
