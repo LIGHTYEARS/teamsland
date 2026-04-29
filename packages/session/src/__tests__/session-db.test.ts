@@ -108,6 +108,25 @@ describe("SessionDB", () => {
       const sessions = db.listActiveSessions(teamId);
       expect(sessions.every((s) => s.status === "active")).toBe(true);
     });
+
+    it("createSession 支持 sessionType, source, originData, summary 字段", async () => {
+      const sid = `sess-${randomUUID()}`;
+      await db.createSession({
+        sessionId: sid,
+        teamId: "team-alpha",
+        sessionType: "task_worker",
+        source: "meego",
+        originData: { meegoIssueId: "ISSUE-42", senderId: "ou_user001" },
+        summary: "实现用户认证模块",
+      });
+      const session = db.getSession(sid);
+      expect(session).toBeDefined();
+      expect(session?.sessionType).toBe("task_worker");
+      expect(session?.source).toBe("meego");
+      expect(session?.originData).toEqual({ meegoIssueId: "ISSUE-42", senderId: "ou_user001" });
+      expect(session?.summary).toBe("实现用户认证模块");
+      expect(session?.messageCount).toBe(0);
+    });
   });
 
   describe("Messages", () => {
@@ -201,6 +220,13 @@ describe("SessionDB", () => {
 
       const results = db.searchMessages("搜索测试", { limit: 3 });
       expect(results.length).toBeLessThanOrEqual(3);
+    });
+
+    it("appendMessage 递增 session 的 messageCount", async () => {
+      await db.appendMessage({ sessionId, role: "user", content: "hello" });
+      await db.appendMessage({ sessionId, role: "assistant", content: "hi" });
+      const session = db.getSession(sessionId);
+      expect(session?.messageCount).toBe(2);
     });
   });
 

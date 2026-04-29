@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type {
   CompactResult,
   MessageRow,
+  OriginData,
   SessionConfig,
   SessionRow,
   SessionStatus,
@@ -114,13 +115,17 @@ export class SessionDB {
     projectId?: string;
     parentSessionId?: string;
     metadata?: Record<string, unknown>;
+    sessionType?: "coordinator" | "task_worker" | "observer_worker";
+    source?: "meego" | "lark_mention" | "lark_dm" | "dashboard" | "coordinator";
+    originData?: OriginData;
+    summary?: string;
   }): Promise<void> {
     await jitter(this.config.sqliteJitterRangeMs);
     const now = Date.now();
     this.db
       .prepare(
-        `INSERT INTO sessions (session_id, parent_session_id, team_id, project_id, agent_id, status, created_at, updated_at, metadata)
-         VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?)`,
+        `INSERT INTO sessions (session_id, parent_session_id, team_id, project_id, agent_id, status, created_at, updated_at, metadata, session_type, source, origin_data, summary)
+         VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         params.sessionId,
@@ -131,6 +136,10 @@ export class SessionDB {
         now,
         now,
         params.metadata ? JSON.stringify(params.metadata) : null,
+        params.sessionType ?? null,
+        params.source ?? null,
+        params.originData ? JSON.stringify(params.originData) : null,
+        params.summary ?? null,
       );
   }
 
@@ -226,6 +235,10 @@ export class SessionDB {
          VALUES (?, ?, ?, ?, ?, ?)`,
       )
       .run(params.sessionId, params.role, params.content, params.toolName ?? null, params.traceId ?? null, now);
+
+    this.db
+      .prepare("UPDATE sessions SET message_count = message_count + 1, updated_at = ? WHERE session_id = ?")
+      .run(now, params.sessionId);
 
     return Number(result.lastInsertRowid);
   }
@@ -519,6 +532,11 @@ export class SessionDB {
       updatedAt: row.updated_at,
       contextHash: row.context_hash,
       metadata: row.metadata ? (JSON.parse(row.metadata) as Record<string, unknown>) : null,
+      sessionType: row.session_type as SessionRow["sessionType"],
+      source: row.source as SessionRow["source"],
+      originData: row.origin_data ? (JSON.parse(row.origin_data) as OriginData) : null,
+      summary: row.summary,
+      messageCount: row.message_count,
     };
   }
 
@@ -561,6 +579,11 @@ interface RawSessionRow {
   updated_at: number;
   context_hash: string | null;
   metadata: string | null;
+  session_type: string | null;
+  source: string | null;
+  origin_data: string | null;
+  summary: string | null;
+  message_count: number;
 }
 
 interface RawMessageRow {
