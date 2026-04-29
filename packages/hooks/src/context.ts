@@ -58,13 +58,32 @@ export function buildHookContext(deps: HookContextDeps, metrics: HookMetrics): H
         retryCount: 0,
         createdAt: Date.now(),
         origin: {
-          source: "coordinator" as const,
+          source: (opts.source ?? "coordinator") as "coordinator",
           senderId: opts.requester,
           chatId: opts.chatId,
         },
         taskBrief: opts.task.slice(0, 200),
         workerType: "task" as const,
       });
+
+      if (deps.sessionDb && deps.teamId) {
+        deps.sessionDb
+          .createSession({
+            sessionId: result.sessionId,
+            teamId: deps.teamId,
+            agentId,
+            sessionType: "task_worker",
+            source: opts.source ?? "coordinator",
+            originData: {
+              chatId: opts.chatId,
+              senderId: opts.requester,
+            },
+            summary: opts.task.slice(0, 200),
+          })
+          .catch((err: unknown) => {
+            logger.error({ err, sessionId: result.sessionId }, "Hook worker session 注册失败");
+          });
+      }
 
       logger.info({ agentId, issueId, worktreePath }, "Hook 派发 Worker 成功");
 

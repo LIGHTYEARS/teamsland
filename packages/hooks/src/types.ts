@@ -1,4 +1,4 @@
-import type { MeegoEvent } from "@teamsland/types";
+import type { MeegoEvent, OriginData } from "@teamsland/types";
 
 // ─── Hook 模块定义 ───
 
@@ -321,6 +321,8 @@ export interface HookSpawnOptions {
   chatId?: string;
   /** worktree 路径（可选，不提供则自动创建） */
   worktreePath?: string;
+  /** 派发来源（可选，默认 "coordinator"） */
+  source?: "meego" | "lark_mention" | "lark_dm" | "coordinator";
 }
 
 /**
@@ -430,4 +432,18 @@ export interface HookContextDeps {
   config: Readonly<Record<string, unknown>>;
   /** 消息队列 */
   queue: { enqueue: (event: MeegoEvent) => Promise<void> };
+  /** Session 数据库（可选，用于注册会话记录） */
+  sessionDb?: {
+    createSession: (params: {
+      sessionId: string;
+      teamId: string;
+      agentId?: string;
+      sessionType?: "coordinator" | "task_worker" | "observer_worker";
+      source?: "meego" | "lark_mention" | "lark_dm" | "dashboard" | "coordinator";
+      originData?: OriginData;
+      summary?: string;
+    }) => Promise<void>;
+  };
+  /** 团队 ID（可选，与 sessionDb 配合使用） */
+  teamId?: string;
 }

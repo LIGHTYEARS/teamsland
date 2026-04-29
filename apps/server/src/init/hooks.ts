@@ -7,6 +7,7 @@ import type { HookContext, HookEngineConfig } from "@teamsland/hooks";
 import { buildHookContext, HookEngine, HookMetricsCollector } from "@teamsland/hooks";
 import { createLogger } from "@teamsland/observability";
 import type { PersistentQueue } from "@teamsland/queue";
+import type { SessionDB } from "@teamsland/session";
 import type { AppConfig, MeegoEvent } from "@teamsland/types";
 import type { ContextResult } from "./context.js";
 import type { LarkResult } from "./lark.js";
@@ -94,6 +95,8 @@ export async function initHooks(
   sidecar: SidecarResult,
   context: ContextResult,
   parentLogger: ReturnType<typeof createLogger>,
+  sessionDb?: SessionDB,
+  teamId?: string,
 ): Promise<HooksResult> {
   const queueRef: LazyQueueRef = { current: null };
 
@@ -161,6 +164,8 @@ export async function initHooks(
           });
         },
       },
+      sessionDb,
+      teamId,
     },
     metricsCollector,
   );

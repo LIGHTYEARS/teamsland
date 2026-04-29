@@ -17,7 +17,7 @@ import { initHooks } from "./init/hooks.js";
 import { initLark } from "./init/lark.js";
 import { initScheduledTasks } from "./init/scheduled-tasks.js";
 import { initSidecar } from "./init/sidecar.js";
-import { initStorage } from "./init/storage.js";
+import { initStorage, TEAM_ID } from "./init/storage.js";
 import { getVikingClient, initViking } from "./init/viking.js";
 import { PipelineTracker } from "./pipeline-tracker.js";
 
@@ -88,7 +88,7 @@ import { PipelineTracker } from "./pipeline-tracker.js";
 
     // ── Phase 4.5: Hook 引擎 ──
     t0 = performance.now();
-    const hooks = await initHooks(config, lark, sidecar, context, logger);
+    const hooks = await initHooks(config, lark, sidecar, context, logger, storage.sessionDb, TEAM_ID);
     timePhase("hooks", t0);
 
     // ── Phase 5: 事件管线 ──
