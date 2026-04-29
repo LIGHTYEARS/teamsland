@@ -114,4 +114,23 @@ describe("schema", () => {
     expect(indexNames).toContain("idx_messages_session");
     expect(indexNames).toContain("idx_tasks_session");
   });
+
+  it("sessions 表包含 v2 新增列", () => {
+    const columns = db.prepare("PRAGMA table_info(sessions)").all() as { name: string }[];
+    const colNames = columns.map((c) => c.name);
+
+    expect(colNames).toContain("session_type");
+    expect(colNames).toContain("source");
+    expect(colNames).toContain("origin_data");
+    expect(colNames).toContain("summary");
+    expect(colNames).toContain("message_count");
+  });
+
+  it("idx_sessions_type_source 索引存在", () => {
+    const indexes = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='index' AND name = 'idx_sessions_type_source'")
+      .all() as { name: string }[];
+
+    expect(indexes).toHaveLength(1);
+  });
 });

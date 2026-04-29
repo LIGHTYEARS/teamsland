@@ -12,7 +12,7 @@ import type { TaskConfig } from "./task.js";
  * const status: SessionStatus = "active";
  * ```
  */
-export type SessionStatus = "active" | "compacted" | "archived";
+export type SessionStatus = "active" | "completed" | "failed" | "compacted" | "archived";
 
 /**
  * Task 状态枚举
@@ -27,6 +27,15 @@ export type SessionStatus = "active" | "compacted" | "archived";
  * ```
  */
 export type TaskStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
+
+export interface OriginData {
+  chatId?: string;
+  messageId?: string;
+  senderId?: string;
+  senderName?: string;
+  meegoIssueId?: string;
+  observeTargetId?: string;
+}
 
 /**
  * Session 行记录
@@ -72,6 +81,16 @@ export interface SessionRow {
   contextHash: string | null;
   /** 可选扩展元数据（JSON 反序列化） */
   metadata: Record<string, unknown> | null;
+  /** 会话类型 */
+  sessionType: string | null;
+  /** 来源标识 */
+  source: string | null;
+  /** 来源原始数据（JSON 反序列化） */
+  originData: OriginData | null;
+  /** 会话摘要 */
+  summary: string | null;
+  /** 消息计数 */
+  messageCount: number;
 }
 
 /**

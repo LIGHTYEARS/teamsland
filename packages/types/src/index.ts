@@ -61,7 +61,15 @@ export type { EnqueueFn } from "./queue.js";
 // Session 发现
 export type { DiscoveredProject, DiscoveredSession } from "./session-discovery.js";
 // Session 持久化行类型
-export type { CompactResult, MessageRow, SessionRow, SessionStatus, TaskRow, TaskStatus } from "./session-row.js";
+export type {
+  CompactResult,
+  MessageRow,
+  OriginData,
+  SessionRow,
+  SessionStatus,
+  TaskRow,
+  TaskStatus,
+} from "./session-row.js";
 // Sidecar 注册表
 export type { AgentOrigin, AgentRecord, AgentStatus, RegistryState } from "./sidecar.js";
 // Swarm 子任务与执行结果

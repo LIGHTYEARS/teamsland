@@ -74,6 +74,17 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id);
 `;
 
+export const MIGRATION_V2_SQL = [
+  "ALTER TABLE sessions ADD COLUMN session_type TEXT",
+  "ALTER TABLE sessions ADD COLUMN source TEXT",
+  "ALTER TABLE sessions ADD COLUMN origin_data TEXT",
+  "ALTER TABLE sessions ADD COLUMN summary TEXT",
+  "ALTER TABLE sessions ADD COLUMN message_count INTEGER NOT NULL DEFAULT 0",
+];
+
+export const MIGRATION_V2_INDEX =
+  "CREATE INDEX IF NOT EXISTS idx_sessions_type_source ON sessions(session_type, source)";
+
 /**
  * 执行数据库 schema 迁移
  *
@@ -93,4 +104,16 @@ CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id);
  */
 export function migrateSchema(db: Database): void {
   db.exec(SCHEMA_SQL);
+
+  for (const stmt of MIGRATION_V2_SQL) {
+    try {
+      db.exec(stmt);
+    } catch (err) {
+      if (!(err instanceof Error) || !err.message.includes("duplicate column name")) {
+        throw err;
+      }
+    }
+  }
+
+  db.exec(MIGRATION_V2_INDEX);
 }
