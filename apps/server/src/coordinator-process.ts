@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { createLogger } from "@teamsland/observability";
+import type { SessionDB } from "@teamsland/session";
 import { CliProcess, type CliProcessOpts, type ResultEvent } from "@teamsland/sidecar";
 import type {
   CoordinatorContext,
@@ -27,6 +28,8 @@ export interface CoordinatorProcessOpts {
   contextLoader: CoordinatorContextLoader;
   promptBuilder: CoordinatorPromptBuilderLike;
   spawnFn?: CliProcessOpts["spawnFn"];
+  sessionDb?: SessionDB;
+  teamId?: string;
 }
 
 export class CoordinatorProcess {
@@ -41,12 +44,16 @@ export class CoordinatorProcess {
   private readonly contextLoader: CoordinatorContextLoader;
   private readonly promptBuilder: CoordinatorPromptBuilderLike;
   private readonly spawnFn?: CliProcessOpts["spawnFn"];
+  private readonly sessionDb?: SessionDB;
+  private readonly teamId: string;
 
   constructor(opts: CoordinatorProcessOpts) {
     this.config = opts.config;
     this.contextLoader = opts.contextLoader;
     this.promptBuilder = opts.promptBuilder;
     this.spawnFn = opts.spawnFn;
+    this.sessionDb = opts.sessionDb;
+    this.teamId = opts.teamId ?? "default";
   }
 
   async processEvent(event: CoordinatorEvent, tracker?: PipelineTracker): Promise<ResultEvent> {
@@ -157,6 +164,18 @@ export class CoordinatorProcess {
     if (newSessionId) {
       this.startedAt = Date.now();
       this.eventCount = 0;
+      if (this.sessionDb) {
+        this.sessionDb
+          .createSession({
+            sessionId: newSessionId,
+            teamId: this.teamId,
+            sessionType: "coordinator",
+            source: "coordinator",
+          })
+          .catch((err: unknown) => {
+            logger.error({ err, sessionId: newSessionId }, "Coordinator session 注册失败");
+          });
+      }
     }
 
     this.cli.onExit((code) => {

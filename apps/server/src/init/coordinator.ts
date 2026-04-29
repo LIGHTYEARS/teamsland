@@ -5,6 +5,7 @@ import type { LarkNotifier } from "@teamsland/lark";
 import type { IVikingMemoryClient } from "@teamsland/memory";
 import { createLogger } from "@teamsland/observability";
 import type { PersistentQueue } from "@teamsland/queue";
+import type { SessionDB } from "@teamsland/session";
 import { type SubagentRegistry, WorkerManager, type WorkerManagerOpts } from "@teamsland/sidecar";
 import type { AppConfig } from "@teamsland/types";
 import { LiveContextLoader } from "../coordinator-context.js";
@@ -108,6 +109,7 @@ export async function initCoordinator(
   parentLogger: ReturnType<typeof createLogger>,
   vikingClient: IVikingMemoryClient,
   notifier: LarkNotifier,
+  sessionDb?: SessionDB,
 ): Promise<CoordinatorResult> {
   if (!config.coordinator?.enabled) {
     parentLogger.info("Coordinator 未启用，跳过初始化");
@@ -147,6 +149,8 @@ export async function initCoordinator(
     },
     contextLoader,
     promptBuilder,
+    sessionDb,
+    teamId: "default",
   });
 
   // 5. 创建 WorkerManager

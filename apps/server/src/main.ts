@@ -124,6 +124,7 @@ import { PipelineTracker } from "./pipeline-tracker.js";
       logger,
       vikingClient,
       lark.notifier,
+      storage.sessionDb,
     );
     let onQueueProcessed: (() => void) | undefined;
 
