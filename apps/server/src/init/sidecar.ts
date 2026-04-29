@@ -12,6 +12,7 @@ import {
   TranscriptReader,
 } from "@teamsland/sidecar";
 import type { AppConfig } from "@teamsland/types";
+import { TEAM_ID } from "./storage.js";
 
 /**
  * Sidecar 初始化结果
@@ -102,6 +103,7 @@ export async function initSidecar(
     processController,
     transcriptReader,
     createLogger("sidecar:observer"),
+    { sessionDb, teamId: TEAM_ID },
   );
 
   return {

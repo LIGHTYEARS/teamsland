@@ -6,7 +6,7 @@ import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Logger } from "@teamsland/observability";
-import type { AgentRecord } from "@teamsland/types";
+import type { AgentRecord, OriginData } from "@teamsland/types";
 import type { ProcessController } from "./process-controller.js";
 import type { SubagentRegistry } from "./registry.js";
 import type { TranscriptReader, TranscriptSummary } from "./transcript-reader.js";
@@ -77,12 +77,31 @@ export interface ObserveResult {
  * ```
  */
 export class ObserverController {
+  private readonly sessionDb?: {
+    createSession: (params: {
+      sessionId: string;
+      teamId: string;
+      agentId?: string;
+      sessionType?: "coordinator" | "task_worker" | "observer_worker";
+      source?: "meego" | "lark_mention" | "lark_dm" | "dashboard" | "coordinator";
+      originData?: OriginData;
+    }) => Promise<void>;
+  };
+  private readonly teamId: string;
+
   constructor(
     private readonly registry: SubagentRegistry,
     private readonly processCtrl: ProcessController,
     private readonly transcriptReader: TranscriptReader,
     private readonly logger: Logger,
-  ) {}
+    opts?: {
+      sessionDb?: ObserverController["sessionDb"];
+      teamId?: string;
+    },
+  ) {
+    this.sessionDb = opts?.sessionDb;
+    this.teamId = opts?.teamId ?? "default";
+  }
 
   /**
    * 为目标 Worker 生成观察者
@@ -134,6 +153,21 @@ export class ObserverController {
       retryCount: 0,
       createdAt: Date.now(),
     });
+
+    if (this.sessionDb) {
+      this.sessionDb
+        .createSession({
+          sessionId: spawnResult.sessionId,
+          teamId: this.teamId,
+          agentId: observerAgentId,
+          sessionType: "observer_worker",
+          source: "coordinator",
+          originData: { observeTargetId: req.targetAgentId },
+        })
+        .catch((err: unknown) => {
+          this.logger.error({ err, sessionId: spawnResult.sessionId }, "Observer session 注册失败");
+        });
+    }
 
     this.logger.info({ observerAgentId, targetAgentId: req.targetAgentId, mode: req.mode }, "Observer Worker 已启动");
 
