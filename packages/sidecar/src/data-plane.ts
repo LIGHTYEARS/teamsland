@@ -211,6 +211,14 @@ export class SidecarDataPlane {
       }
       case "system": {
         this.logger.info({ agentId, sessionId: event.session_id }, "system 事件");
+        if (typeof event.summary === "string") {
+          const record = this.registry.get(agentId);
+          if (record) {
+            this.sessionDb.updateSummary(record.sessionId, (event.summary as string).slice(0, 200)).catch((err) => {
+              this.logger.warn({ agentId, err }, "Summary 更新失败");
+            });
+          }
+        }
         break;
       }
       case "assistant": {
@@ -248,6 +256,9 @@ export class SidecarDataPlane {
     const record = this.registry.get(agentId);
     if (record) {
       record.status = status;
+      this.sessionDb.updateSessionStatus(record.sessionId, status).catch((err) => {
+        this.logger.warn({ agentId, err }, "Session 状态更新失败");
+      });
     }
   }
 }
