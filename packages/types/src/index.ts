@@ -66,7 +66,9 @@ export type {
   MessageRow,
   OriginData,
   SessionRow,
+  SessionSource,
   SessionStatus,
+  SessionType,
   TaskRow,
   TaskStatus,
 } from "./session-row.js";

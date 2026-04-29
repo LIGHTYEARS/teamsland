@@ -14,6 +14,10 @@ import type { TaskConfig } from "./task.js";
  */
 export type SessionStatus = "active" | "completed" | "failed" | "compacted" | "archived";
 
+export type SessionType = "coordinator" | "task_worker" | "observer_worker";
+
+export type SessionSource = "meego" | "lark_mention" | "lark_dm" | "dashboard" | "coordinator";
+
 /**
  * Task 状态枚举
  *
@@ -82,9 +86,9 @@ export interface SessionRow {
   /** 可选扩展元数据（JSON 反序列化） */
   metadata: Record<string, unknown> | null;
   /** 会话类型 */
-  sessionType: string | null;
+  sessionType: SessionType | null;
   /** 来源标识 */
-  source: string | null;
+  source: SessionSource | null;
   /** 来源原始数据（JSON 反序列化） */
   originData: OriginData | null;
   /** 会话摘要 */
