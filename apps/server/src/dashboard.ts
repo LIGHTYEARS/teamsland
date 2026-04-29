@@ -680,7 +680,6 @@ export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): Dashb
     }
   });
 
-  /** WebSocket 消息处理上下文 */
   const wsContext: WsHandlerContext = {
     terminalService,
     wsTerminals,
@@ -689,8 +688,9 @@ export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): Dashb
     dataPlane,
     clients,
     interruptController: deps.interruptController,
+    sessionDb,
+    teamId: "default",
   };
-
   const unsubscribe = registry.subscribe((agents) => {
     broadcast(clients, { type: "agents_update", agents });
   });

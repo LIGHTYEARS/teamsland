@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { createLogger } from "@teamsland/observability";
+import type { SessionDB } from "@teamsland/session";
 import type { InterruptController, ProcessController, SidecarDataPlane, SubagentRegistry } from "@teamsland/sidecar";
 import type { NormalizedMessage } from "@teamsland/types";
 import { validatePath } from "./file-routes.js";
@@ -44,6 +45,8 @@ export interface WsHandlerContext {
   dataPlane: SidecarDataPlane;
   clients: Set<unknown>;
   interruptController?: InterruptController;
+  sessionDb?: SessionDB;
+  teamId?: string;
 }
 
 /**
@@ -466,6 +469,20 @@ async function handleClaudeCommand(
     });
 
     // 启动流处理（后台 fire-and-forget，事件通过 rawEventListener 自动广播）
+    if (ctx.sessionDb && ctx.teamId) {
+      ctx.sessionDb
+        .createSession({
+          sessionId: spawnResult.sessionId,
+          teamId: ctx.teamId,
+          agentId: newAgentId,
+          sessionType: "task_worker",
+          source: "dashboard",
+        })
+        .catch((err: unknown) => {
+          logger.error({ err, sessionId: spawnResult.sessionId }, "Dashboard session 注册失败");
+        });
+    }
+
     ctx.dataPlane.processStream(newAgentId, spawnResult.stdout).catch((err: unknown) => {
       logger.error({ err, agentId: newAgentId }, "Resume 流处理异常");
     });
