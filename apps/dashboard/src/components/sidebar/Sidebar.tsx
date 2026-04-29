@@ -1,23 +1,23 @@
-import type { DiscoveredProject } from "@teamsland/types";
 import { useCallback, useState } from "react";
-import { ProjectList } from "./ProjectList";
+import { useSessionListStore } from "../../stores/useSessionListStore.js";
 import { SessionFilters } from "./SessionFilters";
+import { SessionList } from "./SessionList";
 
 export interface SidebarProps {
-  projects: DiscoveredProject[];
   selectedSessionId: string | null;
-  onSelectSession: (projectName: string, sessionId: string) => void;
+  onSelectSession: (sessionId: string) => void;
   onNavigate: (path: string) => void;
 }
 
 /**
  * Session 侧边栏
  *
- * 在 session 详情视图中使用，显示项目/会话树和类型过滤器。
+ * 在 session 详情视图中使用，显示会话列表和类型过滤器。
  * 全局导航已移至 NavSidebar。
  */
-export function Sidebar({ projects, selectedSessionId, onSelectSession }: SidebarProps) {
+export function Sidebar({ selectedSessionId, onSelectSession }: SidebarProps) {
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
+  const { sessions } = useSessionListStore();
 
   const handleToggleFilter = useCallback((filter: string) => {
     setActiveFilters((prev) => {
@@ -42,10 +42,10 @@ export function Sidebar({ projects, selectedSessionId, onSelectSession }: Sideba
       {/* 会话过滤器 */}
       <SessionFilters activeFilters={activeFilters} onToggleFilter={handleToggleFilter} />
 
-      {/* 项目列表（可滚动） */}
+      {/* 会话列表（可滚动） */}
       <div className="flex-1 overflow-y-auto px-1 py-2">
-        <ProjectList
-          projects={projects}
+        <SessionList
+          sessions={sessions}
           selectedSessionId={selectedSessionId}
           onSelectSession={onSelectSession}
           activeFilters={activeFilters}
