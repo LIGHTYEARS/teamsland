@@ -4,6 +4,7 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { createLogger } from "@teamsland/observability";
+import type { SessionDB } from "@teamsland/session";
 import type { SubagentRegistry } from "@teamsland/sidecar";
 import type { NormalizedMessage, TopologyEdge, TopologyGraph, TopologyNode } from "@teamsland/types";
 import { discoverProjects } from "./session-discovery.js";
@@ -24,6 +25,10 @@ const logger = createLogger("server:api-routes");
 export interface ApiRouteDeps {
   /** Agent 注册表，用于查询运行中的 Agent 列表以构建拓扑图 */
   registry: SubagentRegistry;
+  /** Session 数据库，用于查询 Session 列表 */
+  sessionDb: SessionDB;
+  /** 团队 ID */
+  teamId: string;
 }
 
 /** JSON 响应工具函数 */
@@ -74,6 +79,11 @@ export function handleExtendedApiRoutes(
     return handleNormalizedMessagesRoute(normalizedMatch[1], url);
   }
 
+  // GET /api/sessions
+  if (url.pathname === "/api/sessions" && req.method === "GET") {
+    return handleSessionsListRoute(url, deps);
+  }
+
   return null;
 }
 
@@ -101,6 +111,52 @@ async function handleProjectsRoute(url: URL): Promise<Response> {
   } catch (err: unknown) {
     logger.error({ err }, "项目列表获取失败");
     return jsonResponse({ error: "discovery_failed", message: "项目发现失败" }, 500);
+  }
+}
+
+/**
+ * 处理 GET /api/sessions — 获取 Session 列表
+ *
+ * 支持 ?type=、?source=、?status=、?search=、?limit=、?offset= 参数。
+ *
+ * @param url - 请求 URL
+ * @param deps - 路由依赖
+ * @returns Session 列表 JSON 响应
+ */
+function handleSessionsListRoute(url: URL, deps: ApiRouteDeps): Response {
+  const type = url.searchParams.get("type") ?? undefined;
+  const source = url.searchParams.get("source") ?? undefined;
+  const status = url.searchParams.get("status") ?? undefined;
+  const search = url.searchParams.get("search") ?? undefined;
+  const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? "50"), 1), 100);
+  const offset = Math.max(Number(url.searchParams.get("offset") ?? "0"), 0);
+
+  try {
+    const sessions = deps.sessionDb.listSessions({
+      teamId: deps.teamId,
+      sessionType: type,
+      source,
+      status,
+      search,
+      limit,
+      offset,
+    });
+    const total = deps.sessionDb.countSessions({
+      teamId: deps.teamId,
+      sessionType: type,
+      source,
+      status,
+      search,
+    });
+
+    return jsonResponse({
+      sessions,
+      total,
+      hasMore: offset + limit < total,
+    });
+  } catch (err: unknown) {
+    logger.error({ err }, "Session 列表获取失败");
+    return jsonResponse({ error: "query_failed", message: "Session 列表查询失败" }, 500);
   }
 }
 

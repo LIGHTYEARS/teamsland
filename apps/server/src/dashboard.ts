@@ -427,7 +427,11 @@ async function routeRequest(
   if (askResult) return askResult;
 
   // 扩展 API 路由（/api/projects, /api/topology, /api/sessions/:id/normalized-messages）
-  const extendedResult = handleExtendedApiRoutes(req, url, { registry: ctx.registry });
+  const extendedResult = handleExtendedApiRoutes(req, url, {
+    registry: ctx.registry,
+    sessionDb: ctx.sessionDb,
+    teamId: "default",
+  });
   if (extendedResult) return extendedResult;
 
   // Observability routes (/api/coordinator/*, /api/queue/*)
@@ -787,7 +791,6 @@ export function startDashboard(deps: DashboardDeps, signal?: AbortSignal): Dashb
       server.stop();
     });
   }
-
   return {
     server,
     broadcastQueueUpdate: () => {
